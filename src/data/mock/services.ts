@@ -1,0 +1,73 @@
+import { Service } from '../types';
+import { currentUser, users } from './users';
+
+export const services: Service[] = [
+  {
+    id: 'sv1',
+    title: 'Brand Identity Design',
+    description: 'Complete brand identity package including logo, color palette, typography, and brand guidelines document.',
+    price: 2500,
+    currency: 'AED',
+    duration: '2-3 weeks',
+    category: 'Design',
+    provider: currentUser,
+    rating: 4.9,
+    reviewCount: 47,
+    images: ['https://images.unsplash.com/photo-1561070791-2526d30994b5?w=400&h=300&fit=crop'],
+  },
+  {
+    id: 'sv2',
+    title: 'UI/UX Design',
+    description: 'End-to-end UI/UX design for mobile apps and web platforms. Includes wireframes, prototypes, and design system.',
+    price: 1800,
+    currency: 'AED',
+    duration: '1-2 weeks',
+    category: 'Design',
+    provider: currentUser,
+    rating: 4.8,
+    reviewCount: 32,
+    images: ['https://images.unsplash.com/photo-1558655146-d09347e92766?w=400&h=300&fit=crop'],
+  },
+  {
+    id: 'sv3',
+    title: 'Portrait Photography',
+    description: 'Professional portrait session with 20 edited high-resolution photos. Studio or outdoor location.',
+    price: 800,
+    currency: 'AED',
+    duration: '2 hours',
+    category: 'Photography',
+    provider: users[2],
+    rating: 5.0,
+    reviewCount: 89,
+    images: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=300&fit=crop'],
+  },
+  {
+    id: 'sv4',
+    title: 'React Native App Development',
+    description: 'Custom mobile app development using React Native. Includes backend integration and App Store deployment.',
+    price: 5000,
+    currency: 'AED',
+    duration: '4-6 weeks',
+    category: 'Development',
+    provider: users[1],
+    rating: 4.7,
+    reviewCount: 24,
+    images: ['https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop'],
+  },
+  {
+    id: 'sv5',
+    title: 'Video Editing',
+    description: 'Professional video editing for commercials, social media, and corporate videos. Up to 5 minutes final cut.',
+    price: 1200,
+    currency: 'AED',
+    duration: '3-5 days',
+    category: 'Video',
+    provider: users[3],
+    rating: 4.6,
+    reviewCount: 18,
+    images: ['https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&h=300&fit=crop'],
+  },
+];
+
+export const getServiceById = (id: string): Service | undefined =>
+  services.find((s) => s.id === id);

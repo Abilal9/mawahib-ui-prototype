@@ -1,0 +1,72 @@
+import { Notification } from '../types';
+import { users } from './users';
+
+export const notifications: Notification[] = [
+  {
+    id: 'n1',
+    type: 'like',
+    user: users[1],
+    message: 'liked your post',
+    createdAt: '2026-07-12T15:00:00Z',
+    read: false,
+    postId: 'p3',
+  },
+  {
+    id: 'n2',
+    type: 'comment',
+    user: users[2],
+    message: 'commented: "Stunning work as always! 🔥"',
+    createdAt: '2026-07-12T14:30:00Z',
+    read: false,
+    postId: 'p3',
+  },
+  {
+    id: 'n3',
+    type: 'follow',
+    user: users[4],
+    message: 'started following you',
+    createdAt: '2026-07-12T12:00:00Z',
+    read: false,
+  },
+  {
+    id: 'n4',
+    type: 'job',
+    message: 'New job match: Senior UI/UX Designer at Noon Technologies (92% match)',
+    createdAt: '2026-07-12T10:00:00Z',
+    read: true,
+    jobId: 'j1',
+  },
+  {
+    id: 'n5',
+    type: 'message',
+    user: users[1],
+    message: 'sent you a message',
+    createdAt: '2026-07-12T09:30:00Z',
+    read: true,
+  },
+  {
+    id: 'n6',
+    type: 'like',
+    user: users[3],
+    message: 'liked your post',
+    createdAt: '2026-07-11T20:00:00Z',
+    read: true,
+    postId: 'p1',
+  },
+  {
+    id: 'n7',
+    type: 'system',
+    message: 'Your profile is now featured in the Explore section!',
+    createdAt: '2026-07-11T08:00:00Z',
+    read: true,
+  },
+  {
+    id: 'n8',
+    type: 'comment',
+    user: users[5],
+    message: 'commented: "Would love to collaborate on a project"',
+    createdAt: '2026-07-10T16:45:00Z',
+    read: true,
+    postId: 'p2',
+  },
+];

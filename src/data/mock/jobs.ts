@@ -1,0 +1,60 @@
+import { Job } from '../types';
+
+export const jobs: Job[] = [
+  {
+    id: 'j-arabica',
+    title: 'Barista',
+    company: 'Arabica Coffee',
+    type: 'part-time',
+    location: 'The Zone, Riyadh',
+    salary: '25 SAR / hour',
+    description: 'Join our team at % Arabica and craft exceptional coffee experiences for our guests.',
+    skills: ['Customer Service', 'Coffee'],
+    postedAt: '2026-07-12T06:00:00Z',
+    status: 'open',
+    matchScore: 95,
+    logo: require('../../../assets/images/arabica-logo.png'),
+  },
+  {
+    id: 'j1',
+    title: 'Senior UI/UX Designer',
+    company: 'Noon Technologies',
+    type: 'full-time',
+    location: 'Dubai, UAE',
+    salary: 'AED 25,000 - 35,000/mo',
+    description: 'Lead the design of our next-generation e-commerce platform.',
+    skills: ['Figma', 'UI Design', 'Design Systems'],
+    postedAt: '2026-07-10T08:00:00Z',
+    status: 'open',
+    matchScore: 92,
+  },
+  {
+    id: 'j2',
+    title: 'React Native Developer',
+    company: 'Careem',
+    type: 'contract',
+    location: 'Remote',
+    salary: 'AED 18,000 - 22,000/mo',
+    description: 'Build and maintain mobile applications for millions of users across MENA.',
+    skills: ['React Native', 'TypeScript'],
+    postedAt: '2026-07-09T12:00:00Z',
+    status: 'open',
+    matchScore: 88,
+  },
+  {
+    id: 'j3',
+    title: 'Brand Photographer',
+    company: 'Emirates Group',
+    type: 'freelance',
+    location: 'Dubai, UAE',
+    salary: 'AED 5,000 - 8,000/project',
+    description: 'Capture stunning brand imagery for marketing campaigns.',
+    skills: ['Photography', 'Lightroom'],
+    postedAt: '2026-07-08T10:00:00Z',
+    status: 'open',
+    matchScore: 75,
+  },
+];
+
+export const getJobById = (id: string): Job | undefined =>
+  jobs.find((j) => j.id === id);
