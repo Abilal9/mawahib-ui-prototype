@@ -6,9 +6,15 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { services } from '../../data/mock/services';
+import { getUserById } from '../../data/mock/users';
 import { ScreenProps } from '../../navigation/types';
 
-export default function ServicesScreen({ navigation }: ScreenProps<'Services'>) {
+export default function ServicesScreen({ route, navigation }: ScreenProps<'Services'>) {
+  const user = route.params?.userId ? getUserById(route.params.userId) : undefined;
+  const list = user
+    ? services.filter((service) => service.provider.id === user.id)
+    : services;
+
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
@@ -16,17 +22,22 @@ export default function ServicesScreen({ navigation }: ScreenProps<'Services'>) 
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Services</Text>
+        <Text style={styles.headerTitle}>
+          {user ? `${user.name.split(' ')[0]}'s Services` : 'Services'}
+        </Text>
         <TouchableOpacity style={styles.backButton}>
           <Ionicons name="add" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
       <FlatList
-        data={services}
+        data={list}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No services listed yet.</Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -61,6 +72,7 @@ const styles = StyleSheet.create({
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h3, color: colors.text },
   list: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxxl },
+  empty: { ...typography.body, color: colors.textSecondary, textAlign: 'center', paddingTop: spacing.xxl },
   card: {
     backgroundColor: colors.white, borderRadius: radius.card,
     marginBottom: spacing.md, overflow: 'hidden',

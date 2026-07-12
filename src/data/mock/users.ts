@@ -13,6 +13,9 @@ export const currentUser: User = {
   following: 890,
   posts: 156,
   isVerified: true,
+  title: 'UI/UX Designer',
+  rating: 4.9,
+  reviewCount: 47,
 };
 
 export const users: User[] = [

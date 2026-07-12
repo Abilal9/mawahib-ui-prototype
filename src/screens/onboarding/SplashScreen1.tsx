@@ -1,26 +1,32 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import SplashBranding from '../../components/onboarding/SplashBranding';
 import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
 export default function SplashScreen1({ navigation }: ScreenProps<'Splash1'>) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
     const timer = setTimeout(() => navigation.replace('Splash2'), 1500);
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, fadeAnim]);
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.background} safeBottom={false}>
       <StatusBar style="dark" />
       <View style={styles.container}>
-        <Image
-          source={require('../../../assets/images/logo.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
+        <Animated.View style={{ opacity: fadeAnim }}>
+          <SplashBranding variant="icon" />
+        </Animated.View>
       </View>
     </ScreenContainer>
   );
@@ -31,10 +37,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logo: {
-    width: 56,
-    height: 24,
-    tintColor: colors.primary,
   },
 });

@@ -4,10 +4,15 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type MainTabParamList = {
   HomeTab: undefined;
-  SearchTab: undefined;
+  SearchTab:
+    | {
+        contentType?: 'all' | 'talents' | 'jobs' | 'services' | 'posts';
+        category?: string;
+      }
+    | undefined;
   CreateTab: undefined;
   MessagesTab: undefined;
-  ProfileTab: undefined;
+  JobsTab: undefined;
 };
 
 export type RootStackParamList = {
@@ -15,7 +20,12 @@ export type RootStackParamList = {
   Splash2: undefined;
   Welcome: { step?: 1 | 2 | 3 };
   TurnOnNotifications: undefined;
+  AccountType: undefined;
+  SignIn: undefined;
   SignUp: undefined;
+  Profile: undefined;
+  UserProfile: { userId: string };
+  JobListingDetail: { jobId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
   ProfileSetupStep1: undefined;
@@ -39,6 +49,9 @@ export type RootStackParamList = {
   Services: { userId?: string };
   ServiceDetail: { serviceId: string };
   Calendar: undefined;
+  Connections: undefined;
+  Documentation: undefined;
+  ChangeLanguage: undefined;
   Settings: undefined;
   Premium: undefined;
   PostJob: { step?: number };
@@ -52,6 +65,8 @@ export type RootStackParamList = {
 
 export type ScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
+
+export type RootStackScreenProps<T extends keyof RootStackParamList> = ScreenProps<T>;
 
 export type TabScreenProps<T extends keyof MainTabParamList> = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, T>,

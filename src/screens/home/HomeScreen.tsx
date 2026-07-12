@@ -18,6 +18,7 @@ import { posts } from '../../data/mock/posts';
 import { stories } from '../../data/mock/stories';
 import { jobs } from '../../data/mock/jobs';
 import { notifications } from '../../data/mock/notifications';
+import { useSidebar } from '../../context/SidebarContext';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story } from '../../data/types';
 
@@ -175,6 +176,7 @@ function JobMatchCard({
 }
 
 export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
+  const { open: openSidebar } = useSidebar();
   const [feedPosts, setFeedPosts] = useState(posts);
   const [jobList, setJobList] = useState(jobs);
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -193,7 +195,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     <ScreenContainer padded={false} safeBottom={false}>
       <StatusBar style="dark" />
       <AppHeader
-        onAvatarPress={() => navigation.navigate('ProfileTab')}
+        onAvatarPress={openSidebar}
         onNotificationPress={() => navigation.navigate('Notifications')}
         notificationCount={unreadCount}
       />
@@ -229,7 +231,12 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Jobs matches for you</Text>
-          <TouchableOpacity activeOpacity={0.8}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              navigation.navigate('SearchTab', { contentType: 'jobs', category: 'All' })
+            }
+          >
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -244,7 +251,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
           renderItem={({ item }) => (
             <JobMatchCard
               job={item}
-              onPress={() => navigation.navigate('JobInProgress', { jobId: item.id })}
+              onPress={() => navigation.navigate('JobListingDetail', { jobId: item.id })}
               onDismiss={() => setJobList((prev) => prev.filter((j) => j.id !== item.id))}
             />
           )}
@@ -258,6 +265,7 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: spacing.xl },
   storiesList: {
     paddingHorizontal: spacing.screen,
+    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     gap: spacing.md,
   },

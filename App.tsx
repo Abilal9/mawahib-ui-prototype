@@ -6,6 +6,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './src/navigation/RootNavigator';
+import { AuthProvider } from './src/context/AuthContext';
+import { SidebarProvider } from './src/context/SidebarContext';
+import { CreateMenuProvider } from './src/context/CreateMenuContext';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -34,10 +37,16 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </NavigationContainer>
+      <AuthProvider>
+        <SidebarProvider>
+          <CreateMenuProvider>
+            <NavigationContainer>
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </NavigationContainer>
+          </CreateMenuProvider>
+        </SidebarProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

@@ -1,27 +1,34 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import { colors, spacing } from '../../theme';
+import SplashBranding from '../../components/onboarding/SplashBranding';
+import SplashLoadingDots from '../../components/onboarding/SplashLoadingDots';
+import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    const timer = setTimeout(() => navigation.replace('Welcome', { step: 1 }), 2000);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
+    const timer = setTimeout(() => navigation.replace('Welcome', { step: 1 }), 2200);
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, fadeAnim]);
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.background} safeBottom={false}>
       <StatusBar style="dark" />
       <View style={styles.container}>
-        <Image
-          source={require('../../../assets/images/logo.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
-        <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          <SplashBranding variant="full" />
+          <SplashLoadingDots />
+        </Animated.View>
       </View>
     </ScreenContainer>
   );
@@ -33,12 +40,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: {
-    width: 56,
-    height: 24,
-    tintColor: colors.primary,
-  },
-  loader: {
-    marginTop: spacing.xxxl,
+  content: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

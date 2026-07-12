@@ -59,7 +59,11 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.authorRow}>
+        <TouchableOpacity
+          style={styles.authorRow}
+          onPress={() => navigation.navigate('UserProfile', { userId: post.author.id })}
+          activeOpacity={0.8}
+        >
           <Image source={toImageSource(post.author.avatar)} style={styles.avatar} contentFit="cover" />
           <View style={styles.authorInfo}>
             <Text style={styles.authorName}>{post.author.name}</Text>
@@ -68,7 +72,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           <TouchableOpacity style={styles.followButton}>
             <Text style={styles.followText}>Follow</Text>
           </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
 
         <ScrollView
           horizontal

@@ -6,13 +6,17 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { posts } from '../../data/mock/posts';
+import { getUserById } from '../../data/mock/users';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_SIZE = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm) / 2;
 
-export default function PortfolioScreen({ navigation }: ScreenProps<'Portfolio'>) {
-  const portfolioItems = posts.flatMap((p) => p.images.map((img, i) => ({ id: `${p.id}-${i}`, uri: img })));
+export default function PortfolioScreen({ route, navigation }: ScreenProps<'Portfolio'>) {
+  const user = route.params?.userId ? getUserById(route.params.userId) : undefined;
+  const portfolioItems = posts
+    .filter((post) => (user ? post.author.id === user.id : true))
+    .flatMap((p) => p.images.map((img, i) => ({ id: `${p.id}-${i}`, uri: img, postId: p.id })));
 
   return (
     <ScreenContainer padded={false}>
@@ -21,7 +25,9 @@ export default function PortfolioScreen({ navigation }: ScreenProps<'Portfolio'>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Portfolio</Text>
+        <Text style={styles.headerTitle}>
+          {user ? `${user.name.split(' ')[0]}'s Portfolio` : 'Portfolio'}
+        </Text>
         <View style={styles.backButton} />
       </View>
 
@@ -32,6 +38,9 @@ export default function PortfolioScreen({ navigation }: ScreenProps<'Portfolio'>
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No portfolio items yet.</Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.item}
@@ -57,4 +66,5 @@ const styles = StyleSheet.create({
   row: { gap: spacing.sm, marginBottom: spacing.sm },
   item: { width: ITEM_SIZE, height: ITEM_SIZE, borderRadius: radius.card, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
+  empty: { ...typography.body, color: colors.textSecondary, textAlign: 'center', paddingTop: spacing.xxl },
 });

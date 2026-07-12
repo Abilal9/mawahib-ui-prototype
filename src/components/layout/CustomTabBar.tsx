@@ -4,27 +4,20 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
-
-type TabIcon = 'home' | 'search' | 'add' | 'chatbubble' | 'briefcase';
-
-const TAB_CONFIG: { name: keyof typeof TAB_ICONS; icon: TabIcon }[] = [
-  { name: 'HomeTab', icon: 'home' },
-  { name: 'SearchTab', icon: 'search' },
-  { name: 'CreateTab', icon: 'add' },
-  { name: 'MessagesTab', icon: 'chatbubble' },
-  { name: 'ProfileTab', icon: 'briefcase' },
-];
+import { useCreateMenu } from '../../context/CreateMenuContext';
 
 const TAB_ICONS = {
   HomeTab: 'home',
   SearchTab: 'search',
   CreateTab: 'add',
   MessagesTab: 'chatbubble',
-  ProfileTab: 'briefcase',
+  JobsTab: 'briefcase',
 } as const;
 
 export default function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { isOpen: isCreateMenuOpen, toggle: toggleCreateMenu, close: closeCreateMenu } =
+    useCreateMenu();
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -34,8 +27,18 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
           const isHome = route.name === 'HomeTab';
+          const isCreate = route.name === 'CreateTab';
 
           const onPress = () => {
+            if (isCreate) {
+              toggleCreateMenu();
+              return;
+            }
+
+            if (isCreateMenuOpen) {
+              closeCreateMenu();
+            }
+
             const event = navigation.emit({
               type: 'tabPress',
               target: route.key,
@@ -72,6 +75,33 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
             );
           }
 
+          if (isCreate) {
+            return (
+              <TouchableOpacity
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={isCreateMenuOpen ? { selected: true } : {}}
+                accessibilityLabel="Create"
+                onPress={onPress}
+                style={styles.createTab}
+                activeOpacity={0.85}
+              >
+                <View
+                  style={[
+                    styles.createButton,
+                    isCreateMenuOpen && styles.createButtonActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={isCreateMenuOpen ? 'close' : 'add'}
+                    size={26}
+                    color={isCreateMenuOpen ? colors.white : colors.textSecondary}
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          }
+
           return (
             <TouchableOpacity
               key={route.key}
@@ -96,9 +126,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
                         ? isFocused
                           ? 'search'
                           : 'search-outline'
-                        : iconName === 'add'
-                          ? 'add'
-                          : 'home-outline') as keyof typeof Ionicons.glyphMap
+                        : 'home-outline') as keyof typeof Ionicons.glyphMap
                 }
                 size={24}
                 color={isFocused ? colors.primary : colors.textSecondary}
@@ -145,6 +173,26 @@ const styles = StyleSheet.create({
     height: 60,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  createTab: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  createButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
   },
   homeTab: {
     width: 104,

@@ -36,7 +36,11 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
           <Text style={styles.category}>{service.category}</Text>
           <Text style={styles.title}>{service.title}</Text>
 
-          <View style={styles.providerRow}>
+          <TouchableOpacity
+            style={styles.providerRow}
+            onPress={() => navigation.navigate('UserProfile', { userId: service.provider.id })}
+            activeOpacity={0.8}
+          >
             <Image source={toImageSource(service.provider.avatar)} style={styles.providerAvatar} contentFit="cover" />
             <View>
               <Text style={styles.providerName}>{service.provider.name}</Text>
@@ -45,7 +49,8 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                 <Text style={styles.rating}>{service.rating} ({service.reviewCount} reviews)</Text>
               </View>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
 
           <View style={styles.metaCards}>
             <View style={styles.metaCard}>

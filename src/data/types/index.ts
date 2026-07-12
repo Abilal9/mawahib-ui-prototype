@@ -11,6 +11,9 @@ export interface User {
   following: number;
   posts: number;
   isVerified?: boolean;
+  title?: string;
+  rating?: number;
+  reviewCount?: number;
 }
 
 export interface Post {

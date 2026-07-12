@@ -6,6 +6,8 @@ import {
   SplashScreen2,
   WelcomeScreen,
   TurnOnNotificationsScreen,
+  AccountTypeScreen,
+  SignInScreen,
   SignUpScreen,
   ConfirmCodeScreen,
   ProfileSetupScreen,
@@ -19,14 +21,20 @@ import {
   VideoEditScreen,
   VideoTrimScreen,
   ChatScreen,
+  ProfileScreen,
+  UserProfileScreen,
   PortfolioScreen,
   ServicesScreen,
   ServiceDetailScreen,
   CalendarScreen,
+  ConnectionsScreen,
+  DocumentationScreen,
+  ChangeLanguageScreen,
   SettingsScreen,
   PremiumScreen,
   PostJobScreen,
   JobInProgressScreen,
+  JobListingDetailScreen,
   ConfirmPaymentScreen,
   ApplePayScreen,
   ScanCardScreen,
@@ -51,10 +59,14 @@ export default function RootNavigator() {
       <Stack.Screen name="Splash2" component={SplashScreen2} />
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="TurnOnNotifications" component={TurnOnNotificationsScreen} />
+      <Stack.Screen name="AccountType" component={AccountTypeScreen} />
+      <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="ConfirmCode" component={ConfirmCodeScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="ExploreEmpty" component={ExploreEmptyScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
@@ -69,9 +81,13 @@ export default function RootNavigator() {
       <Stack.Screen name="Services" component={ServicesScreen} />
       <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
+      <Stack.Screen name="Connections" component={ConnectionsScreen} />
+      <Stack.Screen name="Documentation" component={DocumentationScreen} />
+      <Stack.Screen name="ChangeLanguage" component={ChangeLanguageScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Premium" component={PremiumScreen} />
       <Stack.Screen name="PostJob" component={PostJobScreen} />
+      <Stack.Screen name="JobListingDetail" component={JobListingDetailScreen} />
       <Stack.Screen name="JobInProgress" component={JobInProgressScreen} />
       <Stack.Screen name="ConfirmPayment" component={ConfirmPaymentScreen} />
       <Stack.Screen name="ApplePay" component={ApplePayScreen} />

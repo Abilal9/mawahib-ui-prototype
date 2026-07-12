@@ -4,124 +4,126 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import WelcomeStepIndicator from '../../components/onboarding/WelcomeStepIndicator';
+import { WELCOME_STEPS } from '../../constants/welcome';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
-const WELCOME_CONTENT = {
-  1: {
-    title: 'Discover Creative Talents',
-    subtitle: 'Connect with top designers, developers, photographers, and creatives across the MENA region.',
-    image: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400&h=400&fit=crop',
-  },
-  2: {
-    title: 'Showcase Your Work',
-    subtitle: 'Build your portfolio, share your projects, and get discovered by clients and employers.',
-    image: 'https://images.unsplash.com/photo-1558655146-d09347e92766?w=400&h=400&fit=crop',
-  },
-  3: {
-    title: 'Find Your Next Opportunity',
-    subtitle: 'Browse job matches, offer services, and grow your creative career on Mawahib.',
-    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&h=400&fit=crop',
-  },
-} as const;
+const HORIZONTAL_PADDING = spacing.xxl; // 24px — Figma screen inset
+const ILLUSTRATION_WIDTH = 345;
+const ILLUSTRATION_HEIGHT = 237;
 
 export default function WelcomeScreen({ route, navigation }: ScreenProps<'Welcome'>) {
   const step = route.params?.step ?? 1;
-  const content = WELCOME_CONTENT[step];
+  const content = WELCOME_STEPS[step];
   const isLast = step === 3;
 
-  const handleContinue = () => {
+  const handleNext = () => {
     if (isLast) {
-      navigation.navigate('SignUp');
+      navigation.navigate('AccountType');
     } else {
       navigation.navigate('Welcome', { step: (step + 1) as 1 | 2 | 3 });
     }
   };
 
+  const handleSkip = () => {
+    navigation.navigate('AccountType');
+  };
+
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false} backgroundColor={colors.background}>
       <StatusBar style="dark" />
-      <View style={styles.content}>
-        <View style={styles.illustrationContainer}>
-          <Image source={{ uri: content.image }} style={styles.illustration} contentFit="cover" />
+      <View style={styles.page}>
+        <View style={styles.header}>
+          <Image
+            source={require('../../../assets/images/arabic-emblem.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
         </View>
 
-        <View style={styles.textContainer}>
+        <Image
+          source={{ uri: content.image }}
+          style={styles.illustration}
+          contentFit="cover"
+        />
+
+        <View style={styles.textBlock}>
           <Text style={styles.title}>{content.title}</Text>
           <Text style={styles.subtitle}>{content.subtitle}</Text>
         </View>
 
-        <View style={styles.dots}>
-          {([1, 2, 3] as const).map((i) => (
-            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
-          ))}
-        </View>
-      </View>
+        <WelcomeStepIndicator step={step} />
 
-      <View style={styles.footer}>
-        <Button title={isLast ? 'Get Started' : 'Continue'} onPress={handleContinue} fullWidth />
-        {!isLast && (
+        <View style={styles.footer}>
+          <Button
+            title={isLast ? 'Get Started' : 'Next'}
+            onPress={handleNext}
+            fullWidth
+            size="md"
+          />
           <Button
             title="Skip"
-            variant="ghost"
-            onPress={() => navigation.navigate('SignUp')}
+            variant="secondary"
+            onPress={handleSkip}
+            fullWidth
+            size="md"
             style={styles.skipButton}
           />
-        )}
+        </View>
       </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  page: {
     flex: 1,
-    justifyContent: 'center',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: spacing.xl,
   },
-  illustrationContainer: {
+  header: {
+    height: 48,
     alignItems: 'center',
-    marginBottom: spacing.xxxl,
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.xxl,
+  },
+  logo: {
+    width: 40,
+    height: 40,
   },
   illustration: {
-    width: 280,
-    height: 280,
+    width: '100%',
+    maxWidth: ILLUSTRATION_WIDTH,
+    height: ILLUSTRATION_HEIGHT,
     borderRadius: radius.card,
+    alignSelf: 'center',
+    backgroundColor: colors.borderLight,
+    marginBottom: spacing.xxl,
   },
-  textContainer: {
-    paddingHorizontal: spacing.lg,
+  textBlock: {
+    marginBottom: spacing.xxl,
   },
   title: {
-    ...typography.h1,
+    fontFamily: typography.h2.fontFamily,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
     color: colors.text,
-    textAlign: 'center',
     marginBottom: spacing.md,
   },
   subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    ...typography.bodySmall,
+    fontSize: 15,
     lineHeight: 24,
-  },
-  dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xxxl,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  dotActive: {
-    width: 24,
-    backgroundColor: colors.primary,
+    color: colors.textSecondary,
   },
   footer: {
-    paddingBottom: spacing.xl,
+    marginTop: 'auto',
+    paddingTop: spacing.xxl,
   },
   skipButton: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xl,
   },
 });

@@ -4,24 +4,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  CALENDAR_MONTH,
+  calendarEvents,
+  getEventsForDay,
+} from '../../data/mock/calendar';
 import { ScreenProps } from '../../navigation/types';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const EVENTS = [
-  { id: 'e1', title: 'Client Meeting - Brand Review', date: 14, time: '10:00 AM', color: colors.primary },
-  { id: 'e2', title: 'Photo Shoot - Emirates', date: 16, time: '2:00 PM', color: '#2CB67D' },
-  { id: 'e3', title: 'Design Workshop', date: 22, time: '11:00 AM', color: '#FF6B35' },
-];
 
 export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) {
-  const [currentMonth] = useState(new Date(2026, 6, 1));
-  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-  const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+  const [currentMonth] = useState(CALENDAR_MONTH);
+  const daysInMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() + 1,
+    0
+  ).getDate();
+  const firstDay = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth(),
+    1
+  ).getDay();
   const [selectedDay, setSelectedDay] = useState(14);
 
-  const monthName = currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthName = currentMonth.toLocaleString('default', {
+    month: 'long',
+    year: 'numeric',
+  });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const eventDays = EVENTS.map((e) => e.date);
+  const eventDays = calendarEvents.map((event) => event.date);
+  const dayEvents = getEventsForDay(selectedDay);
 
   return (
     <ScreenContainer padded={false}>
@@ -38,20 +50,26 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.monthHeader}>
-          <TouchableOpacity><Ionicons name="chevron-back" size={24} color={colors.text} /></TouchableOpacity>
+          <TouchableOpacity>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </TouchableOpacity>
           <Text style={styles.monthName}>{monthName}</Text>
-          <TouchableOpacity><Ionicons name="chevron-forward" size={24} color={colors.text} /></TouchableOpacity>
+          <TouchableOpacity>
+            <Ionicons name="chevron-forward" size={24} color={colors.text} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.weekDays}>
-          {DAYS_OF_WEEK.map((d) => (
-            <Text key={d} style={styles.weekDay}>{d}</Text>
+          {DAYS_OF_WEEK.map((day) => (
+            <Text key={day} style={styles.weekDay}>
+              {day}
+            </Text>
           ))}
         </View>
 
         <View style={styles.daysGrid}>
-          {Array.from({ length: firstDay }).map((_, i) => (
-            <View key={`empty-${i}`} style={styles.dayCell} />
+          {Array.from({ length: firstDay }).map((_, index) => (
+            <View key={`empty-${index}`} style={styles.dayCell} />
           ))}
           {days.map((day) => {
             const hasEvent = eventDays.includes(day);
@@ -63,8 +81,17 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
                 onPress={() => setSelectedDay(day)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>{day}</Text>
-                {hasEvent && <View style={styles.eventDot} />}
+                <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
+                  {day}
+                </Text>
+                {hasEvent && (
+                  <View
+                    style={[
+                      styles.eventDot,
+                      isSelected && styles.eventDotSelected,
+                    ]}
+                  />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -72,10 +99,10 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
 
         <View style={styles.eventsSection}>
           <Text style={styles.eventsTitle}>Events on July {selectedDay}</Text>
-          {EVENTS.filter((e) => e.date === selectedDay).length === 0 ? (
+          {dayEvents.length === 0 ? (
             <Text style={styles.noEvents}>No events scheduled</Text>
           ) : (
-            EVENTS.filter((e) => e.date === selectedDay).map((event) => (
+            dayEvents.map((event) => (
               <View key={event.id} style={styles.eventCard}>
                 <View style={[styles.eventIndicator, { backgroundColor: event.color }]} />
                 <View style={styles.eventInfo}>
@@ -93,19 +120,43 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen, paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screen,
+    paddingVertical: spacing.md,
   },
-  backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { ...typography.h3, color: colors.text },
   monthHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen, paddingVertical: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screen,
+    paddingVertical: spacing.lg,
   },
   monthName: { ...typography.h2, color: colors.text },
-  weekDays: { flexDirection: 'row', paddingHorizontal: spacing.screen, marginBottom: spacing.sm },
-  weekDay: { flex: 1, textAlign: 'center', ...typography.caption, color: colors.textSecondary },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.screen },
+  weekDays: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.screen,
+    marginBottom: spacing.sm,
+  },
+  weekDay: {
+    flex: 1,
+    textAlign: 'center',
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.screen,
+  },
   dayCell: {
     width: '14.28%',
     aspectRatio: 1,
@@ -113,23 +164,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  daySelected: { backgroundColor: colors.primary, borderRadius: radius.full },
+  daySelected: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+  },
   dayText: { ...typography.body, color: colors.text },
-  dayTextSelected: { color: colors.white, fontFamily: typography.label.fontFamily },
+  dayTextSelected: {
+    color: colors.white,
+    fontFamily: typography.label.fontFamily,
+  },
   eventDot: {
-    position: 'absolute', bottom: 6,
-    width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary,
+    position: 'absolute',
+    bottom: 6,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+  },
+  eventDotSelected: {
+    backgroundColor: colors.white,
   },
   eventsSection: { padding: spacing.screen, paddingTop: spacing.xl },
   eventsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.lg },
   noEvents: { ...typography.body, color: colors.textSecondary },
   eventCard: {
-    flexDirection: 'row', backgroundColor: colors.white,
-    borderRadius: radius.card, padding: spacing.lg, marginBottom: spacing.sm,
-    borderWidth: 1, borderColor: colors.borderLight, gap: spacing.md,
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    gap: spacing.md,
   },
   eventIndicator: { width: 4, borderRadius: 2 },
   eventInfo: { flex: 1 },
   eventTitle: { ...typography.label, color: colors.text },
-  eventTime: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  eventTime: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
 });

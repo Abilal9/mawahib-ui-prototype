@@ -6,6 +6,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getJobById } from '../../data/mock/jobs';
+import { getUserJobById } from '../../data/mock/userJobs';
 import { ScreenProps } from '../../navigation/types';
 
 const TIMELINE = [
@@ -16,7 +17,64 @@ const TIMELINE = [
 ];
 
 export default function JobInProgressScreen({ route, navigation }: ScreenProps<'JobInProgress'>) {
+  const userJob = getUserJobById(route.params.jobId);
   const job = getJobById(route.params.jobId);
+
+  if (userJob) {
+    return (
+      <ScreenContainer padded={false}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Job Details</Text>
+          <View style={styles.backButton} />
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <View style={styles.jobCard}>
+            <Text style={styles.jobTitle}>{userJob.title}</Text>
+            <View style={styles.jobMeta}>
+              <Text style={styles.jobMetaText}>{userJob.statusLabel}</Text>
+              {userJob.jobType && (
+                <>
+                  <Text style={styles.jobMetaDot}>·</Text>
+                  <Text style={styles.jobMetaText}>{userJob.jobType}</Text>
+                </>
+              )}
+            </View>
+            <View style={[styles.matchBadge, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={styles.matchText}>
+                {userJob.type === 'received' ? 'Received' : 'Sent'} · {userJob.date}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>
+            {userJob.type === 'received' ? 'From' : 'To'}
+          </Text>
+          <View style={styles.jobCard}>
+            <Text style={styles.jobCompany}>{userJob.counterpart.name}</Text>
+            {userJob.dueDate && (
+              <View style={styles.jobMeta}>
+                <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+                <Text style={styles.jobMetaText}>Due {userJob.dueDate}</Text>
+              </View>
+            )}
+          </View>
+
+          <Button
+            title="Message"
+            variant="outline"
+            onPress={() => navigation.navigate('MainTabs', { screen: 'MessagesTab' })}
+            fullWidth
+            style={styles.messageButton}
+          />
+        </ScrollView>
+      </ScreenContainer>
+    );
+  }
 
   if (!job) {
     return (

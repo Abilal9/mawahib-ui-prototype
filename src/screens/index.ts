@@ -5,6 +5,8 @@ export { default as WelcomeScreen } from './onboarding/WelcomeScreen';
 export { default as TurnOnNotificationsScreen } from './onboarding/TurnOnNotificationsScreen';
 
 // Auth
+export { default as AccountTypeScreen } from './auth/AccountTypeScreen';
+export { default as SignInScreen } from './auth/SignInScreen';
 export { default as SignUpScreen } from './auth/SignUpScreen';
 export { default as ConfirmCodeScreen } from './auth/ConfirmCodeScreen';
 
@@ -41,14 +43,20 @@ export { default as ChatScreen } from './messages/ChatScreen';
 
 // Profile
 export { default as ProfileScreen } from './profile/ProfileScreen';
+export { default as UserProfileScreen } from './profile/UserProfileScreen';
 export { default as PortfolioScreen } from './profile/PortfolioScreen';
 export { default as ServicesScreen } from './profile/ServicesScreen';
 export { default as ServiceDetailScreen } from './profile/ServiceDetailScreen';
 export { default as CalendarScreen } from './profile/CalendarScreen';
+export { default as ConnectionsScreen } from './profile/ConnectionsScreen';
+export { default as DocumentationScreen } from './profile/DocumentationScreen';
+export { default as ChangeLanguageScreen } from './profile/ChangeLanguageScreen';
 export { default as SettingsScreen } from './profile/SettingsScreen';
 export { default as PremiumScreen } from './profile/PremiumScreen';
 
 // Jobs
+export { default as JobsScreen } from './jobs/JobsScreen';
+export { default as JobListingDetailScreen } from './jobs/JobListingDetailScreen';
 export { default as PostJobScreen } from './jobs/PostJobScreen';
 export { default as JobInProgressScreen } from './jobs/JobInProgressScreen';
 

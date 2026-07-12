@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -16,11 +17,16 @@ import TextInput from '../../components/ui/TextInput';
 import Checkbox from '../../components/ui/Checkbox';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
+  const { accountType } = useAuth();
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+
+  const accountLabel = accountType === 'business' ? 'Business' : 'Talent';
 
   return (
     <ScreenContainer>
@@ -30,35 +36,51 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join the Mawahib creative community</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <Image
+            source={require('../../../assets/images/logo.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
+
+          <Text style={styles.title}>Sign Up</Text>
+          <Text style={styles.subtitle}>
+            Create your {accountLabel.toLowerCase()} account to get started.
+          </Text>
 
           <TextInput
             label="Email"
-            placeholder="you@example.com"
+            placeholder="Enter your email"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
           />
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
 
           <TextInput
-            label="Phone Number"
-            placeholder="+971 50 123 4567"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
+            label="Password"
+            placeholder="Create a password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
           />
 
-          <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)} activeOpacity={0.8}>
+          <TextInput
+            label="Confirm Password"
+            placeholder="Confirm your password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={styles.termsRow}
+            onPress={() => setAgreed(!agreed)}
+            activeOpacity={0.8}
+          >
             <Checkbox checked={agreed} onPress={() => setAgreed(!agreed)} />
             <Text style={styles.termsText}>
               I agree to the <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
@@ -68,32 +90,36 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
 
           <Button
             title="Sign Up"
-            onPress={() => navigation.navigate('ConfirmCode', { email, phone })}
+            onPress={() => navigation.navigate('ConfirmCode', { email })}
             fullWidth
-            disabled={!agreed || (!email && !phone)}
+            disabled={!agreed || !email || !password || password !== confirmPassword}
             style={styles.signUpButton}
           />
 
-          <View style={styles.socialSection}>
-            <Text style={styles.socialLabel}>Or continue with</Text>
-            <View style={styles.socialRow}>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-                <Ionicons name="logo-apple" size={24} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-                <Ionicons name="logo-google" size={24} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-                <Ionicons name="logo-facebook" size={24} color="#1877F2" />
-              </TouchableOpacity>
-            </View>
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>Or continue with</Text>
+            <View style={styles.divider} />
           </View>
 
-          <TouchableOpacity style={styles.loginLink} activeOpacity={0.8}>
-            <Text style={styles.loginText}>
-              Already have an account? <Text style={styles.loginBold}>Log In</Text>
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.socialRow}>
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
+              <Ionicons name="logo-google" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
+              <Ionicons name="logo-apple" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
+              <Ionicons name="logo-facebook" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
+              <Text style={styles.footerLink}>Log In</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -102,38 +128,40 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { paddingBottom: spacing.xxxl },
+  scroll: {
+    paddingBottom: spacing.xxxl,
+    paddingHorizontal: spacing.screen,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
+  },
   title: {
     ...typography.h1,
     color: colors.text,
-    marginTop: spacing.xxl,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
-    marginBottom: spacing.xxl,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
   },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
     marginBottom: spacing.xl,
+    marginTop: spacing.sm,
   },
   termsText: {
     ...typography.bodySmall,
@@ -146,40 +174,50 @@ const styles = StyleSheet.create({
     fontFamily: typography.label.fontFamily,
   },
   signUpButton: {
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.lg,
   },
-  socialSection: {
+  dividerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    marginVertical: spacing.lg,
+    gap: spacing.sm,
   },
-  socialLabel: {
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
     ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
   },
   socialRow: {
     flexDirection: 'row',
-    gap: spacing.lg,
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
   },
   socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  loginLink: {
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
   },
-  loginText: {
-    ...typography.bodySmall,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  footerText: {
+    ...typography.body,
     color: colors.textSecondary,
   },
-  loginBold: {
+  footerLink: {
+    ...typography.body,
     color: colors.primary,
-    fontFamily: typography.label.fontFamily,
+    fontWeight: '600',
   },
 });
