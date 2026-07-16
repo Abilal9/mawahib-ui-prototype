@@ -31,7 +31,9 @@ export default function JobListingDetailScreen({
         ? 'Full-time'
         : job.type === 'contract'
           ? 'Contract'
-          : 'Freelance';
+          : job.type === 'gig'
+            ? 'Gig'
+            : 'Freelance';
 
   return (
     <ScreenContainer padded={false}>

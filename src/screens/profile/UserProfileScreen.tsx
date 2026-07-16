@@ -8,28 +8,31 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import { toImageSource } from '../../utils/image';
+import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileTabs from '../../components/profile/ProfileTabs';
+import AboutTab from '../../components/profile/AboutTab';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getUserById } from '../../data/mock/users';
+import { resolveProfileUser } from '../../data/mock/resolveUser';
 import { posts } from '../../data/mock/posts';
-import { services } from '../../data/mock/services';
 import { talents } from '../../data/mock/talents';
-import { profileAboutSections } from '../../data/mock/profileSections';
+import {
+  getVisitorProfileContent,
+  ProfileTab,
+} from '../../data/mock/myProfile';
 import { ScreenProps } from '../../navigation/types';
 
-const TABS = ['About', 'Portfolio', 'Services', 'Posts'] as const;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_ITEM = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm) / 2;
+const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
+const POST_SIZE = MEDIA;
 
 export default function UserProfileScreen({ route, navigation }: ScreenProps<'UserProfile'>) {
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('About');
-  const insets = useSafeAreaInsets();
-  const user = getUserById(route.params.userId);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('About');
+  const [connected, setConnected] = useState(false);
+  const user = resolveProfileUser(route.params.userId) ?? getUserById(route.params.userId);
   const talent = talents.find((t) => t.user.id === route.params.userId);
 
   if (!user) {
@@ -40,152 +43,118 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     );
   }
 
+  const content = getVisitorProfileContent(user.id);
+  const profileUser = {
+    ...user,
+    title: user.title ?? talent?.category ?? 'Creative Professional',
+    rating: talent?.rating ?? user.rating ?? 4.8,
+    reviewCount: talent?.reviewCount ?? user.reviewCount ?? 24,
+  };
   const userPosts = posts.filter((p) => p.author.id === user.id);
-  const userServices = services.filter((s) => s.provider.id === user.id);
-  const portfolioItems = userPosts.slice(0, 4);
 
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} safeTop={false}>
       <StatusBar style="light" />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <LinearGradient
-            colors={['#E60076', '#FF4DA6', '#FFF0F7']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.wave}
-          />
-          <View style={[styles.headerBar, { paddingTop: insets.top + spacing.sm }]}>
-            <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={22} color={colors.white} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Profile</Text>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => navigation.navigate('Chat', { conversationId: 'c1' })}
-            >
-              <Ionicons name="chatbubble-outline" size={22} color={colors.white} />
-            </TouchableOpacity>
-          </View>
+        <ProfileHero
+          user={profileUser}
+          title="Profile"
+          isOwn={false}
+          onBack={() => navigation.goBack()}
+          onMessage={() => navigation.navigate('Chat', { conversationId: 'c1' })}
+          connectionsLabel={`${user.followers} connections`}
+          onConnectionsPress={() => navigation.navigate('Connections')}
+          onReviewsPress={() => navigation.navigate('Reviews', { userId: user.id })}
+        />
 
-          <View style={styles.profileCenter}>
-            <Image source={toImageSource(user.avatar)} style={styles.avatar} contentFit="cover" />
-            <View style={styles.nameRow}>
-              <Text style={styles.name}>{user.name}</Text>
-              {user.isVerified && (
-                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-              )}
-            </View>
-            <Text style={styles.jobTitle}>
-              {user.title ?? talent?.category ?? user.skills?.[0] ?? 'Creative Professional'}
-            </Text>
-            {user.location && (
-              <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-                <Text style={styles.location}>{user.location}</Text>
-              </View>
-            )}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Ionicons name="star" size={16} color="#F5A623" />
-                <Text style={styles.statValue}>{talent?.rating ?? user.rating ?? 4.8}</Text>
-                <Text style={styles.statLabel}>
-                  · {user.reviewCount ?? 24} reviews
-                </Text>
-              </View>
-              {talent ? (
-                <>
-                  <View style={styles.statDivider} />
-                  <Text style={styles.statValue}>AED {talent.hourlyRate}/hr</Text>
-                </>
-              ) : null}
-            </View>
-          </View>
+        <View style={styles.ctaRow}>
+          <TouchableOpacity
+            style={[styles.connectBtn, connected && styles.connectBtnDone]}
+            onPress={() => setConnected((v) => !v)}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={connected ? 'checkmark' : 'person-add-outline'}
+              size={18}
+              color={colors.white}
+            />
+            <Text style={styles.connectText}>{connected ? 'Connected' : 'Connect'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.messageBtn}
+            onPress={() => navigation.navigate('Chat', { conversationId: 'c1' })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
+            <Text style={styles.messageText}>Message</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.segmentedTabs}>
-          {TABS.map((tab, index) => (
-            <React.Fragment key={tab}>
-              {index > 0 && <View style={styles.tabDivider} />}
-              <TouchableOpacity
-                style={[styles.segmentTab, activeTab === tab && styles.segmentTabActive]}
-                onPress={() => setActiveTab(tab)}
-              >
-                <Text style={[styles.segmentText, activeTab === tab && styles.segmentTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            </React.Fragment>
-          ))}
-        </View>
+        <ProfileTabs active={activeTab} onChange={setActiveTab} />
 
         {activeTab === 'About' && (
-          <View style={styles.aboutList}>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>Bio</Text>
-              <Text style={styles.aboutValue}>{user.bio}</Text>
-            </View>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>Skills</Text>
-              <Text style={styles.aboutValue}>{user.skills?.join(', ')}</Text>
-            </View>
-            {profileAboutSections.slice(2).map((section) => (
-              <View key={section.id} style={styles.aboutRow}>
-                <Text style={styles.aboutLabel}>{section.label}</Text>
-                <Text style={styles.aboutValue}>{section.value}</Text>
+          <AboutTab content={content} isOwn={false} onAdd={() => {}} onEdit={() => {}} />
+        )}
+
+        {activeTab === 'Portfolio' && (
+          <View style={styles.tabPad}>
+            {content.portfolio.map((project) => (
+              <View key={project.id} style={styles.projectCard}>
+                <Text style={styles.projectTitle}>{project.title}</Text>
+                <Text style={styles.projectDesc}>{project.description}</Text>
+                <View style={styles.mediaGrid}>
+                  {project.images.map((uri, index) => (
+                    <Image
+                      key={`${project.id}-${index}`}
+                      source={{ uri }}
+                      style={styles.mediaImage}
+                      contentFit="cover"
+                    />
+                  ))}
+                </View>
               </View>
             ))}
           </View>
         )}
 
-        {activeTab === 'Portfolio' && (
-          <View style={styles.tabContent}>
-            {portfolioItems.length === 0 ? (
-              <Text style={styles.emptyText}>No portfolio items yet.</Text>
-            ) : (
-              <View style={styles.portfolioGrid}>
-                {portfolioItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.portfolioItem}
-                    onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-                  >
-                    <Image source={{ uri: item.images[0] }} style={styles.portfolioImage} contentFit="cover" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
         {activeTab === 'Services' && (
-          <View style={styles.tabContent}>
-            {userServices.length === 0 ? (
-              <Text style={styles.emptyText}>No services listed yet.</Text>
-            ) : (
-              userServices.map((service) => (
-                <TouchableOpacity
-                  key={service.id}
-                  style={styles.serviceCard}
-                  onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
-                >
-                  <Image source={{ uri: service.images[0] }} style={styles.serviceImage} contentFit="cover" />
-                  <View style={styles.serviceInfo}>
-                    <Text style={styles.serviceTitle}>{service.title}</Text>
-                    <Text style={styles.serviceMeta}>
-                      {service.currency} {service.price.toLocaleString()}
-                    </Text>
+          <View style={styles.tabPad}>
+            {content.services.map((service) => (
+              <TouchableOpacity
+                key={service.id}
+                style={styles.serviceCard}
+                onPress={() =>
+                  navigation.navigate('ServiceDetail', { serviceId: service.id })
+                }
+              >
+                <Image
+                  source={{ uri: service.images[0] }}
+                  style={styles.serviceImage}
+                  contentFit="cover"
+                />
+                <View style={styles.serviceBody}>
+                  <Text style={styles.serviceTitle}>{service.title}</Text>
+                  <Text style={styles.serviceDesc} numberOfLines={2}>
+                    {service.description}
+                  </Text>
+                  <View style={styles.packageRow}>
+                    {service.packages.map((pkg) => (
+                      <View key={pkg.name} style={styles.packageChip}>
+                        <Text style={styles.packageName}>{pkg.name}</Text>
+                        <Text style={styles.packagePrice}>{pkg.priceLabel}</Text>
+                      </View>
+                    ))}
                   </View>
-                </TouchableOpacity>
-              ))
-            )}
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
         {activeTab === 'Posts' && (
-          <View style={styles.tabContent}>
+          <View style={styles.tabPad}>
             {userPosts.length === 0 ? (
-              <Text style={styles.emptyText}>No posts yet.</Text>
+              <Text style={styles.emptyCopy}>No posts yet.</Text>
             ) : (
               <View style={styles.postsGrid}>
                 {userPosts.map((post) => (
@@ -194,7 +163,11 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                     style={styles.postItem}
                     onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
                   >
-                    <Image source={{ uri: post.images[0] }} style={styles.postImage} contentFit="cover" />
+                    <Image
+                      source={{ uri: post.images[0] }}
+                      style={styles.postImage}
+                      contentFit="cover"
+                    />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -207,92 +180,83 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: colors.white, paddingBottom: spacing.lg },
-  wave: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  headerBar: {
+  ctaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...typography.h3, color: colors.white },
-  profileCenter: { alignItems: 'center', paddingHorizontal: spacing.screen },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 3,
-    borderColor: colors.white,
-    marginBottom: spacing.md,
-  },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { ...typography.h2, color: colors.text },
-  jobTitle: { ...typography.body, color: colors.textSecondary, marginTop: 4 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
-  location: { ...typography.bodySmall, color: colors.textSecondary },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: spacing.md },
-  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statValue: { ...typography.bodySmall, color: colors.text, fontWeight: '600' },
-  statLabel: { ...typography.bodySmall, color: colors.textSecondary },
-  statDivider: { width: 1, height: 16, backgroundColor: colors.border },
-  segmentedTabs: {
+  connectBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: spacing.screen,
-    marginVertical: spacing.lg,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+  },
+  connectBtnDone: {
+    backgroundColor: '#00A63E',
+  },
+  connectText: { ...typography.button, color: colors.white },
+  messageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
     backgroundColor: colors.white,
     borderRadius: radius.button,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingVertical: spacing.md,
   },
-  segmentTab: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: 'center' },
-  segmentTabActive: { backgroundColor: '#FFF0F7' },
-  tabDivider: { width: 1, height: 24, backgroundColor: colors.border },
-  segmentText: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' },
-  segmentTextActive: { color: colors.primary, fontWeight: '600' },
-  aboutList: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxl, gap: spacing.sm },
-  aboutRow: {
-    backgroundColor: colors.white,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  messageText: { ...typography.button, color: colors.primary },
+  tabPad: {
+    paddingHorizontal: spacing.screen,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.lg,
   },
-  aboutLabel: { ...typography.label, color: colors.text, marginBottom: 4 },
-  aboutValue: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20 },
-  tabContent: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxl },
-  emptyText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xxl },
-  portfolioGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  portfolioItem: { width: GRID_ITEM, height: GRID_ITEM, borderRadius: radius.card, overflow: 'hidden' },
-  portfolioImage: { width: '100%', height: '100%' },
+  projectCard: { gap: spacing.sm },
+  projectTitle: { ...typography.bodyMedium, color: colors.text, fontWeight: '600' },
+  projectDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  mediaImage: {
+    width: MEDIA,
+    height: MEDIA,
+    borderRadius: radius.button,
+  },
   serviceCard: {
-    flexDirection: 'row',
     backgroundColor: colors.white,
     borderRadius: radius.card,
     overflow: 'hidden',
-    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#F3F4F6',
   },
-  serviceImage: { width: 96, height: 96 },
-  serviceInfo: { flex: 1, padding: spacing.md, justifyContent: 'center' },
-  serviceTitle: { ...typography.label, color: colors.text },
-  serviceMeta: { ...typography.bodySmall, color: colors.primary, marginTop: 4 },
+  serviceImage: { width: '100%', height: 180 },
+  serviceBody: { padding: spacing.md, gap: spacing.sm },
+  serviceTitle: { ...typography.bodyMedium, fontWeight: '500', color: colors.text },
+  serviceDesc: { ...typography.caption, color: colors.textTertiary },
+  packageRow: { flexDirection: 'row', gap: spacing.sm },
+  packageChip: {
+    flex: 1,
+    backgroundColor: '#FFF0F7',
+    borderRadius: radius.button,
+    padding: spacing.sm,
+  },
+  packageName: { ...typography.caption, color: colors.primary, fontWeight: '600' },
+  packagePrice: { fontSize: 11, color: colors.text, marginTop: 2 },
+  emptyCopy: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.xxl,
+  },
   postsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   postItem: {
-    width: (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3,
-    height: (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3,
+    width: POST_SIZE,
+    height: POST_SIZE,
     borderRadius: radius.button,
     overflow: 'hidden',
   },

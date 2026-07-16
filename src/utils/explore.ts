@@ -1,9 +1,5 @@
 import { Job, Post, Service, Talent } from '../data/types';
-import {
-  ExploreCategory,
-  ExploreContentType,
-  ExploreFilters,
-} from '../data/mock/explore';
+import { ExploreFilters, ExploreTab } from '../data/mock/explore';
 
 function matchesLocation(text: string, location: ExploreFilters['location']) {
   if (location === 'all') return true;
@@ -14,28 +10,30 @@ function matchesLocation(text: string, location: ExploreFilters['location']) {
   return true;
 }
 
-function matchesCategory(category: string, selected: ExploreCategory) {
-  return selected === 'All' || category.toLowerCase() === selected.toLowerCase();
-}
-
 function matchesQuery(query: string, values: string[]) {
   if (!query.trim()) return true;
   const q = query.toLowerCase();
   return values.some((v) => v.toLowerCase().includes(q));
 }
 
+function matchesChip(chip: string | null, tags: string[] = []) {
+  if (!chip) return true;
+  return tags.some((t) => t.toLowerCase() === chip.toLowerCase());
+}
+
 export function filterTalents(
   items: Talent[],
   query: string,
-  category: ExploreCategory,
+  chip: string | null,
   filters: ExploreFilters
 ) {
   return items
-    .filter((item) => matchesCategory(item.category, category))
+    .filter((item) => matchesChip(chip, item.tags ?? [item.category]))
     .filter((item) =>
       matchesQuery(query, [
         item.user.name,
         item.user.username,
+        item.user.title ?? '',
         item.category,
         ...item.skills,
         item.user.location ?? '',
@@ -48,22 +46,15 @@ export function filterTalents(
 export function filterJobs(
   items: Job[],
   query: string,
-  category: ExploreCategory,
+  chip: string | null,
   filters: ExploreFilters
 ) {
   return items
     .filter((item) => {
-      if (category === 'All') return true;
-      const map: Record<string, string> = {
-        Design: 'design',
-        Development: 'developer',
-        Photography: 'photograph',
-        Video: 'video',
-        Illustration: 'illustration',
-        Writing: 'writing',
-      };
-      const needle = map[category] ?? category.toLowerCase();
+      if (!chip) return true;
+      const needle = chip.toLowerCase();
       return (
+        (item.exploreTag ?? '').toLowerCase() === needle ||
         item.title.toLowerCase().includes(needle) ||
         item.skills.some((s) => s.toLowerCase().includes(needle))
       );
@@ -78,18 +69,29 @@ export function filterJobs(
       ])
     )
     .filter((item) => matchesLocation(item.location, filters.location))
-    .filter((item) => filters.jobType === 'all' || item.type === filters.jobType)
+    .filter((item) => {
+      if (filters.jobType === 'all') return true;
+      if (filters.jobType === 'freelance' && item.type === 'gig') return true;
+      return item.type === filters.jobType;
+    })
     .sort((a, b) => sortJobs(a, b, filters.sort));
 }
 
 export function filterServices(
   items: Service[],
   query: string,
-  category: ExploreCategory,
+  chip: string | null,
   filters: ExploreFilters
 ) {
   return items
-    .filter((item) => matchesCategory(item.category, category))
+    .filter((item) => {
+      if (!chip) return true;
+      const needle = chip.toLowerCase();
+      return (
+        (item.exploreTag ?? item.category).toLowerCase() === needle ||
+        item.category.toLowerCase() === needle
+      );
+    })
     .filter((item) =>
       matchesQuery(query, [
         item.title,
@@ -106,14 +108,14 @@ export function filterServices(
 export function filterPosts(
   items: Post[],
   query: string,
-  category: ExploreCategory,
+  chip: string | null,
   filters: ExploreFilters
 ) {
   return items
     .filter((item) => {
-      if (category === 'All') return true;
+      if (!chip) return true;
       const role = item.role ?? item.author.skills?.join(' ') ?? '';
-      return role.toLowerCase().includes(category.toLowerCase());
+      return role.toLowerCase().includes(chip.toLowerCase());
     })
     .filter((item) =>
       matchesQuery(query, [
@@ -154,11 +156,9 @@ function sortPosts(a: Post, b: Post, sort: ExploreFilters['sort']) {
   return Date.parse(b.createdAt) - Date.parse(a.createdAt);
 }
 
-export function getExploreSectionTitle(contentType: ExploreContentType, query: string) {
-  if (query) return 'Results';
-  if (contentType === 'all') return 'Discover';
-  if (contentType === 'talents') return 'Top Talents';
-  if (contentType === 'jobs') return 'Open Jobs';
-  if (contentType === 'services') return 'Services';
-  return 'Posts';
+export function normalizeExploreTab(
+  value?: string
+): ExploreTab {
+  if (value === 'services' || value === 'jobs') return value;
+  return 'talents';
 }

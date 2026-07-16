@@ -1,207 +1,179 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius, typography } from '../../theme';
-import {
-  CALENDAR_MONTH,
-  calendarEvents,
-  getUpcomingEvents,
-} from '../../data/mock/calendar';
+import { colors, spacing, typography } from '../../theme';
 
-const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Figma sidebar: June with day 21 selected + colored event dots */
+const EVENT_DOTS: Record<number, string[]> = {
+  20: ['#F0B429'],
+  21: ['#2CB67D'],
+  22: ['#3B82F6'],
+  23: ['#F0B429', '#2CB67D'],
+  24: ['#3B82F6'],
+  25: ['#2CB67D'],
+  30: ['#F0B429', '#3B82F6'],
+};
 
 interface SidebarCalendarPreviewProps {
   onPress: () => void;
 }
 
 export default function SidebarCalendarPreview({ onPress }: SidebarCalendarPreviewProps) {
-  const daysInMonth = new Date(
-    CALENDAR_MONTH.getFullYear(),
-    CALENDAR_MONTH.getMonth() + 1,
-    0
-  ).getDate();
-  const firstDay = new Date(
-    CALENDAR_MONTH.getFullYear(),
-    CALENDAR_MONTH.getMonth(),
-    1
-  ).getDay();
-  const monthName = CALENDAR_MONTH.toLocaleString('default', {
-    month: 'long',
-    year: 'numeric',
-  });
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const eventDays = calendarEvents.map((event) => event.date);
-  const today = 12;
-  const upcoming = getUpcomingEvents(1)[0];
+  const [month, setMonth] = useState(() => new Date(2025, 5, 1)); // June 2025
+  const selectedDay = 21;
+
+  const { firstDay, monthLabel, days } = useMemo(() => {
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+    const monthLabel = month.toLocaleString('default', {
+      month: 'long',
+      year: 'numeric',
+    });
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    return { firstDay, monthLabel, days };
+  }, [month]);
+
+  const shiftMonth = (delta: number) => {
+    setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
+    <View style={styles.card}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-          </View>
-          <Text style={styles.headerTitle}>Calendar</Text>
+        <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+          <Text style={styles.monthLabel}>{monthLabel}</Text>
+        </TouchableOpacity>
+        <View style={styles.nav}>
+          <TouchableOpacity hitSlop={8} onPress={() => shiftMonth(-1)}>
+            <Ionicons name="chevron-back" size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={8} onPress={() => shiftMonth(1)}>
+            <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
       </View>
 
-      <Text style={styles.monthName}>{monthName}</Text>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.95}>
+        <View style={styles.weekDays}>
+          {WEEKDAYS.map((day, index) => (
+            <Text key={`${day}-${index}`} style={styles.weekDay}>
+              {day}
+            </Text>
+          ))}
+        </View>
 
-      <View style={styles.weekDays}>
-        {DAYS_OF_WEEK.map((day, index) => (
-          <Text key={`${day}-${index}`} style={styles.weekDay}>
-            {day}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.daysGrid}>
-        {Array.from({ length: firstDay }).map((_, index) => (
-          <View key={`empty-${index}`} style={styles.dayCell} />
-        ))}
-        {days.map((day) => {
-          const hasEvent = eventDays.includes(day);
-          const isToday = day === today;
-          return (
-            <View key={day} style={styles.dayCell}>
-              <View style={[styles.dayInner, isToday && styles.dayToday]}>
-                <Text style={[styles.dayText, isToday && styles.dayTextToday]}>{day}</Text>
+        <View style={styles.daysGrid}>
+          {Array.from({ length: firstDay }).map((_, index) => (
+            <View key={`empty-${index}`} style={styles.dayCell} />
+          ))}
+          {days.map((day) => {
+            const isSelected =
+              day === selectedDay && month.getMonth() === 5 && month.getFullYear() === 2025;
+            const dots = EVENT_DOTS[day] ?? [];
+            return (
+              <View key={day} style={styles.dayCell}>
+                <View style={[styles.dayInner, isSelected && styles.daySelected]}>
+                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
+                    {day}
+                  </Text>
+                </View>
+                {dots.length > 0 ? (
+                  <View style={styles.dotsRow}>
+                    {dots.map((color, i) => (
+                      <View
+                        key={`${day}-dot-${i}`}
+                        style={[styles.dot, { backgroundColor: color }]}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.dotsSpacer} />
+                )}
               </View>
-              {hasEvent && <View style={styles.eventDot} />}
-            </View>
-          );
-        })}
-      </View>
-
-      {upcoming && (
-        <View style={styles.upcoming}>
-          <View style={[styles.eventStripe, { backgroundColor: upcoming.color }]} />
-          <View style={styles.upcomingInfo}>
-            <Text style={styles.upcomingTitle} numberOfLines={1}>
-              {upcoming.title}
-            </Text>
-            <Text style={styles.upcomingMeta}>
-              Jul {upcoming.date} · {upcoming.time}
-            </Text>
-          </View>
+            );
+          })}
         </View>
-      )}
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  headerLeft: {
+  monthLabel: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  nav: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.button,
-    backgroundColor: '#FFF0F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    ...typography.label,
-    color: colors.text,
-  },
-  monthName: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
   weekDays: {
     flexDirection: 'row',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   weekDay: {
     flex: 1,
     textAlign: 'center',
-    ...typography.caption,
+    fontSize: 9,
+    lineHeight: 12,
     color: colors.textSecondary,
-    fontSize: 10,
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   dayCell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
+    width: '14.28%' as `${number}%`,
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    paddingVertical: 0,
+    minHeight: 24,
   },
   dayInner: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 11,
   },
-  dayToday: {
+  daySelected: {
     backgroundColor: colors.primary,
   },
   dayText: {
-    ...typography.caption,
+    fontSize: 10,
+    lineHeight: 12,
     color: colors.text,
-    fontSize: 11,
   },
-  dayTextToday: {
+  dayTextSelected: {
     color: colors.white,
     fontWeight: '600',
   },
-  eventDot: {
-    position: 'absolute',
-    bottom: 2,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
-  upcoming: {
+  dotsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    gap: spacing.sm,
+    gap: 1,
+    marginTop: 1,
+    minHeight: 3,
   },
-  eventStripe: {
+  dotsSpacer: {
+    height: 4,
+  },
+  dot: {
     width: 3,
-    height: 32,
-    borderRadius: 2,
-  },
-  upcomingInfo: {
-    flex: 1,
-  },
-  upcomingTitle: {
-    ...typography.bodySmall,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  upcomingMeta: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
+    height: 3,
+    borderRadius: 1.5,
   },
 });

@@ -2,138 +2,121 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import { useCreateMenu } from '../../context/CreateMenuContext';
 
-const TAB_ICONS = {
-  HomeTab: 'home',
-  SearchTab: 'search',
-  CreateTab: 'add',
-  MessagesTab: 'chatbubble',
-  JobsTab: 'briefcase',
-} as const;
+type TabIconName = keyof typeof Ionicons.glyphMap;
+
+const ICON_SIZE = 24;
+const CREATE_ICON_SIZE = 28;
+
+const TAB_ICONS: Record<
+  string,
+  { active: TabIconName; inactive: TabIconName }
+> = {
+  HomeTab: { active: 'home', inactive: 'home-outline' },
+  SearchTab: { active: 'search', inactive: 'search-outline' },
+  MessagesTab: { active: 'chatbubble', inactive: 'chatbubble-outline' },
+  JobsTab: { active: 'briefcase', inactive: 'briefcase-outline' },
+};
 
 export default function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { isOpen: isCreateMenuOpen, toggle: toggleCreateMenu, close: closeCreateMenu } =
     useCreateMenu();
+  const bottomPad = Math.max(insets.bottom, 10);
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <View style={styles.shadow} />
-      <View style={styles.bar}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-          const isHome = route.name === 'HomeTab';
-          const isCreate = route.name === 'CreateTab';
+    <View
+      pointerEvents="box-none"
+      style={[styles.wrapper, { paddingBottom: bottomPad }]}
+    >
+      <View style={styles.glassShell}>
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 55 : 80}
+          tint="light"
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.sheen} pointerEvents="none" />
+        <View style={styles.glassBorder} pointerEvents="none" />
 
-          const onPress = () => {
+        <View style={styles.bar}>
+          {state.routes.map((route, index) => {
+            const { options } = descriptors[route.key];
+            const isFocused = state.index === index;
+            const isCreate = route.name === 'CreateTab';
+
+            const onPress = () => {
+              if (isCreate) {
+                toggleCreateMenu();
+                return;
+              }
+
+              if (isCreateMenuOpen) {
+                closeCreateMenu();
+              }
+
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name, route.params);
+              }
+            };
+
             if (isCreate) {
-              toggleCreateMenu();
-              return;
-            }
-
-            if (isCreateMenuOpen) {
-              closeCreateMenu();
-            }
-
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name, route.params);
-            }
-          };
-
-          const iconName = TAB_ICONS[route.name as keyof typeof TAB_ICONS] ?? 'home';
-
-          if (isHome) {
-            return (
-              <TouchableOpacity
-                key={route.key}
-                accessibilityRole="button"
-                accessibilityState={isFocused ? { selected: true } : {}}
-                accessibilityLabel={options.tabBarAccessibilityLabel}
-                onPress={onPress}
-                style={styles.homeTab}
-                activeOpacity={0.85}
-              >
-                <View style={styles.homeCutout} />
-                <View style={[styles.homeButton, isFocused && styles.homeButtonActive]}>
-                  <Ionicons
-                    name="home"
-                    size={24}
-                    color={isFocused ? colors.white : colors.textSecondary}
-                  />
-                </View>
-              </TouchableOpacity>
-            );
-          }
-
-          if (isCreate) {
-            return (
-              <TouchableOpacity
-                key={route.key}
-                accessibilityRole="button"
-                accessibilityState={isCreateMenuOpen ? { selected: true } : {}}
-                accessibilityLabel="Create"
-                onPress={onPress}
-                style={styles.createTab}
-                activeOpacity={0.85}
-              >
-                <View
-                  style={[
-                    styles.createButton,
-                    isCreateMenuOpen && styles.createButtonActive,
-                  ]}
+              return (
+                <TouchableOpacity
+                  key={route.key}
+                  accessibilityRole="button"
+                  accessibilityState={isCreateMenuOpen ? { selected: true } : {}}
+                  accessibilityLabel="Create"
+                  onPress={onPress}
+                  style={styles.tab}
+                  activeOpacity={0.85}
                 >
+                  {isCreateMenuOpen ? (
+                    <View style={styles.highlight} pointerEvents="none" />
+                  ) : null}
                   <Ionicons
                     name={isCreateMenuOpen ? 'close' : 'add'}
-                    size={26}
-                    color={isCreateMenuOpen ? colors.white : colors.textSecondary}
+                    size={CREATE_ICON_SIZE}
+                    color={isCreateMenuOpen ? colors.primary : colors.textSecondary}
                   />
-                </View>
+                </TouchableOpacity>
+              );
+            }
+
+            const icons = TAB_ICONS[route.name] ?? {
+              active: 'ellipse' as TabIconName,
+              inactive: 'ellipse-outline' as TabIconName,
+            };
+
+            return (
+              <TouchableOpacity
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : { selected: false }}
+                accessibilityLabel={options.tabBarAccessibilityLabel}
+                onPress={onPress}
+                style={styles.tab}
+                activeOpacity={0.7}
+              >
+                {isFocused ? <View style={styles.highlight} pointerEvents="none" /> : null}
+                <Ionicons
+                  name={isFocused ? icons.active : icons.inactive}
+                  size={ICON_SIZE}
+                  color={isFocused ? colors.primary : colors.textSecondary}
+                />
               </TouchableOpacity>
             );
-          }
-
-          return (
-            <TouchableOpacity
-              key={route.key}
-              accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel}
-              onPress={onPress}
-              style={styles.tab}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={
-                  (iconName === 'chatbubble'
-                    ? isFocused
-                      ? 'chatbubble'
-                      : 'chatbubble-outline'
-                    : iconName === 'briefcase'
-                      ? isFocused
-                        ? 'briefcase'
-                        : 'briefcase-outline'
-                      : iconName === 'search'
-                        ? isFocused
-                          ? 'search'
-                          : 'search-outline'
-                        : 'home-outline') as keyof typeof Ionicons.glyphMap
-                }
-                size={24}
-                color={isFocused ? colors.primary : colors.textSecondary}
-              />
-            </TouchableOpacity>
-          );
-        })}
+          })}
+        </View>
       </View>
     </View>
   );
@@ -141,87 +124,63 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: colors.white,
-  },
-  shadow: {
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 12 },
-    }),
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
-    height: 1,
-    backgroundColor: colors.borderLight,
+    bottom: 0,
+    paddingHorizontal: spacing.md,
+    backgroundColor: 'transparent',
+  },
+  glassShell: {
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: Platform.select({
+      ios: 'rgba(255,255,255,0.28)',
+      default: 'rgba(255,255,255,0.72)',
+    }),
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0E243A',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.14,
+        shadowRadius: 24,
+      },
+      android: { elevation: 16 },
+    }),
+  },
+  sheen: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 28,
+    borderTopWidth: StyleSheet.hairlineWidth * 2,
+    borderTopColor: 'rgba(255,255,255,0.65)',
+    backgroundColor: 'transparent',
+  },
+  glassBorder: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   bar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: colors.white,
     height: 60,
     paddingHorizontal: spacing.sm,
+    backgroundColor: 'transparent',
   },
   tab: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  createTab: {
-    width: 60,
-    height: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  createButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
-  },
-  homeTab: {
-    width: 104,
-    height: 60,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  homeCutout: {
+  /** Behind the icon only — same slot size active/inactive */
+  highlight: {
     position: 'absolute',
-    top: 0,
-    width: 104,
-    height: 60,
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-  },
-  homeButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  homeButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(230, 0, 118, 0.14)',
   },
 });

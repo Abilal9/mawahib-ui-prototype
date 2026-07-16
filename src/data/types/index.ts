@@ -51,7 +51,7 @@ export interface Job {
   id: string;
   title: string;
   company: string;
-  type: 'full-time' | 'part-time' | 'contract' | 'freelance';
+  type: 'full-time' | 'part-time' | 'contract' | 'freelance' | 'gig';
   location: string;
   salary: string;
   description: string;
@@ -60,6 +60,8 @@ export interface Job {
   status?: 'open' | 'in-progress' | 'completed' | 'cancelled';
   matchScore?: number;
   logo?: string | number;
+  /** Explore filter chip e.g. Tech / Design / Food */
+  exploreTag?: string;
 }
 
 export interface Message {
@@ -82,12 +84,15 @@ export interface Conversation {
 export interface Notification {
   id: string;
   type: 'like' | 'comment' | 'follow' | 'job' | 'message' | 'system';
+  title?: string;
   user?: User;
   message: string;
   createdAt: string;
   read: boolean;
   postId?: string;
   jobId?: string;
+  actions?: Array<'accept' | 'decline'>;
+  showRating?: boolean;
 }
 
 export interface Service {
@@ -102,7 +107,12 @@ export interface Service {
   rating: number;
   reviewCount: number;
   images: string[];
+  priceLabel?: string;
+  /** Explore filter chip */
+  exploreTag?: string;
 }
+
+export type TalentConnectStatus = 'connect' | 'added' | 'request-sent';
 
 export interface Talent {
   id: string;
@@ -111,4 +121,11 @@ export interface Talent {
   rating: number;
   hourlyRate: number;
   skills: string[];
+  rateLabel?: string;
+  reviewCount?: number;
+  mutualConnections?: number;
+  mutualAvatars?: (string | number)[];
+  connectStatus?: TalentConnectStatus;
+  /** Explore filter chips that match this talent */
+  tags?: string[];
 }

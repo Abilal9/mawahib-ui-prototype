@@ -1,30 +1,56 @@
-export const exploreCategories = [
-  'All',
+export const exploreTabs = [
+  { id: 'talents', label: 'Talents' },
+  { id: 'services', label: 'Services' },
+  { id: 'jobs', label: 'Jobs' },
+] as const;
+
+export type ExploreTab = (typeof exploreTabs)[number]['id'];
+
+/** @deprecated use ExploreTab — kept for older navigations */
+export type ExploreContentType = ExploreTab | 'all' | 'posts';
+
+export const talentFilters = [
+  'Saudi Made',
+  'Local Talent',
+  'Visual Artists',
+  'Photographers',
+  'Videographers',
+  'Performers',
+] as const;
+
+export const serviceFilters = [
+  'Music',
+  'Events',
   'Design',
-  'Development',
   'Photography',
   'Video',
-  'Illustration',
-  'Writing',
+  'Development',
+  'Coaching',
 ] as const;
 
-export type ExploreCategory = (typeof exploreCategories)[number];
-
-export const exploreContentTypes = [
-  { id: 'all', label: 'All' },
-  { id: 'talents', label: 'Talents' },
-  { id: 'jobs', label: 'Jobs' },
-  { id: 'services', label: 'Services' },
-  { id: 'posts', label: 'Posts' },
+export const jobFilters = [
+  'Tech',
+  'Design',
+  'Media',
+  'Events',
+  'Food',
+  'Business',
 ] as const;
 
-export type ExploreContentType = (typeof exploreContentTypes)[number]['id'];
+export type ExploreChip =
+  | (typeof talentFilters)[number]
+  | (typeof serviceFilters)[number]
+  | (typeof jobFilters)[number]
+  | 'All';
+
+/** Legacy category chips — map soft to filter chips */
+export type ExploreCategory = string;
 
 export type ExploreSort = 'recommended' | 'top-rated' | 'newest' | 'price-low' | 'price-high';
 
 export type ExploreLocation = 'all' | 'dubai' | 'riyadh' | 'remote';
 
-export type ExploreJobType = 'all' | 'full-time' | 'part-time' | 'contract' | 'freelance';
+export type ExploreJobType = 'all' | 'full-time' | 'part-time' | 'contract' | 'freelance' | 'gig';
 
 export interface ExploreFilters {
   sort: ExploreSort;
@@ -37,3 +63,9 @@ export const defaultExploreFilters: ExploreFilters = {
   location: 'all',
   jobType: 'all',
 };
+
+export function chipsForTab(tab: ExploreTab): readonly string[] {
+  if (tab === 'talents') return talentFilters;
+  if (tab === 'services') return serviceFilters;
+  return jobFilters;
+}

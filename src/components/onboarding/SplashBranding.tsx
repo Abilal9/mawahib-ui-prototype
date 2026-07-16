@@ -4,11 +4,13 @@ import { Image } from 'expo-image';
 import { BRAND_NAME, SPLASH_TAGLINE } from '../../constants/brand';
 import { colors, spacing, typography } from '../../theme';
 
-// Figma Splash Screen 1/2 (8368:11336, 8368:11327) — logo mark ~55.5pt wide, 12pt gap to title
-const SPLASH_LOGO_SOLO_SIZE = 80;
-const SPLASH_LOGO_ROW_SIZE = 64;
-const BRAND_ROW_GAP = spacing.md; // 12px — Figma gap between logo and "Mawahib"
-const TAGLINE_TOP_GAP = spacing.md; // 12px — Figma gap from brand row to tagline
+/** Layout footprint stays original; drawn size is 2× so text/gap don’t shift */
+const SPLASH_LOGO_SOLO_LAYOUT = 80;
+const SPLASH_LOGO_SOLO_DRAW = 160;
+const SPLASH_LOGO_ROW_LAYOUT = 64;
+const SPLASH_LOGO_ROW_DRAW = 128;
+const BRAND_ROW_GAP = spacing.md;
+const TAGLINE_TOP_GAP = spacing.md;
 
 interface SplashBrandingProps {
   variant: 'icon' | 'full';
@@ -16,22 +18,30 @@ interface SplashBrandingProps {
 }
 
 export default function SplashBranding({ variant, style }: SplashBrandingProps) {
-  const logoIcon = (
-    <Image
-      source={require('../../../assets/images/arabic-emblem.png')}
-      style={variant === 'icon' ? styles.logoIconSolo : styles.logoIconRow}
-      contentFit="contain"
-    />
-  );
-
   if (variant === 'icon') {
-    return <View style={[styles.iconOnly, style]}>{logoIcon}</View>;
+    return (
+      <View style={[styles.iconOnly, style]}>
+        <View style={styles.logoSlotSolo}>
+          <Image
+            source={require('../../../assets/images/arabic-emblem.png')}
+            style={styles.logoIconSolo}
+            contentFit="contain"
+          />
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={[styles.full, style]}>
       <View style={styles.brandRow}>
-        {logoIcon}
+        <View style={styles.logoSlotRow}>
+          <Image
+            source={require('../../../assets/images/arabic-emblem.png')}
+            style={styles.logoIconRow}
+            contentFit="contain"
+          />
+        </View>
         <Text style={styles.brandName}>{BRAND_NAME}</Text>
       </View>
       {SPLASH_TAGLINE ? (
@@ -55,13 +65,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: BRAND_ROW_GAP,
   },
+  logoSlotSolo: {
+    width: SPLASH_LOGO_SOLO_LAYOUT,
+    height: SPLASH_LOGO_SOLO_LAYOUT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoSlotRow: {
+    width: SPLASH_LOGO_ROW_LAYOUT,
+    height: SPLASH_LOGO_ROW_LAYOUT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   logoIconSolo: {
-    width: SPLASH_LOGO_SOLO_SIZE,
-    height: SPLASH_LOGO_SOLO_SIZE,
+    position: 'absolute',
+    width: SPLASH_LOGO_SOLO_DRAW,
+    height: SPLASH_LOGO_SOLO_DRAW,
   },
   logoIconRow: {
-    width: SPLASH_LOGO_ROW_SIZE,
-    height: SPLASH_LOGO_ROW_SIZE,
+    position: 'absolute',
+    width: SPLASH_LOGO_ROW_DRAW,
+    height: SPLASH_LOGO_ROW_DRAW,
   },
   brandName: {
     fontFamily: typography.h1.fontFamily,
@@ -74,7 +98,7 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     fontSize: 15,
     lineHeight: 24,
-    color: colors.textSecondary,
+    color: colors.text,
     textAlign: 'center',
     maxWidth: 236,
     marginTop: TAGLINE_TOP_GAP,

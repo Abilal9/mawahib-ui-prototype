@@ -60,7 +60,7 @@ export default function MessagesInboxScreen({ navigation }: TabScreenProps<'Mess
 const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.screen, paddingVertical: spacing.lg },
   headerTitle: { ...typography.h2, color: colors.text },
-  list: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxxl },
+  list: { paddingHorizontal: spacing.screen, paddingBottom: 120 },
   conversation: {
     flexDirection: 'row',
     alignItems: 'center',

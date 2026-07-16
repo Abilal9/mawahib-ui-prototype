@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -13,286 +13,382 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import ProfileTabs from '../../components/profile/ProfileTabs';
+import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
+import AboutTab from '../../components/profile/AboutTab';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { currentUser } from '../../data/mock/users';
+import { useMyProfile } from '../../context/ProfileContext';
 import { posts } from '../../data/mock/posts';
-import { services } from '../../data/mock/services';
-import { profileAboutSections } from '../../data/mock/profileSections';
+import { ProfileTab, AboutSectionKey } from '../../data/mock/myProfile';
+import { Post } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
-const TABS = ['About', 'Portfolio', 'Services', 'Posts'] as const;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_GAP = spacing.sm;
-const GRID_ITEM = (SCREEN_WIDTH - spacing.screen * 2 - GRID_GAP) / 2;
+const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
 
 export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('About');
+  const [activeTab, setActiveTab] = React.useState<ProfileTab>('About');
   const insets = useSafeAreaInsets();
-  const user = currentUser;
-  const userPosts = posts.filter((p) => p.author.id === user.id);
-  const userServices = services.filter((s) => s.provider.id === user.id);
-  const portfolioItems = userPosts.slice(0, 4);
+  const { user, content, useEmptyProfile } = useMyProfile();
+  const userPosts = posts.filter((p) => content.postIds.includes(p.id));
+
+  const openAbout = (key: AboutSectionKey) => {
+    navigation.navigate('EditAboutSection', { section: key });
+  };
 
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
       <StatusBar style="light" />
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
+
+      {/* Fixed pink top bar — stays while tabs stick below */}
+      <LinearGradient
+        colors={['#E60076', '#F6339A']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.fixedBar, { paddingTop: insets.top }]}
+      >
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>My Profile</Text>
+        <TouchableOpacity style={styles.navBtn} activeOpacity={0.85}>
+          <Ionicons name="share-outline" size={20} color={colors.white} />
+        </TouchableOpacity>
+      </LinearGradient>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* 0 — Profile summary (scrolls away) */}
+        <View>
           <LinearGradient
-            colors={['#E60076', '#FF4DA6', '#FFF0F7']}
+            colors={['#E60076', '#F6339A', '#FFB3D9']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.wave}
+            style={styles.heroBleed}
           />
-          <View style={[styles.headerBar, { paddingTop: insets.top + spacing.sm }]}>
-            <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={22} color={colors.white} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>My Profile</Text>
-            <TouchableOpacity style={styles.headerButton}>
-              <Ionicons name="create-outline" size={22} color={colors.white} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.profileCenter}>
-            <Image source={toImageSource(user.avatar)} style={styles.avatar} contentFit="cover" />
+          <View style={styles.profileCard}>
+            <Image
+              source={toImageSource(user.avatar)}
+              style={styles.avatar}
+              contentFit="cover"
+            />
             <View style={styles.nameRow}>
               <Text style={styles.name}>{user.name}</Text>
-              {user.isVerified && (
-                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-              )}
+              {user.isVerified ? (
+                <View style={styles.verified}>
+                  <Ionicons name="checkmark" size={10} color={colors.white} />
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.jobTitle}>UI/UX Designer</Text>
-            {user.location && (
+            <Text style={styles.role}>{user.title}</Text>
+            {user.location ? (
               <View style={styles.locationRow}>
                 <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
                 <Text style={styles.location}>{user.location}</Text>
               </View>
-            )}
-
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Ionicons name="star" size={16} color="#F5A623" />
-                <Text style={styles.statValue}>4.9</Text>
-                <Text style={styles.statLabel}>· 47 reviews</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>1.2k</Text>
-                <Text style={styles.statLabel}>connections</Text>
-              </View>
-            </View>
+            ) : null}
+            <TouchableOpacity
+              style={styles.ratingRow}
+              onPress={() => navigation.navigate('Reviews', { userId: user.id })}
+              activeOpacity={0.8}
+            >
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Ionicons key={i} name="star" size={14} color="#F5A623" />
+              ))}
+              <Text style={styles.ratingValue}>{user.rating ?? 5}</Text>
+              <Text style={styles.reviewsLink}>{user.reviewCount ?? 106} reviews</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Connections')}>
+              <Text style={styles.connections}>{user.followers} connections</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.segmentedTabs}>
-          {TABS.map((tab, index) => (
-            <React.Fragment key={tab}>
-              {index > 0 && <View style={styles.tabDivider} />}
-              <TouchableOpacity
-                style={[styles.segmentTab, activeTab === tab && styles.segmentTabActive]}
-                onPress={() => setActiveTab(tab)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.segmentText, activeTab === tab && styles.segmentTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            </React.Fragment>
-          ))}
-        </View>
+        {/* 1 — Sticky tabs (pin under fixed pink bar on scroll) */}
+        <ProfileTabs active={activeTab} onChange={setActiveTab} />
 
-        {activeTab === 'About' && (
-          <View style={styles.aboutList}>
-            {profileAboutSections.map((section) => (
-              <TouchableOpacity key={section.id} style={styles.aboutRow} activeOpacity={0.7}>
-                <View style={styles.aboutRowContent}>
-                  <Text style={styles.aboutLabel}>{section.label}</Text>
-                  <Text style={styles.aboutValue} numberOfLines={2}>
-                    {section.value}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {activeTab === 'Portfolio' && (
-          <View style={styles.tabContent}>
-            {portfolioItems.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons name="images-outline" size={40} color={colors.primary} />
-                </View>
-                <Text style={styles.emptyTitle}>No portfolio yet</Text>
-                <Text style={styles.emptyText}>
-                  Showcase your best work to attract clients and opportunities.
-                </Text>
-                <TouchableOpacity style={styles.emptyButton} activeOpacity={0.85}>
-                  <Ionicons name="add" size={18} color={colors.white} />
-                  <Text style={styles.emptyButtonText}>Add Portfolio</Text>
+        {/* 2 — Tab content */}
+        <View>
+          {activeTab === 'About' && (
+            <>
+              <AboutTab content={content} isOwn onAdd={openAbout} onEdit={openAbout} />
+              {content.bio ? (
+                <TouchableOpacity style={styles.demoEmpty} onPress={useEmptyProfile}>
+                  <Text style={styles.demoEmptyText}>Preview empty profile</Text>
                 </TouchableOpacity>
-              </View>
+              ) : null}
+            </>
+          )}
+
+          {activeTab === 'Portfolio' &&
+            (content.portfolio.length === 0 ? (
+              <ProfileEmptyState
+                icon="briefcase-outline"
+                title="Your Portfolio is Empty"
+                description="Publishing projects makes you 5x more discoverable by recruiters."
+                cta="Add Project"
+                onPress={() => navigation.navigate('AddPortfolioProject')}
+                showHeaderAdd
+                headerTitle="Portfolio"
+              />
             ) : (
-              <View style={styles.portfolioGrid}>
-                {portfolioItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.portfolioItem}
-                    onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-                  >
-                    <Image source={{ uri: item.images[0] }} style={styles.portfolioImage} contentFit="cover" />
-                  </TouchableOpacity>
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Portfolio</Text>
+                  <View style={styles.headerActions}>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('AddPortfolioProject')}
+                    >
+                      <Ionicons name="add" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                    <Ionicons name="download-outline" size={20} color={colors.textSecondary} />
+                    <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
+                  </View>
+                </View>
+                {content.portfolio.map((project) => (
+                  <View key={project.id} style={styles.projectCard}>
+                    <Text style={styles.projectTitle}>{project.title}</Text>
+                    <Text style={styles.projectDesc}>{project.description}</Text>
+                    <View style={styles.mediaGrid}>
+                      {project.images.map((uri, index) => (
+                        <View key={`${project.id}-${index}`} style={styles.mediaItem}>
+                          <Image
+                            source={{ uri }}
+                            style={styles.mediaImage}
+                            contentFit="cover"
+                          />
+                          {project.hasVideo &&
+                          index === (project.videoIndex ?? project.images.length - 1) ? (
+                            <View style={styles.playOverlay}>
+                              <Ionicons name="play" size={18} color={colors.white} />
+                            </View>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
                 ))}
               </View>
-            )}
-          </View>
-        )}
+            ))}
 
-        {activeTab === 'Services' && (
-          <View style={styles.tabContent}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Services</Text>
-              <TouchableOpacity style={styles.addButton} activeOpacity={0.8}>
-                <Ionicons name="add" size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-
-            {userServices.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons name="briefcase-outline" size={40} color={colors.primary} />
-                </View>
-                <Text style={styles.emptyTitle}>No services listed</Text>
-                <Text style={styles.emptyText}>
-                  Offer your skills as services and start earning on Mawahib.
-                </Text>
-                <TouchableOpacity style={styles.emptyButton} activeOpacity={0.85}>
-                  <Ionicons name="add" size={18} color={colors.white} />
-                  <Text style={styles.emptyButtonText}>Add Service</Text>
-                </TouchableOpacity>
-              </View>
+          {activeTab === 'Services' &&
+            (content.services.length === 0 ? (
+              <ProfileEmptyState
+                icon="document-text-outline"
+                title="Your Services Are Empty"
+                description="Add services to start receiving requests."
+                cta="Add Service"
+                onPress={() => navigation.navigate('AddProfileService')}
+                showHeaderAdd
+                headerTitle="Services"
+              />
             ) : (
-              <View style={styles.servicesList}>
-                {userServices.map((service) => (
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Services</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('AddProfileService')}>
+                    <Ionicons name="add" size={22} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+                {content.services.map((service) => (
                   <TouchableOpacity
                     key={service.id}
                     style={styles.serviceCard}
-                    onPress={() => navigation.navigate('ServiceDetail', { serviceId: service.id })}
-                    activeOpacity={0.85}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      navigation.navigate('ServiceDetail', { serviceId: service.id })
+                    }
                   >
-                    <Image source={{ uri: service.images[0] }} style={styles.serviceImage} contentFit="cover" />
-                    <View style={styles.serviceInfo}>
-                      <Text style={styles.serviceTitle}>{service.title}</Text>
-                      <Text style={styles.serviceMeta}>
-                        {service.currency} {service.price.toLocaleString()} · {service.duration}
-                      </Text>
-                      <View style={styles.serviceRating}>
-                        <Ionicons name="star" size={12} color="#F5A623" />
-                        <Text style={styles.serviceRatingText}>
-                          {service.rating} ({service.reviewCount})
-                        </Text>
+                    <View style={styles.serviceImageWrap}>
+                      <Image
+                        source={{ uri: service.images[0] }}
+                        style={styles.serviceImage}
+                        contentFit="cover"
+                      />
+                      {service.images.length > 1 ? (
+                        <View style={styles.dots}>
+                          {service.images.slice(0, 3).map((_, i) => (
+                            <View
+                              key={i}
+                              style={[styles.dot, i === 0 && styles.dotActive]}
+                            />
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.serviceBody}>
+                      <View style={styles.serviceTitleRow}>
+                        <Text style={styles.serviceTitle}>{service.title}</Text>
+                        <TouchableOpacity
+                          style={styles.ratingInline}
+                          onPress={() => navigation.navigate('Reviews', { userId: user.id })}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="star" size={14} color="#F5A623" />
+                          <Text style={styles.ratingInlineText}>
+                            {service.rating.toFixed(1)}
+                          </Text>
+                          <Text style={styles.reviewCount}>({service.reviewCount})</Text>
+                        </TouchableOpacity>
                       </View>
+                      <Text style={styles.serviceDesc} numberOfLines={2}>
+                        {service.description}
+                      </Text>
+                      {service.packages.map((pkg) => (
+                        <View key={pkg.name} style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>{pkg.name}</Text>
+                          <Text style={styles.priceValue}>
+                            <Text style={styles.currency}>﷼ </Text>
+                            {pkg.priceLabel}
+                          </Text>
+                        </View>
+                      ))}
                     </View>
                   </TouchableOpacity>
                 ))}
               </View>
-            )}
-          </View>
-        )}
+            ))}
 
-        {activeTab === 'Posts' && (
-          <View style={styles.tabContent}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Posts</Text>
-              <TouchableOpacity
-                style={styles.addButton}
+          {activeTab === 'Posts' &&
+            (userPosts.length === 0 ? (
+              <ProfileEmptyState
+                icon="grid-outline"
+                title="No Posts Yet"
+                description="Share updates to stay active."
+                cta="Add Post"
                 onPress={() => navigation.navigate('PostCreate')}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="add" size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-
-            {userPosts.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Ionicons name="grid-outline" size={40} color={colors.primary} />
-                </View>
-                <Text style={styles.emptyTitle}>No posts yet</Text>
-                <Text style={styles.emptyText}>
-                  Share your work and updates with the Mawahib community.
-                </Text>
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={() => navigation.navigate('PostCreate')}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="add" size={18} color={colors.white} />
-                  <Text style={styles.emptyButtonText}>Create Post</Text>
-                </TouchableOpacity>
-              </View>
+                showHeaderAdd
+                headerTitle="Posts"
+              />
             ) : (
-              <View style={styles.postsGrid}>
-                {userPosts.map((post) => (
-                  <TouchableOpacity
-                    key={post.id}
-                    style={styles.postItem}
-                    onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
-                  >
-                    <Image source={{ uri: post.images[0] }} style={styles.postImage} contentFit="cover" />
-                    {post.images.length > 1 && (
-                      <View style={styles.multiBadge}>
-                        <Ionicons name="copy-outline" size={12} color={colors.white} />
-                      </View>
-                    )}
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Posts</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('PostCreate')}>
+                    <Ionicons name="add" size={22} color={colors.primary} />
                   </TouchableOpacity>
+                </View>
+                {userPosts.map((post) => (
+                  <FeedPost
+                    key={post.id}
+                    post={post}
+                    onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
+                    onAuthorPress={() =>
+                      navigation.navigate('UserProfile', { userId: post.author.id })
+                    }
+                  />
                 ))}
               </View>
-            )}
-          </View>
-        )}
+            ))}
+        </View>
       </ScrollView>
     </ScreenContainer>
   );
 }
 
+function FeedPost({
+  post,
+  onPress,
+  onAuthorPress,
+}: {
+  post: Post;
+  onPress: () => void;
+  onAuthorPress: () => void;
+}) {
+  const truncated =
+    post.caption.length > 110 ? `${post.caption.slice(0, 110)}...` : post.caption;
+
+  return (
+    <TouchableOpacity style={styles.feedCard} onPress={onPress} activeOpacity={0.95}>
+      <TouchableOpacity
+        style={styles.feedHeader}
+        onPress={onAuthorPress}
+        activeOpacity={0.85}
+      >
+        <Image
+          source={toImageSource(post.author.avatar)}
+          style={styles.feedAvatar}
+          contentFit="cover"
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.feedName}>{post.author.name}</Text>
+          <Text style={styles.feedMeta}>
+            {post.role ?? post.author.title ?? 'Creator'} · {post.timeAgo ?? '2h'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      <Text style={styles.feedCaption}>
+        {truncated}
+        {post.caption.length > 110 ? (
+          <Text style={styles.seeMore}> See more</Text>
+        ) : null}
+      </Text>
+      {post.images[0] ? (
+        <Image source={{ uri: post.images[0] }} style={styles.feedImage} contentFit="cover" />
+      ) : null}
+      <View style={styles.feedActions}>
+        <View style={styles.feedAction}>
+          <Ionicons name="thumbs-up-outline" size={18} color={colors.textSecondary} />
+          <Text style={styles.feedCount}>{post.likes}</Text>
+        </View>
+        <View style={styles.feedAction}>
+          <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
+          <Text style={styles.feedCount}>{post.comments}</Text>
+        </View>
+        <Ionicons name="arrow-redo-outline" size={18} color={colors.textSecondary} />
+        <View style={{ flex: 1 }} />
+        <Ionicons name="bookmark-outline" size={18} color={colors.textSecondary} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  header: {
-    backgroundColor: colors.white,
-    paddingBottom: spacing.lg,
-  },
-  wave: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  headerBar: {
+  fixedBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    marginBottom: spacing.md,
+    paddingBottom: spacing.sm,
+    zIndex: 20,
   },
-  headerButton: {
-    width: 40,
-    height: 40,
+  navBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  navTitle: {
     ...typography.h3,
     color: colors.white,
   },
-  profileCenter: {
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
+  },
+  heroBleed: {
+    height: 48,
+  },
+  profileCard: {
+    marginTop: -28,
+    marginHorizontal: spacing.screen,
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    paddingHorizontal: spacing.screen,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   avatar: {
     width: 88,
@@ -311,8 +407,16 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.text,
   },
-  jobTitle: {
-    ...typography.body,
+  verified: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  role: {
+    ...typography.bodySmall,
     color: colors.textSecondary,
     marginTop: 4,
   },
@@ -323,232 +427,151 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   location: {
-    ...typography.bodySmall,
+    ...typography.caption,
     color: colors.textSecondary,
   },
-  statsRow: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 2,
     marginTop: spacing.md,
-    gap: spacing.md,
   },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    ...typography.bodySmall,
+  ratingValue: {
+    ...typography.caption,
     color: colors.text,
     fontWeight: '600',
+    marginLeft: 4,
   },
-  statLabel: {
-    ...typography.bodySmall,
+  reviewsLink: {
+    ...typography.caption,
     color: colors.textSecondary,
+    textDecorationLine: 'underline',
+    marginLeft: 2,
   },
-  statDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: colors.border,
+  connections: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: spacing.sm,
   },
-  segmentedTabs: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  demoEmpty: {
     marginHorizontal: spacing.screen,
-    marginVertical: spacing.lg,
-    backgroundColor: colors.white,
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
     borderRadius: radius.button,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
+    borderStyle: 'dashed',
   },
-  segmentTab: {
-    flex: 1,
-    paddingVertical: spacing.sm + 4,
-    alignItems: 'center',
-  },
-  segmentTabActive: {
-    backgroundColor: '#FFF0F7',
-  },
-  tabDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: colors.border,
-  },
-  segmentText: {
-    ...typography.bodySmall,
+  demoEmptyText: {
+    ...typography.caption,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
-  segmentTextActive: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  aboutList: {
+  tabPad: {
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xxl,
-  },
-  aboutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  aboutRowContent: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  aboutLabel: {
-    ...typography.label,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  aboutValue: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  tabContent: {
-    paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.xxl,
+    gap: spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
   },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.text,
-  },
-  addButton: {
-    width: 36,
-    height: 36,
+  sectionTitle: { ...typography.h3, color: colors.text },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  projectCard: { gap: spacing.sm },
+  projectTitle: { ...typography.bodyMedium, color: colors.text, fontWeight: '600' },
+  projectDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  mediaItem: {
+    width: MEDIA,
+    height: MEDIA,
     borderRadius: radius.button,
-    backgroundColor: '#FFF0F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FFF0F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    ...typography.h3,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-    lineHeight: 22,
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radius.button,
-  },
-  emptyButtonText: {
-    ...typography.button,
-    color: colors.white,
-  },
-  portfolioGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GRID_GAP,
-  },
-  portfolioItem: {
-    width: GRID_ITEM,
-    height: GRID_ITEM,
-    borderRadius: radius.card,
     overflow: 'hidden',
+    backgroundColor: colors.borderLight,
   },
-  portfolioImage: {
-    width: '100%',
-    height: '100%',
-  },
-  servicesList: {
-    gap: spacing.md,
+  mediaImage: { width: '100%', height: '100%' },
+  playOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   serviceCard: {
-    flexDirection: 'row',
     backgroundColor: colors.white,
     borderRadius: radius.card,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#F3F4F6',
   },
-  serviceImage: {
-    width: 96,
-    height: 96,
-  },
-  serviceInfo: {
-    flex: 1,
-    padding: spacing.md,
+  serviceImageWrap: { height: 180, backgroundColor: colors.borderLight },
+  serviceImage: { width: '100%', height: '100%' },
+  dots: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
     justifyContent: 'center',
+    gap: 6,
   },
-  serviceTitle: {
-    ...typography.label,
-    color: colors.text,
-    marginBottom: 4,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  serviceMeta: {
-    ...typography.bodySmall,
-    color: colors.primary,
-    marginBottom: 4,
+  dotActive: {
+    width: 16,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
   },
-  serviceRating: {
+  serviceBody: { padding: spacing.md, gap: spacing.sm },
+  serviceTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  serviceTitle: { flex: 1, ...typography.bodyMedium, fontWeight: '500', color: colors.text },
+  ratingInline: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingInlineText: { ...typography.caption, color: colors.text },
+  reviewCount: { ...typography.caption, color: '#829AB1' },
+  serviceDesc: { ...typography.caption, color: colors.textTertiary, lineHeight: 18 },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  priceLabel: { ...typography.caption, color: colors.textSecondary },
+  priceValue: { ...typography.caption, color: colors.primary, fontWeight: '600' },
+  currency: { color: colors.primary },
+  feedCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  feedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  feedAvatar: { width: 40, height: 40, borderRadius: 20 },
+  feedName: { ...typography.label, color: colors.text },
+  feedMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  feedCaption: { ...typography.bodySmall, color: colors.text, lineHeight: 20 },
+  seeMore: { color: colors.primary },
+  feedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: radius.card,
+  },
+  feedActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.md,
   },
-  serviceRatingText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  postsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GRID_GAP,
-  },
-  postItem: {
-    width: (SCREEN_WIDTH - spacing.screen * 2 - GRID_GAP * 2) / 3,
-    height: (SCREEN_WIDTH - spacing.screen * 2 - GRID_GAP * 2) / 3,
-    borderRadius: radius.button,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  postImage: {
-    width: '100%',
-    height: '100%',
-  },
-  multiBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 4,
-    padding: 2,
-  },
+  feedAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  feedCount: { ...typography.caption, color: colors.textSecondary },
 });

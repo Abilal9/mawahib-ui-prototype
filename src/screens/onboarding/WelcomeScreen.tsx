@@ -90,8 +90,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   logo: {
-    width: 40,
-    height: 40,
+    // Draw 2× to match home header without growing layout footprint
+    position: 'absolute',
+    width: 112,
+    height: 112,
   },
   illustration: {
     width: '100%',

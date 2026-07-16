@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import { currentUser } from '../../data/mock/users';
@@ -12,8 +13,9 @@ interface AppHeaderProps {
   notificationCount?: number;
 }
 
-// Asset has generous padding; render larger so the mark reads clearly in the header.
-const LOGO_SIZE = 80;
+/** Layout footprint stays compact; drawn size is 2× so neighbors don’t shift */
+const LOGO_LAYOUT = 56;
+const LOGO_DRAW = 112;
 const SIDE_ICON_SIZE = 32;
 
 export default function AppHeader({
@@ -21,37 +23,41 @@ export default function AppHeader({
   onNotificationPress,
   notificationCount = 0,
 }: AppHeaderProps) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
-      <View style={styles.leftSlot}>
-        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
-          <Image source={toImageSource(currentUser.avatar)} style={styles.avatar} />
-        </TouchableOpacity>
-      </View>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.row}>
+        <View style={styles.leftSlot}>
+          <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
+            <Image source={toImageSource(currentUser.avatar)} style={styles.avatar} />
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.centerSlot}>
-        <Image
-          source={require('../../../assets/images/arabic-emblem.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
-      </View>
+        <View style={styles.centerSlot}>
+          <Image
+            source={require('../../../assets/images/arabic-emblem.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
+        </View>
 
-      <View style={styles.rightSlot}>
-        <TouchableOpacity
-          onPress={onNotificationPress}
-          activeOpacity={0.8}
-          style={styles.bellButton}
-        >
-          <Ionicons name="notifications-outline" size={24} color={colors.text} />
-          {notificationCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {notificationCount > 9 ? '9+' : notificationCount}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.rightSlot}>
+          <TouchableOpacity
+            onPress={onNotificationPress}
+            activeOpacity={0.8}
+            style={styles.bellButton}
+          >
+            <Ionicons name="notifications-outline" size={24} color={colors.text} />
+            {notificationCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {notificationCount > 9 ? '9+' : notificationCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -59,12 +65,13 @@ export default function AppHeader({
 
 const styles = StyleSheet.create({
   container: {
+    paddingHorizontal: spacing.screen,
+    paddingBottom: spacing.xs,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: LOGO_SIZE,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.screen,
+    height: 40,
   },
   leftSlot: {
     flex: 1,
@@ -72,6 +79,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centerSlot: {
+    width: LOGO_LAYOUT,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -86,8 +95,9 @@ const styles = StyleSheet.create({
     borderRadius: SIDE_ICON_SIZE / 2,
   },
   logo: {
-    width: LOGO_SIZE,
-    height: LOGO_SIZE,
+    position: 'absolute',
+    width: LOGO_DRAW,
+    height: LOGO_DRAW,
   },
   bellButton: {
     width: SIDE_ICON_SIZE,

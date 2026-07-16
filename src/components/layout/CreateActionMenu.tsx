@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     right: 0,
   },
   backdropFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(14, 36, 58, 0.45)',
   },
   tabBarPassThrough: {

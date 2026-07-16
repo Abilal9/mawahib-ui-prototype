@@ -6,7 +6,7 @@ export type MainTabParamList = {
   HomeTab: undefined;
   SearchTab:
     | {
-        contentType?: 'all' | 'talents' | 'jobs' | 'services' | 'posts';
+        contentType?: 'talents' | 'jobs' | 'services' | 'all' | 'posts';
         category?: string;
       }
     | undefined;
@@ -25,6 +25,11 @@ export type RootStackParamList = {
   SignUp: undefined;
   Profile: undefined;
   UserProfile: { userId: string };
+  EditAboutSection: {
+    section: 'bio' | 'languages' | 'talents' | 'education' | 'experience' | 'certifications';
+  };
+  AddPortfolioProject: undefined;
+  AddProfileService: undefined;
   JobListingDetail: { jobId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
@@ -50,6 +55,7 @@ export type RootStackParamList = {
   ServiceDetail: { serviceId: string };
   Calendar: undefined;
   Connections: undefined;
+  Reviews: { userId?: string } | undefined;
   Documentation: undefined;
   ChangeLanguage: undefined;
   Settings: undefined;

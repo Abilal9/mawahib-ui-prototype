@@ -9,6 +9,7 @@ interface ScreenContainerProps {
   padded?: boolean;
   backgroundColor?: string;
   safeBottom?: boolean;
+  safeTop?: boolean;
 }
 
 export default function ScreenContainer({
@@ -17,6 +18,7 @@ export default function ScreenContainer({
   padded = true,
   backgroundColor = colors.background,
   safeBottom = true,
+  safeTop = true,
 }: ScreenContainerProps) {
   const insets = useSafeAreaInsets();
 
@@ -26,7 +28,7 @@ export default function ScreenContainer({
         styles.container,
         {
           backgroundColor,
-          paddingTop: insets.top,
+          paddingTop: safeTop ? insets.top : 0,
           paddingBottom: safeBottom ? insets.bottom : 0,
         },
         padded && styles.padded,

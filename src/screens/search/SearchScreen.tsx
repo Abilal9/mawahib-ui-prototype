@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,144 +18,173 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { talents, recentSearches } from '../../data/mock/talents';
 import { jobs } from '../../data/mock/jobs';
 import { services } from '../../data/mock/services';
-import { posts } from '../../data/mock/posts';
 import {
-  exploreCategories,
-  exploreContentTypes,
-  ExploreCategory,
-  ExploreContentType,
+  exploreTabs,
+  chipsForTab,
   defaultExploreFilters,
+  ExploreTab,
 } from '../../data/mock/explore';
 import {
   filterJobs,
-  filterPosts,
   filterServices,
   filterTalents,
-  getExploreSectionTitle,
+  normalizeExploreTab,
 } from '../../utils/explore';
 import { TabScreenProps } from '../../navigation/types';
-import { Job, Post, Service, Talent } from '../../data/types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const POST_ITEM = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm) / 2;
+import { Job, Service, Talent, TalentConnectStatus } from '../../data/types';
 
 export default function SearchScreen({ navigation, route }: TabScreenProps<'SearchTab'>) {
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searches, setSearches] = useState(recentSearches);
-  const [category, setCategory] = useState<ExploreCategory>(
-    (route.params?.category as ExploreCategory) ?? 'All'
+  const [tab, setTab] = useState<ExploreTab>(
+    normalizeExploreTab(route.params?.contentType)
   );
-  const [contentType, setContentType] = useState<ExploreContentType>(
-    route.params?.contentType ?? 'all'
-  );
+  const [chip, setChip] = useState<string | null>(null);
   const [filters, setFilters] = useState(defaultExploreFilters);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [connectState, setConnectState] = useState<Record<string, TalentConnectStatus>>({});
 
   useEffect(() => {
-    if (route.params?.contentType) setContentType(route.params.contentType);
-    if (route.params?.category) setCategory(route.params.category as ExploreCategory);
-  }, [route.params?.contentType, route.params?.category]);
+    if (route.params?.contentType) {
+      setTab(normalizeExploreTab(route.params.contentType));
+      setChip(null);
+    }
+  }, [route.params?.contentType]);
+
+  const chipOptions = chipsForTab(tab);
 
   const talentResults = useMemo(
-    () => filterTalents(talents, query, category, filters),
-    [query, category, filters]
+    () => filterTalents(talents, query, chip, filters),
+    [query, chip, filters]
   );
   const jobResults = useMemo(
-    () => filterJobs(jobs, query, category, filters),
-    [query, category, filters]
+    () => filterJobs(jobs, query, chip, filters),
+    [query, chip, filters]
   );
   const serviceResults = useMemo(
-    () => filterServices(services, query, category, filters),
-    [query, category, filters]
-  );
-  const postResults = useMemo(
-    () => filterPosts(posts, query, category, filters),
-    [query, category, filters]
+    () => filterServices(services, query, chip, filters),
+    [query, chip, filters]
   );
 
-  const hasResults =
-    talentResults.length + jobResults.length + serviceResults.length + postResults.length > 0;
+  const results =
+    tab === 'talents'
+      ? talentResults
+      : tab === 'services'
+        ? serviceResults
+        : jobResults;
 
   const removeSearch = (term: string) => setSearches((prev) => prev.filter((s) => s !== term));
 
-  const showSection = (type: ExploreContentType) =>
-    contentType === 'all' || contentType === type;
+  const cycleConnect = (id: string, current?: TalentConnectStatus) => {
+    const order: TalentConnectStatus[] = ['connect', 'request-sent', 'added'];
+    const start = connectState[id] ?? current ?? 'connect';
+    const next = order[(order.indexOf(start) + 1) % order.length];
+    setConnectState((prev) => ({ ...prev, [id]: next }));
+  };
 
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
+
       <View style={styles.topBar}>
-        <Text style={styles.pageTitle}>Explore</Text>
+        {searchOpen ? (
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={styles.searchField}
+              placeholder={`Search ${tab}...`}
+              placeholderTextColor={colors.textSecondary}
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={() => setQuery('')}>
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setSearchOpen(false);
+                setQuery('');
+              }}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.pageTitle}>Explore</Text>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setSearchOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="search-outline" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      <View style={styles.mainTabs}>
+        {exploreTabs.map((item) => {
+          const selected = tab === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.mainTab, selected && styles.mainTabActive]}
+              onPress={() => {
+                setTab(item.id);
+                setChip(null);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.mainTabText, selected && styles.mainTabTextActive]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.filterRow}>
         <TouchableOpacity
-          style={styles.filterButton}
+          style={styles.filterIconBtn}
           onPress={() => setFilterOpen(true)}
           activeOpacity={0.8}
         >
-          <Ionicons name="options-outline" size={22} color={colors.text} />
+          <Ionicons name="options-outline" size={18} color={colors.text} />
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchHeader}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color={colors.textSecondary} />
-          <TextInput
-            style={styles.searchField}
-            placeholder="Search talents, jobs, services..."
-            placeholderTextColor={colors.textSecondary}
-            value={query}
-            onChangeText={setQuery}
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}
+        >
+          {chipOptions.map((item) => {
+            const selected = chip === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[styles.chip, selected && styles.chipActive]}
+                onPress={() => setChip(selected ? null : item)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryRow}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
       >
-        {exploreCategories.map((item) => {
-          const selected = category === item;
-          return (
-            <TouchableOpacity
-              key={item}
-              style={[styles.categoryChip, selected && styles.categoryChipActive]}
-              onPress={() => setCategory(item)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>
-                {item}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.contentTabs}>
-        {exploreContentTypes.map((tab) => {
-          const selected = contentType === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.contentTab, selected && styles.contentTabActive]}
-              onPress={() => setContentType(tab.id)}
-            >
-              <Text style={[styles.contentTabText, selected && styles.contentTabTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {!query && (
+        {searchOpen && !query ? (
           <View style={styles.recentSection}>
-            <Text style={styles.sectionTitle}>Recent searches</Text>
+            <Text style={styles.recentTitle}>Recent searches</Text>
             {searches.map((term) => (
               <TouchableOpacity
                 key={term}
@@ -165,20 +194,15 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
               >
                 <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
                 <Text style={styles.recentText}>{term}</Text>
-                <TouchableOpacity
-                  onPress={() => removeSearch(term)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
+                <TouchableOpacity onPress={() => removeSearch(term)}>
                   <Ionicons name="close" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
-        )}
+        ) : null}
 
-        <Text style={styles.sectionTitle}>{getExploreSectionTitle(contentType, query)}</Text>
-
-        {!hasResults ? (
+        {results.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="compass-outline" size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>No results found</Text>
@@ -188,66 +212,41 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
           </View>
         ) : (
           <>
-            {showSection('talents') && talentResults.length > 0 && (
-              <ExploreSection title={contentType === 'all' ? 'Talents' : undefined}>
-                {talentResults.map((talent) => (
-                  <TalentCard
-                    key={talent.id}
-                    talent={talent}
-                    onPress={() =>
-                      navigation.navigate('UserProfile', { userId: talent.user.id })
-                    }
-                  />
-                ))}
-              </ExploreSection>
-            )}
+            {tab === 'talents' &&
+              talentResults.map((talent) => (
+                <TalentCard
+                  key={talent.id}
+                  talent={talent}
+                  connectStatus={connectState[talent.id] ?? talent.connectStatus ?? 'connect'}
+                  onPress={() => navigation.navigate('UserProfile', { userId: talent.user.id })}
+                  onConnect={() => cycleConnect(talent.id, talent.connectStatus)}
+                />
+              ))}
 
-            {showSection('jobs') && jobResults.length > 0 && (
-              <ExploreSection title={contentType === 'all' ? 'Jobs' : undefined}>
-                {jobResults.map((job) => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    onPress={() => navigation.navigate('JobListingDetail', { jobId: job.id })}
-                  />
-                ))}
-              </ExploreSection>
-            )}
+            {tab === 'services' &&
+              serviceResults.map((service) => (
+                <ServiceCard
+                  key={service.id}
+                  service={service}
+                  onPress={() =>
+                    navigation.navigate('ServiceDetail', { serviceId: service.id })
+                  }
+                  onProviderPress={() =>
+                    navigation.navigate('UserProfile', {
+                      userId: service.provider.id,
+                    })
+                  }
+                />
+              ))}
 
-            {showSection('services') && serviceResults.length > 0 && (
-              <ExploreSection title={contentType === 'all' ? 'Services' : undefined}>
-                {serviceResults.map((service) => (
-                  <ServiceCard
-                    key={service.id}
-                    service={service}
-                    onPress={() =>
-                      navigation.navigate('ServiceDetail', { serviceId: service.id })
-                    }
-                  />
-                ))}
-              </ExploreSection>
-            )}
-
-            {showSection('posts') && postResults.length > 0 && (
-              <ExploreSection title={contentType === 'all' ? 'Posts' : undefined}>
-                <View style={styles.postGrid}>
-                  {postResults.map((post) => (
-                    <TouchableOpacity
-                      key={post.id}
-                      style={styles.postItem}
-                      onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
-                      activeOpacity={0.9}
-                    >
-                      <Image
-                        source={{ uri: post.images[0] }}
-                        style={styles.postImage}
-                        contentFit="cover"
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ExploreSection>
-            )}
+            {tab === 'jobs' &&
+              jobResults.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onPress={() => navigation.navigate('JobListingDetail', { jobId: job.id })}
+                />
+              ))}
           </>
         )}
       </ScrollView>
@@ -255,7 +254,7 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
       <ExploreFilterSheet
         visible={filterOpen}
         filters={filters}
-        showJobType={contentType === 'jobs' || contentType === 'all'}
+        showJobType={tab === 'jobs'}
         onClose={() => setFilterOpen(false)}
         onApply={setFilters}
         onReset={() => setFilters(defaultExploreFilters)}
@@ -264,118 +263,207 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   );
 }
 
-function ExploreSection({
-  title,
-  children,
+function TalentCard({
+  talent,
+  connectStatus,
+  onPress,
+  onConnect,
 }: {
-  title?: string;
-  children: React.ReactNode;
+  talent: Talent;
+  connectStatus: TalentConnectStatus;
+  onPress: () => void;
+  onConnect: () => void;
 }) {
+  const connectStyle =
+    connectStatus === 'added'
+      ? styles.connectAdded
+      : connectStatus === 'request-sent'
+        ? styles.connectPending
+        : styles.connectDefault;
+  const connectIcon: keyof typeof Ionicons.glyphMap =
+    connectStatus === 'added'
+      ? 'checkmark'
+      : connectStatus === 'request-sent'
+        ? 'arrow-forward'
+        : 'person-add-outline';
+
   return (
-    <View style={styles.section}>
-      {title ? <Text style={styles.subsectionTitle}>{title}</Text> : null}
-      {children}
-    </View>
+    <TouchableOpacity style={styles.talentCard} onPress={onPress} activeOpacity={0.9}>
+      <View style={styles.talentRow}>
+        <Image
+          source={toImageSource(talent.user.avatar)}
+          style={styles.talentAvatar}
+          contentFit="cover"
+        />
+        <View style={styles.talentBody}>
+          <View style={styles.nameRow}>
+            <Text style={styles.talentName}>{talent.user.name}</Text>
+            {talent.user.isVerified ? (
+              <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+            ) : null}
+          </View>
+          <Text style={styles.talentTitle}>{talent.user.title ?? talent.category}</Text>
+          <View style={styles.metaRow}>
+            <Ionicons name="location-outline" size={14} color={colors.text} />
+            <Text style={styles.metaText}>{talent.user.location}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Ionicons name="cash-outline" size={14} color={colors.text} />
+            <Text style={styles.metaText}>
+              {talent.rateLabel ?? `${talent.hourlyRate} / hr`}
+            </Text>
+          </View>
+          {(talent.mutualConnections ?? 0) > 0 ? (
+            <View style={styles.mutualRow}>
+              <View style={styles.mutualAvatars}>
+                {(talent.mutualAvatars ?? []).slice(0, 3).map((avatar, index) => (
+                  <Image
+                    key={`${talent.id}-m-${index}`}
+                    source={toImageSource(avatar)}
+                    style={[styles.mutualAvatar, { marginLeft: index === 0 ? 0 : -6, zIndex: 3 - index }]}
+                    contentFit="cover"
+                  />
+                ))}
+              </View>
+              <Text style={styles.mutualText}>
+                {talent.mutualConnections} mutual connections
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={14} color={colors.warning} />
+            <Text style={styles.ratingValue}>{talent.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingCount}>({talent.reviewCount ?? 0})</Text>
+          </View>
+        </View>
+        <View style={styles.talentActions}>
+          <TouchableOpacity
+            style={[styles.connectBtn, connectStyle]}
+            onPress={onConnect}
+            activeOpacity={0.85}
+          >
+            <Ionicons name={connectIcon} size={16} color={colors.white} />
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={8} onPress={() => {}} style={styles.menuBtn}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
-function TalentCard({ talent, onPress }: { talent: Talent; onPress: () => void }) {
+function ServiceCard({
+  service,
+  onPress,
+  onProviderPress,
+}: {
+  service: Service;
+  onPress: () => void;
+  onProviderPress: () => void;
+}) {
   return (
-    <TouchableOpacity style={styles.talentCard} onPress={onPress} activeOpacity={0.85}>
-      <Image
-        source={toImageSource(talent.user.avatar)}
-        style={styles.talentAvatar}
-        contentFit="cover"
-      />
-      <View style={styles.talentBody}>
-        <View style={styles.talentTop}>
-          <Text style={styles.talentName}>{talent.user.name}</Text>
-          {talent.user.isVerified && (
-            <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-          )}
-        </View>
-        <Text style={styles.talentCategory}>{talent.category}</Text>
-        <View style={styles.talentMeta}>
-          <Ionicons name="star" size={12} color={colors.warning} />
-          <Text style={styles.talentRating}>{talent.rating}</Text>
-          <Text style={styles.talentRate}>· AED {talent.hourlyRate}/hr</Text>
-        </View>
-        <Text style={styles.talentLocation} numberOfLines={1}>
-          {talent.user.location}
-        </Text>
+    <TouchableOpacity style={styles.serviceCard} onPress={onPress} activeOpacity={0.9}>
+      <View style={styles.serviceImageWrap}>
+        <Image
+          source={{ uri: service.images[0] }}
+          style={styles.serviceImage}
+          contentFit="cover"
+        />
+        {service.images.length > 1 ? (
+          <View style={styles.dots}>
+            {service.images.slice(0, 3).map((_, i) => (
+              <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
+            ))}
+          </View>
+        ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      <View style={styles.serviceBody}>
+        <View style={styles.serviceTitleRow}>
+          <Text style={styles.serviceTitle} numberOfLines={1}>
+            {service.title}
+          </Text>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={14} color={colors.warning} />
+            <Text style={styles.ratingValue}>{service.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingCount}>({service.reviewCount})</Text>
+          </View>
+        </View>
+        <Text style={styles.serviceDesc} numberOfLines={2}>
+          {service.description}
+        </Text>
+        <TouchableOpacity
+          style={styles.providerRow}
+          onPress={onProviderPress}
+          activeOpacity={0.85}
+        >
+          <Image
+            source={toImageSource(service.provider.avatar)}
+            style={styles.providerAvatar}
+            contentFit="cover"
+          />
+          <Text style={styles.providerName}>{service.provider.name}</Text>
+          {service.provider.isVerified ? (
+            <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+          ) : null}
+        </TouchableOpacity>
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.serviceMeta}>{service.duration}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Ionicons name="cash-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.serviceMeta}>
+            {service.priceLabel ?? `${service.currency} ${service.price.toLocaleString()}`}
+          </Text>
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
 
 function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
-  const typeLabel =
-    job.type === 'part-time'
-      ? 'Part-time'
-      : job.type === 'full-time'
-        ? 'Full-time'
-        : job.type === 'contract'
-          ? 'Contract'
-          : 'Freelance';
+  const badge = jobTypeBadge(job.type);
 
   return (
-    <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.jobTop}>
+    <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.9}>
+      <View style={styles.jobLogoWrap}>
         {job.logo ? (
           <Image source={toImageSource(job.logo)} style={styles.jobLogo} contentFit="cover" />
         ) : (
-          <View style={styles.jobLogoPlaceholder}>
-            <Text style={styles.jobLogoText}>{job.company.charAt(0)}</Text>
-          </View>
+          <Text style={styles.jobLogoText}>{job.company.charAt(0)}</Text>
         )}
-        <View style={styles.jobInfo}>
-          <View style={styles.jobTitleRow}>
-            <Text style={styles.jobTitle}>{job.title}</Text>
-            <View style={styles.jobTypeBadge}>
-              <Text style={styles.jobTypeText}>{typeLabel}</Text>
-            </View>
-          </View>
-          <Text style={styles.jobCompany}>{job.company}</Text>
+      </View>
+      <View style={styles.jobBody}>
+        <Text style={styles.jobTitle}>{job.title}</Text>
+        <Text style={styles.jobCompany}>{job.company}</Text>
+        <View style={styles.metaRow}>
+          <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.jobMeta}>{job.location}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Ionicons name="cash-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.jobMeta}>{job.salary}</Text>
         </View>
       </View>
-      <View style={styles.jobMetaRow}>
-        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText}>{job.location}</Text>
+      <View style={[styles.jobBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+        <Text style={[styles.jobBadgeText, { color: badge.text }]}>{badge.label}</Text>
       </View>
-      <View style={styles.jobMetaRow}>
-        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText}>{job.salary}</Text>
-      </View>
-      {job.matchScore ? (
-        <View style={styles.matchBadge}>
-          <Text style={styles.matchText}>{job.matchScore}% match</Text>
-        </View>
-      ) : null}
     </TouchableOpacity>
   );
 }
 
-function ServiceCard({ service, onPress }: { service: Service; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.serviceCard} onPress={onPress} activeOpacity={0.85}>
-      <Image source={{ uri: service.images[0] }} style={styles.serviceImage} contentFit="cover" />
-      <View style={styles.serviceInfo}>
-        <Text style={styles.serviceCategory}>{service.category}</Text>
-        <Text style={styles.serviceTitle}>{service.title}</Text>
-        <Text style={styles.serviceProvider}>{service.provider.name}</Text>
-        <View style={styles.serviceFooter}>
-          <Text style={styles.servicePrice}>
-            {service.currency} {service.price.toLocaleString()}
-          </Text>
-          <View style={styles.serviceRating}>
-            <Ionicons name="star" size={12} color={colors.warning} />
-            <Text style={styles.serviceRatingText}>{service.rating}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+function jobTypeBadge(type: Job['type']) {
+  if (type === 'part-time') {
+    return { label: 'Part-time', bg: '#EFF6FF', border: '#DBEAFE', text: '#193CB8' };
+  }
+  if (type === 'full-time') {
+    return { label: 'Full-time', bg: '#FEFCE8', border: '#FEF9C2', text: '#894B00' };
+  }
+  if (type === 'gig' || type === 'freelance') {
+    return { label: type === 'gig' ? 'Gig' : 'Freelance', bg: '#F0FDF4', border: '#DCFCE7', text: '#016630' };
+  }
+  return { label: 'Contract', bg: '#FDF2F8', border: '#FCE7F3', text: colors.primary };
 }
 
 const styles = StyleSheet.create({
@@ -386,80 +474,121 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+    minHeight: 48,
   },
-  pageTitle: { ...typography.h2, color: colors.text },
-  filterButton: {
-    width: 40,
-    height: 40,
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.button,
-    backgroundColor: colors.white,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.white,
   },
-  searchHeader: { paddingHorizontal: spacing.screen, paddingBottom: spacing.md },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
     borderRadius: radius.button,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     gap: spacing.sm,
+    height: 40,
   },
-  searchField: { flex: 1, ...typography.body, color: colors.text, paddingVertical: spacing.sm },
-  categoryRow: {
-    paddingHorizontal: spacing.screen,
-    gap: spacing.sm,
+  searchField: {
+    flex: 1,
+    ...typography.bodySmall,
+    color: colors.text,
+    paddingVertical: 0,
+  },
+  cancelText: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  mainTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  mainTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingBottom: spacing.md,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  categoryChip: {
-    paddingHorizontal: spacing.md,
+  mainTabActive: {
+    borderBottomColor: colors.primary,
+  },
+  mainTabText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  mainTabTextActive: {
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.screen,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  filterIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipScroll: {
+    gap: spacing.sm,
+    paddingRight: spacing.screen,
+  },
+  chip: {
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: radius.full,
+    borderRadius: radius.button,
     backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
-  categoryChipActive: {
+  chipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  categoryText: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' },
-  categoryTextActive: { color: colors.white, fontWeight: '600' },
-  contentTabs: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.screen,
-    marginBottom: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.button,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  contentTab: {
-    flex: 1,
-    paddingVertical: spacing.sm + 2,
-    alignItems: 'center',
-  },
-  contentTabActive: { backgroundColor: '#FFF0F7' },
-  contentTabText: { ...typography.caption, color: colors.textSecondary, fontWeight: '500' },
-  contentTabTextActive: { color: colors.primary, fontWeight: '700' },
-  content: { paddingBottom: spacing.xxxl },
-  recentSection: { paddingHorizontal: spacing.screen, marginBottom: spacing.lg },
-  sectionTitle: {
-    ...typography.label,
+  chipText: {
+    ...typography.caption,
     color: colors.text,
-    marginBottom: spacing.md,
+  },
+  chipTextActive: {
+    color: colors.white,
+    fontWeight: '500',
+  },
+  content: {
     paddingHorizontal: spacing.screen,
+    paddingTop: spacing.md,
+    paddingBottom: 120,
+    gap: spacing.xl,
   },
-  subsectionTitle: {
-    ...typography.h3,
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
+  recentSection: { marginBottom: spacing.sm },
+  recentTitle: { ...typography.label, color: colors.text, marginBottom: spacing.sm },
   recentItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -469,7 +598,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderLight,
   },
   recentText: { ...typography.body, color: colors.text, flex: 1 },
-  section: { paddingHorizontal: spacing.screen, marginBottom: spacing.lg },
   empty: {
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
@@ -487,97 +615,191 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   talentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.white,
     borderRadius: radius.card,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#F3F4F6',
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.lg,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 1,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  talentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  talentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 0.9,
+    borderColor: colors.white,
+    backgroundColor: '#FDF2F8',
+  },
+  talentBody: { flex: 1, gap: spacing.sm },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  talentName: { ...typography.bodyMedium, color: colors.text, fontWeight: '500' },
+  talentTitle: { ...typography.caption, color: colors.text },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { ...typography.caption, color: colors.text },
+  mutualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  mutualAvatars: { flexDirection: 'row', alignItems: 'center' },
+  mutualAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: colors.white,
+  },
+  mutualText: { fontSize: 11, lineHeight: 14, color: colors.textSecondary },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingValue: { ...typography.caption, color: colors.text },
+  ratingCount: { ...typography.caption, color: '#829AB1' },
+  talentActions: { alignItems: 'center', gap: 2 },
+  connectBtn: {
+    width: 31,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.white,
+  },
+  connectDefault: {
+    backgroundColor: colors.primary,
+  },
+  connectAdded: {
+    backgroundColor: '#00A63E',
+  },
+  connectPending: {
+    backgroundColor: '#BCCCDC',
+  },
+  menuBtn: {
+    padding: spacing.sm,
+  },
+  serviceCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 1,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  serviceImageWrap: {
+    height: 205,
+    backgroundColor: colors.borderLight,
+  },
+  serviceImage: { width: '100%', height: '100%' },
+  dots: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  dotActive: { backgroundColor: colors.white },
+  serviceBody: {
+    padding: spacing.md,
     gap: spacing.md,
   },
-  talentAvatar: { width: 56, height: 56, borderRadius: radius.avatar },
-  talentBody: { flex: 1 },
-  talentTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  talentName: { ...typography.label, color: colors.text },
-  talentCategory: { ...typography.caption, color: colors.primary, marginTop: 2 },
-  talentMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  talentRating: { ...typography.caption, color: colors.text },
-  talentRate: { ...typography.caption, color: colors.textSecondary },
-  talentLocation: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  serviceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  serviceTitle: {
+    flex: 1,
+    ...typography.bodyMedium,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  serviceDesc: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
+  providerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  providerAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  providerName: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.text,
+  },
+  serviceMeta: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
   jobCard: {
     backgroundColor: colors.white,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#F3F4F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 1,
+      },
+      android: { elevation: 1 },
+    }),
   },
-  jobTop: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
-  jobLogo: { width: 44, height: 44, borderRadius: radius.button },
-  jobLogoPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.button,
-    backgroundColor: colors.primary + '15',
+  jobLogoWrap: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  jobLogo: { width: 32, height: 32, borderRadius: 8 },
   jobLogoText: { ...typography.label, color: colors.primary },
-  jobInfo: { flex: 1 },
-  jobTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  jobTitle: { ...typography.label, color: colors.text, flex: 1 },
-  jobTypeBadge: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#DBEAFE',
+  jobBody: { flex: 1, gap: spacing.sm },
+  jobTitle: { ...typography.bodyMedium, fontWeight: '500', color: colors.text },
+  jobCompany: { ...typography.caption, color: colors.text },
+  jobMeta: { ...typography.caption, color: colors.textTertiary },
+  jobBadge: {
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
     borderRadius: radius.button,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
   },
-  jobTypeText: { ...typography.caption, color: '#193CB8', fontSize: 11 },
-  jobCompany: { ...typography.bodySmall, color: colors.textSecondary, marginTop: 2 },
-  jobMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  jobMetaText: { ...typography.caption, color: colors.textSecondary },
-  matchBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary + '15',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    marginTop: spacing.sm,
-  },
-  matchText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  serviceCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderRadius: radius.card,
-    overflow: 'hidden',
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  serviceImage: { width: 96, height: 96 },
-  serviceInfo: { flex: 1, padding: spacing.md, justifyContent: 'center' },
-  serviceCategory: { ...typography.caption, color: colors.primary },
-  serviceTitle: { ...typography.label, color: colors.text, marginTop: 2 },
-  serviceProvider: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  serviceFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  servicePrice: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
-  serviceRating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  serviceRatingText: { ...typography.caption, color: colors.textSecondary },
-  postGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  postItem: {
-    width: POST_ITEM,
-    height: POST_ITEM,
-    borderRadius: radius.card,
-    overflow: 'hidden',
-  },
-  postImage: { width: '100%', height: '100%' },
+  jobBadgeText: { fontSize: 11, lineHeight: 14 },
 });

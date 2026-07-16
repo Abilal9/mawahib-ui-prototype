@@ -8,10 +8,8 @@ import {
   Animated,
   Dimensions,
   Pressable,
-  ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,13 +17,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SidebarCalendarPreview from './SidebarCalendarPreview';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
-import { currentUser } from '../../data/mock/users';
 import { useSidebar } from '../../context/SidebarContext';
+import { useMyProfile } from '../../context/ProfileContext';
 import { RootStackParamList } from '../../navigation/types';
 
-const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.84;
+const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.82;
 
-const MENU_ITEMS: {
+const PRIMARY_LINKS: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   route: 'Profile' | 'Connections';
@@ -35,19 +33,27 @@ const MENU_ITEMS: {
 ];
 
 const FOOTER_LINKS: {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   route?: 'Documentation' | 'Settings' | 'ChangeLanguage';
   action?: 'logout';
   danger?: boolean;
+  trailing?: string;
 }[] = [
-  { label: 'Documentation', route: 'Documentation' },
-  { label: 'Settings', route: 'Settings' },
-  { label: 'Change Language', route: 'ChangeLanguage' },
-  { label: 'Log Out', action: 'logout', danger: true },
+  { icon: 'book-outline', label: 'Documentation', route: 'Documentation' },
+  { icon: 'settings-outline', label: 'Settings', route: 'Settings' },
+  {
+    icon: 'globe-outline',
+    label: 'Change Language',
+    route: 'ChangeLanguage',
+    trailing: 'العربية',
+  },
+  { icon: 'log-out-outline', label: 'Logout', action: 'logout', danger: true },
 ];
 
 export default function AppSidebar() {
   const { isOpen, close } = useSidebar();
+  const { user } = useMyProfile();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
@@ -56,16 +62,8 @@ export default function AppSidebar() {
   useEffect(() => {
     if (isOpen) {
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 260,
-          useNativeDriver: true,
-        }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
@@ -74,11 +72,7 @@ export default function AppSidebar() {
           duration: 220,
           useNativeDriver: true,
         }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]).start();
     }
   }, [isOpen, slideAnim, fadeAnim]);
@@ -87,6 +81,7 @@ export default function AppSidebar() {
     route:
       | 'Profile'
       | 'Connections'
+      | 'Reviews'
       | 'Calendar'
       | 'Premium'
       | 'Documentation'
@@ -94,7 +89,13 @@ export default function AppSidebar() {
       | 'ChangeLanguage'
   ) => {
     close();
-    setTimeout(() => navigation.navigate(route), 200);
+    setTimeout(() => {
+      if (route === 'Reviews') {
+        navigation.navigate('Reviews', { userId: user.id });
+      } else {
+        navigation.navigate(route);
+      }
+    }, 200);
   };
 
   const handleLogout = () => {
@@ -107,6 +108,9 @@ export default function AppSidebar() {
     }, 200);
   };
 
+  const rating = user.rating ?? 5;
+  const reviews = user.reviewCount ?? 106;
+
   return (
     <Modal visible={isOpen} transparent animationType="none" onRequestClose={close}>
       <View style={styles.overlay}>
@@ -114,118 +118,124 @@ export default function AppSidebar() {
           <Pressable style={StyleSheet.absoluteFill} onPress={close} />
         </Animated.View>
 
-        <Animated.View
-          style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
-        >
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[
+        <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
+          <View
+            style={[
               styles.content,
               {
                 paddingTop: insets.top + spacing.lg,
-                paddingBottom: insets.bottom + spacing.xl,
+                paddingBottom: Math.max(insets.bottom, spacing.md),
               },
             ]}
-            showsVerticalScrollIndicator={false}
-            bounces
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
           >
+            {/* Profile header — Figma: avatar + name/verified + role + rating */}
             <TouchableOpacity
               style={styles.profileHeader}
               onPress={() => handleNavigate('Profile')}
               activeOpacity={0.85}
             >
               <Image
-                source={toImageSource(currentUser.avatar)}
+                source={toImageSource(user.avatar)}
                 style={styles.avatar}
                 contentFit="cover"
               />
               <View style={styles.profileInfo}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.name}>{currentUser.name}</Text>
-                  {currentUser.isVerified && (
-                    <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                  )}
-                </View>
-                <Text style={styles.role}>{currentUser.title ?? 'UI/UX Designer'}</Text>
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={14} color="#F5A623" />
-                  <Text style={styles.ratingText}>
-                    {currentUser.rating ?? 4.9} · {currentUser.reviewCount ?? 47} reviews
+                  <Text style={styles.name} numberOfLines={1}>
+                    {user.name}
                   </Text>
+                  {user.isVerified ? (
+                    <View style={styles.verifiedBadge}>
+                      <Ionicons name="checkmark" size={10} color={colors.white} />
+                    </View>
+                  ) : null}
                 </View>
+                <Text style={styles.role} numberOfLines={1}>
+                  {user.title ?? 'Event Photographer'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.ratingRow}
+                  onPress={() => handleNavigate('Reviews')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="star" size={14} color="#F5A623" />
+                  <Text style={styles.ratingValue}>
+                    {rating % 1 === 0 ? rating.toFixed(0) : rating.toFixed(1)}
+                  </Text>
+                  <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
 
-            <View style={styles.divider} />
-
-            {MENU_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.menuItem}
-                onPress={() => handleNavigate(item.route)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuIconWrap}>
-                  <Ionicons name={item.icon} size={20} color={colors.primary} />
-                </View>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            ))}
-
-            <SidebarCalendarPreview onPress={() => handleNavigate('Calendar')} />
-
-            <TouchableOpacity
-              style={styles.premiumCard}
-              onPress={() => handleNavigate('Premium')}
-              activeOpacity={0.9}
-            >
-              <LinearGradient
-                colors={['#E60076', '#FF4DA6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.premiumGradient}
-              >
-                <View style={styles.premiumIcon}>
-                  <Ionicons name="diamond" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.premiumTextWrap}>
-                  <Text style={styles.premiumTitle}>Get Premium Features</Text>
-                  <Text style={styles.premiumSubtitle}>
-                    Unlock visibility, tools, and exclusive benefits
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.white} />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <View style={styles.footerLinks}>
-              {FOOTER_LINKS.map((link) => (
+            {/* Primary nav */}
+            <View style={styles.primaryLinks}>
+              {PRIMARY_LINKS.map((item) => (
                 <TouchableOpacity
-                  key={link.label}
-                  style={styles.footerLink}
-                  onPress={() => {
-                    if (link.action === 'logout') handleLogout();
-                    else if (link.route) handleNavigate(link.route);
-                  }}
+                  key={item.label}
+                  style={styles.primaryLink}
+                  onPress={() => handleNavigate(item.route)}
                   activeOpacity={0.7}
                 >
-                  <Text
-                    style={[
-                      styles.footerLinkText,
-                      link.danger && styles.footerLinkDanger,
-                    ]}
-                  >
-                    {link.label}
-                  </Text>
+                  <Ionicons name={item.icon} size={20} color={colors.textTertiary} />
+                  <Text style={styles.primaryLinkLabel}>{item.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </ScrollView>
+
+            <View style={styles.footerSpacer} />
+
+            {/* Calendar + Premium sit above Documentation */}
+            <View style={styles.bottomBlock}>
+              <SidebarCalendarPreview onPress={() => handleNavigate('Calendar')} />
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumTop}>
+                  <View style={styles.crownWrap}>
+                    <Ionicons name="diamond-outline" size={16} color={colors.primary} />
+                  </View>
+                  <Text style={styles.premiumTitle}>Get Premium Features</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.upgradeBtn}
+                  onPress={() => handleNavigate('Premium')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.upgradeText}>Upgrade Plan</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.footerLinks}>
+                {FOOTER_LINKS.map((link) => (
+                  <TouchableOpacity
+                    key={link.label}
+                    style={styles.footerLink}
+                    onPress={() => {
+                      if (link.action === 'logout') handleLogout();
+                      else if (link.route) handleNavigate(link.route);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={link.icon}
+                      size={18}
+                      color={link.danger ? colors.error : colors.textTertiary}
+                    />
+                    <Text
+                      style={[styles.footerLinkText, link.danger && styles.footerLinkDanger]}
+                    >
+                      {link.label}
+                    </Text>
+                    {link.trailing ? (
+                      <View style={styles.trailing}>
+                        <Text style={styles.trailingText}>{link.trailing}</Text>
+                        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -239,24 +249,24 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(14, 36, 58, 0.45)',
+    backgroundColor: 'rgba(14, 36, 58, 0.4)',
   },
   sidebar: {
     width: SIDEBAR_WIDTH,
     alignSelf: 'stretch',
     backgroundColor: colors.white,
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  scrollView: {
-    flex: 1,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 10,
+    overflow: 'hidden',
   },
   content: {
-    paddingHorizontal: spacing.lg,
-    flexGrow: 1,
+    flex: 1,
+    paddingHorizontal: spacing.xxl,
   },
   profileHeader: {
     flexDirection: 'row',
@@ -265,107 +275,143 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.avatar,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   profileInfo: {
     flex: 1,
+    gap: 2,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 2,
   },
   name: {
-    ...typography.h3,
+    ...typography.bodyMedium,
+    fontWeight: '600',
     color: colors.text,
+    flexShrink: 1,
+  },
+  verifiedBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   role: {
-    ...typography.bodySmall,
+    ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: 4,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 4,
   },
-  ratingText: {
+  ratingValue: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  reviewsLink: {
     ...typography.caption,
     color: colors.textSecondary,
+    textDecorationLine: 'underline',
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginBottom: spacing.md,
+  primaryLinks: {
+    gap: spacing.sm,
+    marginBottom: 0,
   },
-  menuItem: {
+  primaryLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    gap: spacing.md,
+    paddingVertical: 4,
+  },
+  primaryLinkLabel: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  bottomBlock: {
     gap: spacing.md,
   },
-  menuIconWrap: {
-    width: 36,
-    height: 36,
+  premiumCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: 0,
+    gap: spacing.sm,
+    backgroundColor: colors.white,
+  },
+  premiumTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  crownWrap: {
+    width: 32,
+    height: 32,
     borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     backgroundColor: '#FFF0F7',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: {
-    ...typography.body,
+  premiumTitle: {
+    ...typography.label,
     color: colors.text,
     flex: 1,
-    fontWeight: '500',
+    fontSize: 13,
   },
-  premiumCard: {
-    borderRadius: radius.card,
-    overflow: 'hidden',
-    marginBottom: spacing.lg,
-  },
-  premiumGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  premiumIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.white,
+  upgradeBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.button,
+    paddingVertical: spacing.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  premiumTextWrap: {
-    flex: 1,
-  },
-  premiumTitle: {
-    ...typography.label,
+  upgradeText: {
+    ...typography.button,
     color: colors.white,
-    marginBottom: 4,
+    fontSize: 14,
   },
-  premiumSubtitle: {
-    ...typography.caption,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 18,
+  footerSpacer: {
+    flex: 1,
+    minHeight: spacing.sm,
   },
   footerLinks: {
-    gap: spacing.xs,
-    paddingTop: spacing.sm,
+    gap: 2,
   },
   footerLink: {
-    paddingVertical: spacing.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
   },
   footerLinkText: {
-    ...typography.body,
-    color: colors.textSecondary,
+    ...typography.bodySmall,
+    color: colors.text,
+    flex: 1,
   },
   footerLinkDanger: {
     color: colors.error,
+    fontWeight: '500',
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trailingText: {
+    ...typography.bodySmall,
+    color: colors.primary,
     fontWeight: '500',
   },
 });

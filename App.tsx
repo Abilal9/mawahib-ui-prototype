@@ -9,6 +9,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { SidebarProvider } from './src/context/SidebarContext';
 import { CreateMenuProvider } from './src/context/CreateMenuContext';
+import { ProfileProvider } from './src/context/ProfileContext';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -40,10 +41,12 @@ export default function App() {
       <AuthProvider>
         <SidebarProvider>
           <CreateMenuProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <RootNavigator />
-            </NavigationContainer>
+            <ProfileProvider>
+              <NavigationContainer>
+                <StatusBar style="dark" />
+                <RootNavigator />
+              </NavigationContainer>
+            </ProfileProvider>
           </CreateMenuProvider>
         </SidebarProvider>
       </AuthProvider>

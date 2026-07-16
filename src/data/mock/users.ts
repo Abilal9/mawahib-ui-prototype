@@ -89,3 +89,4 @@ export const users: User[] = [
 
 export const getUserById = (id: string): User | undefined =>
   users.find((u) => u.id === id);
+

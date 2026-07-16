@@ -17,10 +17,12 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { posts } from '../../data/mock/posts';
 import { stories } from '../../data/mock/stories';
 import { jobs } from '../../data/mock/jobs';
+import { services } from '../../data/mock/services';
+import { talents } from '../../data/mock/talents';
 import { notifications } from '../../data/mock/notifications';
 import { useSidebar } from '../../context/SidebarContext';
 import { TabScreenProps } from '../../navigation/types';
-import { Post, Job, Story } from '../../data/types';
+import { Post, Job, Story, Service, Talent } from '../../data/types';
 
 function imageSource(src: string | number) {
   return toImageSource(src);
@@ -60,17 +62,23 @@ function FeedPostCard({
   post,
   onPress,
   onLike,
+  onAuthorPress,
 }: {
   post: Post;
   onPress: () => void;
   onLike: () => void;
+  onAuthorPress: () => void;
 }) {
   const truncated =
     post.caption.length > 120 ? `${post.caption.slice(0, 120)}...` : post.caption;
 
   return (
     <TouchableOpacity style={styles.feedCard} onPress={onPress} activeOpacity={0.95}>
-      <View style={styles.feedHeader}>
+      <TouchableOpacity
+        style={styles.feedHeader}
+        onPress={onAuthorPress}
+        activeOpacity={0.85}
+      >
         <Image
           source={imageSource(post.author.avatar)}
           style={styles.feedAvatar}
@@ -86,7 +94,7 @@ function FeedPostCard({
           {post.role && <Text style={styles.feedRole}>{post.role}</Text>}
         </View>
         <Text style={styles.feedTime}>{post.timeAgo ?? '2h'}</Text>
-      </View>
+      </TouchableOpacity>
 
       <Text style={styles.feedCaption}>
         {truncated}
@@ -94,6 +102,14 @@ function FeedPostCard({
           <Text style={styles.seeMore}> See more</Text>
         )}
       </Text>
+
+      {post.images[0] ? (
+        <Image
+          source={{ uri: post.images[0] }}
+          style={styles.feedImage}
+          contentFit="cover"
+        />
+      ) : null}
 
       <View style={styles.feedActions}>
         <TouchableOpacity style={styles.feedAction} onPress={onLike}>
@@ -120,6 +136,23 @@ function FeedPostCard({
   );
 }
 
+function SectionHeader({
+  title,
+  onPress,
+}: {
+  title: string;
+  onPress: () => void;
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <TouchableOpacity activeOpacity={0.8} onPress={onPress} hitSlop={8}>
+        <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function JobMatchCard({
   job,
   onPress,
@@ -136,11 +169,13 @@ function JobMatchCard({
         ? 'Full-time'
         : job.type === 'contract'
           ? 'Contract'
-          : 'Freelance';
+          : job.type === 'gig'
+            ? 'Gig'
+            : 'Freelance';
 
   return (
-    <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.9}>
-      <TouchableOpacity style={styles.jobDismiss} onPress={onDismiss} hitSlop={8}>
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.9}>
+      <TouchableOpacity style={styles.cardDismiss} onPress={onDismiss} hitSlop={8}>
         <Ionicons name="close" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
@@ -154,22 +189,139 @@ function JobMatchCard({
         )}
         <View style={styles.jobInfo}>
           <View style={styles.jobTitleRow}>
-            <Text style={styles.jobTitle}>{job.title}</Text>
+            <Text style={styles.jobTitle} numberOfLines={1}>
+              {job.title}
+            </Text>
             <View style={styles.jobTypeBadge}>
               <Text style={styles.jobTypeText}>{typeLabel}</Text>
             </View>
           </View>
-          <Text style={styles.jobCompany}>{job.company}</Text>
+          <Text style={styles.jobCompany} numberOfLines={1}>
+            {job.company}
+          </Text>
         </View>
       </View>
 
       <View style={styles.jobMetaRow}>
         <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText}>{job.location}</Text>
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {job.location}
+        </Text>
       </View>
       <View style={styles.jobMetaRow}>
         <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText}>{job.salary}</Text>
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {job.salary}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function ServiceMatchCard({
+  service,
+  onPress,
+  onDismiss,
+}: {
+  service: Service;
+  onPress: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.9}>
+      <TouchableOpacity style={styles.cardDismiss} onPress={onDismiss} hitSlop={8}>
+        <Ionicons name="close" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      <View style={styles.jobTop}>
+        <Image
+          source={{ uri: service.images[0] }}
+          style={styles.jobLogo}
+          contentFit="cover"
+        />
+        <View style={styles.jobInfo}>
+          <Text style={styles.jobTitle} numberOfLines={1}>
+            {service.title}
+          </Text>
+          <View style={styles.ratingInline}>
+            <Ionicons name="star" size={12} color={colors.warning} />
+            <Text style={styles.ratingInlineText}>{service.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingCountText}>({service.reviewCount})</Text>
+          </View>
+          <Text style={styles.jobCompany} numberOfLines={1}>
+            {service.provider.name}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.jobMetaRow}>
+        <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {service.duration}
+        </Text>
+      </View>
+      <View style={styles.jobMetaRow}>
+        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {service.priceLabel ?? `${service.price} ${service.currency}`}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function TalentMatchCard({
+  talent,
+  onPress,
+  onDismiss,
+}: {
+  talent: Talent;
+  onPress: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.9}>
+      <TouchableOpacity style={styles.cardDismiss} onPress={onDismiss} hitSlop={8}>
+        <Ionicons name="close" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      <View style={styles.jobTop}>
+        <Image
+          source={imageSource(talent.user.avatar)}
+          style={styles.talentAvatar}
+          contentFit="cover"
+        />
+        <View style={styles.jobInfo}>
+          <View style={styles.jobTitleRow}>
+            <Text style={styles.jobTitle} numberOfLines={1}>
+              {talent.user.name}
+            </Text>
+            {talent.user.isVerified ? (
+              <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+            ) : null}
+          </View>
+          <Text style={styles.jobCompany} numberOfLines={1}>
+            {talent.user.title ?? talent.category}
+          </Text>
+          <View style={styles.ratingInline}>
+            <Ionicons name="star" size={12} color={colors.warning} />
+            <Text style={styles.ratingInlineText}>{talent.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingCountText}>({talent.reviewCount ?? 0})</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.jobMetaRow}>
+        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {talent.user.location ?? 'Riyadh'}
+        </Text>
+      </View>
+      <View style={styles.jobMetaRow}>
+        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
+        <Text style={styles.jobMetaText} numberOfLines={1}>
+          {talent.rateLabel ?? `${talent.hourlyRate} / hr`}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -179,6 +331,8 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const { open: openSidebar } = useSidebar();
   const [feedPosts, setFeedPosts] = useState(posts);
   const [jobList, setJobList] = useState(jobs);
+  const [serviceList, setServiceList] = useState(services);
+  const [talentList, setTalentList] = useState(talents);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const toggleLike = (postId: string) => {
@@ -191,8 +345,12 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     );
   };
 
+  const openExplore = (contentType: 'jobs' | 'services' | 'talents') => {
+    navigation.navigate('SearchTab', { contentType });
+  };
+
   return (
-    <ScreenContainer padded={false} safeBottom={false}>
+    <ScreenContainer padded={false} safeBottom={false} safeTop={false}>
       <StatusBar style="dark" />
       <AppHeader
         onAvatarPress={openSidebar}
@@ -220,59 +378,161 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
           )}
         />
 
-        {feedPosts.map((post) => (
+        {feedPosts[0] ? (
+          <FeedPostCard
+            key={feedPosts[0].id}
+            post={feedPosts[0]}
+            onPress={() =>
+              navigation.navigate('PostDetail', { postId: feedPosts[0].id })
+            }
+            onLike={() => toggleLike(feedPosts[0].id)}
+            onAuthorPress={() =>
+              navigation.navigate('UserProfile', { userId: feedPosts[0].author.id })
+            }
+          />
+        ) : null}
+
+        {jobList.length > 0 ? (
+          <>
+            <SectionHeader
+              title="Jobs matches for you"
+              onPress={() => openExplore('jobs')}
+            />
+            <FlatList
+              data={jobList}
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.carousel}
+              renderItem={({ item }) => (
+                <JobMatchCard
+                  job={item}
+                  onPress={() =>
+                    navigation.navigate('JobListingDetail', { jobId: item.id })
+                  }
+                  onDismiss={() =>
+                    setJobList((prev) => prev.filter((j) => j.id !== item.id))
+                  }
+                />
+              )}
+            />
+          </>
+        ) : null}
+
+        {feedPosts[1] ? (
+          <FeedPostCard
+            key={feedPosts[1].id}
+            post={feedPosts[1]}
+            onPress={() =>
+              navigation.navigate('PostDetail', { postId: feedPosts[1].id })
+            }
+            onLike={() => toggleLike(feedPosts[1].id)}
+            onAuthorPress={() =>
+              navigation.navigate('UserProfile', { userId: feedPosts[1].author.id })
+            }
+          />
+        ) : null}
+
+        {serviceList.length > 0 ? (
+          <>
+            <SectionHeader
+              title="Services for you"
+              onPress={() => openExplore('services')}
+            />
+            <FlatList
+              data={serviceList}
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.carousel}
+              renderItem={({ item }) => (
+                <ServiceMatchCard
+                  service={item}
+                  onPress={() =>
+                    navigation.navigate('ServiceDetail', { serviceId: item.id })
+                  }
+                  onDismiss={() =>
+                    setServiceList((prev) => prev.filter((s) => s.id !== item.id))
+                  }
+                />
+              )}
+            />
+          </>
+        ) : null}
+
+        {feedPosts[2] ? (
+          <FeedPostCard
+            key={feedPosts[2].id}
+            post={feedPosts[2]}
+            onPress={() =>
+              navigation.navigate('PostDetail', { postId: feedPosts[2].id })
+            }
+            onLike={() => toggleLike(feedPosts[2].id)}
+            onAuthorPress={() =>
+              navigation.navigate('UserProfile', { userId: feedPosts[2].author.id })
+            }
+          />
+        ) : null}
+
+        {talentList.length > 0 ? (
+          <>
+            <SectionHeader
+              title="Talents for you"
+              onPress={() => openExplore('talents')}
+            />
+            <FlatList
+              data={talentList}
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[styles.carousel, styles.carouselLast]}
+              renderItem={({ item }) => (
+                <TalentMatchCard
+                  talent={item}
+                  onPress={() =>
+                    navigation.navigate('UserProfile', { userId: item.user.id })
+                  }
+                  onDismiss={() =>
+                    setTalentList((prev) => prev.filter((t) => t.id !== item.id))
+                  }
+                />
+              )}
+            />
+          </>
+        ) : null}
+
+        {/* Any remaining posts after the suggested carousels */}
+        {feedPosts.slice(3).map((post) => (
           <FeedPostCard
             key={post.id}
             post={post}
             onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
             onLike={() => toggleLike(post.id)}
+            onAuthorPress={() =>
+              navigation.navigate('UserProfile', { userId: post.author.id })
+            }
           />
         ))}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Jobs matches for you</Text>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() =>
-              navigation.navigate('SearchTab', { contentType: 'jobs', category: 'All' })
-            }
-          >
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={jobList}
-          horizontal
-          scrollEnabled={false}
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.jobsList}
-          renderItem={({ item }) => (
-            <JobMatchCard
-              job={item}
-              onPress={() => navigation.navigate('JobListingDetail', { jobId: item.id })}
-              onDismiss={() => setJobList((prev) => prev.filter((j) => j.id !== item.id))}
-            />
-          )}
-        />
       </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: spacing.xl },
+  scroll: { paddingBottom: 120 },
   storiesList: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: 0,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
-  storyItem: { alignItems: 'center', width: 79 },
+  storyItem: { alignItems: 'center', width: 72 },
   storyCard: {
-    width: 75,
-    height: 95,
+    width: 68,
+    height: 88,
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 2,
@@ -299,22 +559,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     textAlign: 'center',
-    width: 79,
+    width: 72,
   },
   feedCard: {
-    marginHorizontal: spacing.screen,
-    marginBottom: spacing.lg,
     backgroundColor: colors.white,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
   feedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.md,
     gap: spacing.sm,
+    paddingHorizontal: spacing.screen,
   },
   feedAvatar: { width: 40, height: 40, borderRadius: radius.avatar },
   feedAuthor: { flex: 1 },
@@ -322,13 +581,25 @@ const styles = StyleSheet.create({
   feedAuthorName: { ...typography.label, color: colors.text },
   feedRole: { ...typography.caption, color: colors.textSecondary },
   feedTime: { ...typography.caption, color: colors.textSecondary },
-  feedCaption: { ...typography.bodySmall, color: colors.text, lineHeight: 20 },
+  feedCaption: {
+    ...typography.bodySmall,
+    color: colors.text,
+    lineHeight: 20,
+    paddingHorizontal: spacing.screen,
+  },
   seeMore: { color: colors.primary },
+  feedImage: {
+    width: '100%',
+    height: 220,
+    marginTop: spacing.md,
+    backgroundColor: colors.borderLight,
+  },
   feedActions: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: spacing.md,
     gap: spacing.md,
+    paddingHorizontal: spacing.screen,
   },
   feedAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   feedActionCount: { ...typography.bodySmall, color: colors.textTertiary },
@@ -338,11 +609,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.screen,
+    marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
   sectionTitle: { ...typography.h3, color: colors.text },
-  jobsList: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxxl, gap: spacing.md },
-  jobCard: {
+  carousel: {
+    paddingHorizontal: spacing.screen,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  carouselLast: {
+    paddingBottom: spacing.xxxl,
+  },
+  matchCard: {
     width: 280,
     backgroundColor: colors.white,
     borderRadius: radius.card,
@@ -350,9 +629,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
-  jobDismiss: { position: 'absolute', top: spacing.md, right: spacing.md, zIndex: 1 },
-  jobTop: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  cardDismiss: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 1,
+  },
+  jobTop: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+    paddingRight: 20,
+  },
   jobLogo: { width: 48, height: 48, borderRadius: 8 },
+  talentAvatar: { width: 48, height: 48, borderRadius: 24 },
   jobLogoPlaceholder: {
     width: 48,
     height: 48,
@@ -363,8 +653,13 @@ const styles = StyleSheet.create({
   },
   jobLogoText: { ...typography.label, color: colors.textSecondary },
   jobInfo: { flex: 1 },
-  jobTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  jobTitle: { ...typography.label, color: colors.text },
+  jobTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  jobTitle: { ...typography.label, color: colors.text, flexShrink: 1 },
   jobTypeBadge: {
     backgroundColor: '#EFF6FF',
     borderColor: '#DBEAFE',
@@ -375,6 +670,14 @@ const styles = StyleSheet.create({
   },
   jobTypeText: { ...typography.caption, color: '#193CB8', fontSize: 11 },
   jobCompany: { ...typography.bodySmall, color: colors.textSecondary, marginTop: 2 },
+  ratingInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  ratingInlineText: { ...typography.caption, color: colors.text, fontWeight: '600' },
+  ratingCountText: { ...typography.caption, color: colors.textSecondary },
   jobMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  jobMetaText: { ...typography.caption, color: colors.textSecondary },
+  jobMetaText: { ...typography.caption, color: colors.textSecondary, flex: 1 },
 });
