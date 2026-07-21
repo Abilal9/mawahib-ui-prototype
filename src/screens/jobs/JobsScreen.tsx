@@ -5,159 +5,213 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Dimensions,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import JobsFilterSheet, {
-  JobsFilters,
-  defaultJobsFilters,
-} from '../../components/explore/JobsFilterSheet';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
-import { userJobs } from '../../data/mock/userJobs';
 import { UserJob } from '../../data/types/userJobs';
 import { TabScreenProps } from '../../navigation/types';
+import { useUserJobs } from '../../context/UserJobsContext';
 
 type JobsTab = 'received' | 'sent';
+type ReceivedSection = 'requests' | 'in-progress' | 'upcoming' | 'completed';
+type SentSection = 'requests' | 'posted' | 'completed';
+type SectionSort = 'most-recent' | 'oldest' | 'due-date';
 
-function parseDate(date: string) {
-  return Date.parse(date);
-}
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PANEL_WIDTH = SCREEN_WIDTH - spacing.screen * 2;
 
-function sortJobsList(items: UserJob[], sort: JobsFilters['sort']) {
+const RECEIVED_SECTIONS: {
+  key: ReceivedSection;
+  title: string;
+  dot: string;
+  countColor: string;
+}[] = [
+  { key: 'requests', title: 'Job Requests', dot: '#C084FC', countColor: '#8B5CF6' },
+  { key: 'in-progress', title: 'In Progress Jobs', dot: '#60A5FA', countColor: '#3B82F6' },
+  { key: 'upcoming', title: 'Upcoming Jobs', dot: '#FACC15', countColor: '#CA8A04' },
+  { key: 'completed', title: 'Completed Jobs', dot: '#22C55E', countColor: '#16A34A' },
+];
+
+const SENT_SECTIONS: {
+  key: SentSection;
+  title: string;
+  dot: string;
+  countColor: string;
+}[] = [
+  { key: 'requests', title: 'Request', dot: '#C084FC', countColor: '#8B5CF6' },
+  { key: 'posted', title: 'Posted Jobs', dot: '#60A5FA', countColor: '#3B82F6' },
+  { key: 'completed', title: 'Completed Jobs', dot: '#22C55E', countColor: '#16A34A' },
+];
+
+function sortJobs(items: UserJob[], sort: SectionSort) {
   const copy = [...items];
+  if (sort === 'most-recent') {
+    return copy.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  }
   if (sort === 'oldest') {
-    return copy.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+    return copy.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   }
-  if (sort === 'due-date') {
-    return copy.sort((a, b) => {
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return parseDate(a.dueDate) - parseDate(b.dueDate);
-    });
-  }
-  return copy.sort((a, b) => parseDate(b.date) - parseDate(a.date));
+  return copy.sort((a, b) => {
+    const aDate = Date.parse(a.dueDate ?? a.date);
+    const bDate = Date.parse(b.dueDate ?? b.date);
+    if (Number.isNaN(aDate)) return 1;
+    if (Number.isNaN(bDate)) return -1;
+    return aDate - bDate;
+  });
 }
 
-function organizeJobs(items: UserJob[], tab: JobsTab) {
-  if (tab === 'received') {
-    return {
-      requests: items.filter((j) => j.status === 'pending'),
-      inProgress: items.filter((j) => j.status === 'in-progress'),
-      history: [] as UserJob[],
-    };
+function getStatusTone(status: UserJob['status']) {
+  switch (status) {
+    case 'pending':
+      return { bg: '#FCE7F3', text: '#BE185D' };
+    case 'pending-payment':
+      return { bg: '#E0ECFF', text: '#2E6AC5' };
+    case 'sent-for-review':
+      return { bg: '#FEF9C3', text: '#8A6A16' };
+    case 'declined':
+      return { bg: '#EF4444', text: '#FFFFFF' };
+    case 'upcoming':
+      return { bg: '#FEF3C7', text: '#8A6A16' };
+    case 'in-progress':
+      return { bg: '#DBEAFE', text: '#1D4ED8' };
+    case 'done':
+      return { bg: '#DCFCE7', text: '#15803D' };
+    default:
+      return { bg: '#EEF2F6', text: colors.textSecondary };
   }
-
-  return {
-    requests: items.filter((j) => j.status === 'sent'),
-    inProgress: items.filter((j) => j.status === 'in-progress'),
-    history: items.filter((j) => j.status === 'completed' || j.status === 'declined'),
-  };
 }
 
-function JobCard({ job, onPress }: { job: UserJob; onPress: () => void }) {
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    pending: { bg: '#FFF3E0', text: '#E65100' },
-    sent: { bg: '#E3F2FD', text: '#1565C0' },
-    'in-progress': { bg: '#E8F5E9', text: '#2E7D32' },
-    completed: { bg: '#F3E5F5', text: '#7B1FA2' },
-    declined: { bg: '#FFEBEE', text: '#C62828' },
-  };
-  const badge = statusColors[job.status] ?? statusColors.pending;
+function JobFlowCard({
+  job,
+  onPress,
+  hideStatus,
+  showReviewPrompt,
+}: {
+  job: UserJob;
+  onPress: () => void;
+  hideStatus?: boolean;
+  showReviewPrompt?: boolean;
+}) {
+  const tone = getStatusTone(job.status);
 
   return (
-    <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.jobCardTop}>
+    <TouchableOpacity style={styles.receivedJobCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.receivedTopRow}>
         <Text style={styles.jobTitle} numberOfLines={1}>
           {job.title}
         </Text>
-        {job.jobType && (
-          <View style={styles.jobTypeBadge}>
-            <Text style={styles.jobTypeText}>{job.jobType}</Text>
-          </View>
-        )}
+        <View style={styles.statusAndChevron}>
+          {!hideStatus ? (
+            <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
+              <Text style={[styles.statusText, { color: tone.text }]}>{job.statusLabel}</Text>
+            </View>
+          ) : null}
+          <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        </View>
       </View>
 
-      <View style={styles.jobMeta}>
-        <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-          <Text style={[styles.statusText, { color: badge.text }]}>{job.statusLabel}</Text>
+      <View style={styles.metaLine}>
+        <Text style={styles.metaLabel}>User</Text>
+        <View style={styles.userInline}>
+          <Image source={toImageSource(job.counterpart.avatar)} style={styles.userAvatar} contentFit="cover" />
+          <Text style={styles.metaValue}>{job.counterpart.name}</Text>
         </View>
-        <Text style={styles.jobDate}>{job.date}</Text>
       </View>
-
-      <View style={styles.counterpartRow}>
-        <Image
-          source={toImageSource(job.counterpart.avatar)}
-          style={styles.counterpartAvatar}
-          contentFit="cover"
-        />
-        <View style={styles.counterpartInfo}>
-          <Text style={styles.counterpartLabel}>
-            {job.type === 'received' ? 'From' : 'To'}
-          </Text>
-          <Text style={styles.counterpartName}>{job.counterpart.name}</Text>
+      <View style={styles.metaSeparator} />
+      <View style={styles.metaLine}>
+        <Text style={styles.metaLabel}>{job.activityLabel === 'Done' ? 'Done' : 'Date'}</Text>
+        <View style={styles.userInline}>
+          <Ionicons name="time-outline" size={14} color="#3F78B7" />
+          <Text style={styles.dateValue}>{job.date}</Text>
         </View>
-        {job.dueDate && (
-          <View style={styles.dueDate}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.dueDateText}>{job.dueDate}</Text>
+      </View>
+      {job.activityLabel ? (
+        <>
+          <View style={styles.metaSeparator} />
+          <View style={styles.metaLine}>
+            <Text style={styles.metaLabel}>{job.activityLabel}</Text>
+            <Text style={styles.activityValue}>{job.activityValue ?? ''}</Text>
           </View>
-        )}
-      </View>
+        </>
+      ) : null}
+      {showReviewPrompt ? (
+        <>
+          <View style={styles.metaSeparator} />
+          <View style={styles.reviewStars}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Ionicons key={i} name="star" size={22} color={colors.border} />
+            ))}
+          </View>
+        </>
+      ) : null}
     </TouchableOpacity>
   );
 }
 
-function JobSection({
-  title,
-  jobs,
-  onJobPress,
-}: {
-  title: string;
-  jobs: UserJob[];
-  onJobPress: (job: UserJob) => void;
-}) {
-  if (jobs.length === 0) return null;
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {jobs.map((job) => (
-        <JobCard key={job.id} job={job} onPress={() => onJobPress(job)} />
-      ))}
-    </View>
-  );
-}
-
 export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
+  const { jobs: userJobs } = useUserJobs();
   const [activeTab, setActiveTab] = useState<JobsTab>('received');
-  const [filters, setFilters] = useState<JobsFilters>(defaultJobsFilters);
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [activeReceivedSection, setActiveReceivedSection] = useState(0);
+  const [activeSentSection, setActiveSentSection] = useState(0);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortSection, setSortSection] = useState<ReceivedSection | SentSection>('requests');
+  const [sectionSort, setSectionSort] = useState<
+    Record<ReceivedSection | SentSection, SectionSort>
+  >({
+    requests: 'most-recent',
+    'in-progress': 'most-recent',
+    upcoming: 'most-recent',
+    completed: 'most-recent',
+    posted: 'most-recent',
+  });
 
-  const filtered = useMemo(() => {
-    let items = userJobs.filter((j) => j.type === activeTab);
-    if (filters.status !== 'all') {
-      items = items.filter((j) => j.status === filters.status);
-    }
-    return sortJobsList(items, filters.sort);
-  }, [activeTab, filters]);
+  const receivedJobs = useMemo(
+    () => userJobs.filter((j) => j.type === 'received'),
+    []
+  );
+  const sentJobs = useMemo(() => userJobs.filter((j) => j.type === 'sent'), []);
 
-  const { requests, inProgress, history } = organizeJobs(filtered, activeTab);
+  const sectioned = useMemo(() => {
+    const bySection = {
+      requests: receivedJobs.filter((j) => j.section === 'requests'),
+      'in-progress': receivedJobs.filter((j) => j.section === 'in-progress'),
+      upcoming: receivedJobs.filter((j) => j.section === 'upcoming'),
+      completed: receivedJobs.filter((j) => j.section === 'completed'),
+    };
+    return {
+      requests: sortJobs(bySection.requests, sectionSort.requests),
+      'in-progress': sortJobs(bySection['in-progress'], sectionSort['in-progress']),
+      upcoming: sortJobs(bySection.upcoming, sectionSort.upcoming),
+      completed: sortJobs(bySection.completed, sectionSort.completed),
+    };
+  }, [receivedJobs, sectionSort]);
+
+  const sentSectioned = useMemo(() => {
+    const bySection = {
+      requests: sentJobs.filter((j) => j.section === 'requests'),
+      posted: sentJobs.filter((j) => j.section === 'posted'),
+      completed: sentJobs.filter((j) => j.section === 'completed'),
+    };
+    return {
+      requests: sortJobs(bySection.requests, sectionSort.requests),
+      posted: sortJobs(bySection.posted, sectionSort.posted),
+      completed: sortJobs(bySection.completed, sectionSort.completed),
+    };
+  }, [sentJobs, sectionSort]);
 
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Jobs</Text>
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setFilterOpen(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="options-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.tabBar}>
@@ -174,50 +228,163 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
         ))}
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        {filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="briefcase-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No jobs yet</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'received'
-                ? 'Job requests you receive will appear here.'
-                : 'Jobs you send will appear here.'}
-            </Text>
-          </View>
-        ) : (
-          <>
-            <JobSection
-              title="Job requests"
-              jobs={requests}
-              onJobPress={(job) => navigation.navigate('JobInProgress', { jobId: job.id })}
-            />
-            <JobSection
-              title="In progress"
-              jobs={inProgress}
-              onJobPress={(job) => navigation.navigate('JobInProgress', { jobId: job.id })}
-            />
-            {history.length > 0 && (
-              <JobSection
-                title="History"
-                jobs={history}
-                onJobPress={(job) => navigation.navigate('JobInProgress', { jobId: job.id })}
+      {activeTab === 'received' ? (
+        <>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            snapToInterval={PANEL_WIDTH + spacing.md}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.receivedPager}
+            onScroll={(e) => {
+              const x = e.nativeEvent.contentOffset.x;
+              const page = Math.round(x / (PANEL_WIDTH + spacing.md));
+              setActiveReceivedSection(Math.max(0, Math.min(3, page)));
+            }}
+            scrollEventThrottle={16}
+          >
+            {RECEIVED_SECTIONS.map((section) => {
+              const items = sectioned[section.key];
+              return (
+                <View key={section.key} style={styles.panel}>
+                  <View style={styles.panelHeader}>
+                    <View style={styles.panelTitleWrap}>
+                      <View style={[styles.panelDot, { backgroundColor: section.dot }]} />
+                      <Text style={styles.panelTitle}>{section.title}</Text>
+                      <Text style={[styles.panelCount, { color: section.countColor }]}>
+                        {items.length}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.panelFilter}
+                      onPress={() => {
+                        setSortSection(section.key);
+                        setSortOpen(true);
+                      }}
+                    >
+                      <Ionicons name="filter-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {items.map((job) => (
+                      <JobFlowCard
+                        key={job.id}
+                        job={job}
+                        onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.dotsRow}>
+            {RECEIVED_SECTIONS.map((s, i) => (
+              <View
+                key={s.key}
+                style={[styles.dot, i === activeReceivedSection && styles.dotActive]}
               />
-            )}
-          </>
-        )}
-      </ScrollView>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            snapToInterval={PANEL_WIDTH + spacing.md}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.receivedPager}
+            onScroll={(e) => {
+              const x = e.nativeEvent.contentOffset.x;
+              const page = Math.round(x / (PANEL_WIDTH + spacing.md));
+              setActiveSentSection(Math.max(0, Math.min(2, page)));
+            }}
+            scrollEventThrottle={16}
+          >
+            {SENT_SECTIONS.map((section) => {
+              const items = sentSectioned[section.key];
+              return (
+                <View key={section.key} style={styles.panel}>
+                  <View style={styles.panelHeader}>
+                    <View style={styles.panelTitleWrap}>
+                      <View style={[styles.panelDot, { backgroundColor: section.dot }]} />
+                      <Text style={styles.panelTitle}>{section.title}</Text>
+                      <Text style={[styles.panelCount, { color: section.countColor }]}>
+                        {items.length}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.panelFilter}
+                      onPress={() => {
+                        setSortSection(section.key);
+                        setSortOpen(true);
+                      }}
+                    >
+                      <Ionicons name="filter-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {items.map((job) => (
+                      <JobFlowCard
+                        key={job.id}
+                        job={job}
+                        hideStatus={section.key === 'posted'}
+                        showReviewPrompt={section.key === 'completed'}
+                        onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.dotsRow}>
+            {SENT_SECTIONS.map((s, i) => (
+              <View
+                key={s.key}
+                style={[styles.dot, i === activeSentSection && styles.dotActive]}
+              />
+            ))}
+          </View>
+        </>
+      )}
 
-      <JobsFilterSheet
-        visible={filterOpen}
-        filters={filters}
-        onClose={() => setFilterOpen(false)}
-        onApply={setFilters}
-        onReset={() => setFilters(defaultJobsFilters)}
-      />
+      <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
+        <Pressable style={styles.sortBackdrop} onPress={() => setSortOpen(false)}>
+          <Pressable style={styles.sortSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.sortTitle}>
+              Sort{' '}
+              {RECEIVED_SECTIONS.find((s) => s.key === sortSection)?.title ??
+                SENT_SECTIONS.find((s) => s.key === sortSection)?.title}
+            </Text>
+            {([
+              { id: 'most-recent', label: 'Most recent' },
+              { id: 'oldest', label: 'Oldest first' },
+              { id: 'due-date', label: 'Due date' },
+            ] as { id: SectionSort; label: string }[]).map((opt) => {
+              const selected = sectionSort[sortSection] === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={styles.sortOption}
+                  onPress={() => {
+                    setSectionSort((prev) => ({ ...prev, [sortSection]: opt.id }));
+                    setSortOpen(false);
+                  }}
+                >
+                  <Text style={[styles.sortOptionText, selected && styles.sortOptionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                  {selected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -235,154 +402,214 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.text,
   },
-  filterButton: {
+  headerSpacer: {
     width: 40,
     height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.button,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   tabBar: {
     flexDirection: 'row',
-    marginHorizontal: spacing.screen,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     marginBottom: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.button,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    borderRadius: radius.button,
   },
   tabActive: {
-    backgroundColor: colors.primary,
+    borderBottomWidth: 3,
+    borderBottomColor: colors.primary,
   },
   tabText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: colors.white,
-  },
-  scroll: {
-    paddingHorizontal: spacing.screen,
-    paddingBottom: 120,
-  },
-  section: {
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  jobCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  jobCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-    gap: spacing.sm,
-  },
-  jobTitle: {
     ...typography.body,
-    color: colors.text,
-    fontWeight: '600',
-    flex: 1,
-  },
-  jobTypeBadge: {
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.button,
-  },
-  jobTypeText: {
-    ...typography.caption,
     color: colors.textSecondary,
     fontWeight: '500',
   },
-  jobMeta: {
+  tabTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  receivedPager: {
+    paddingHorizontal: spacing.screen,
+    paddingRight: spacing.screen,
+    gap: spacing.md,
+  },
+  panel: {
+    width: PANEL_WIDTH,
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.md,
+    maxHeight: 560,
+  },
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
+  panelTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  panelDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  panelTitle: {
+    ...typography.bodyMedium,
+    color: colors.text,
+  },
+  panelCount: {
+    ...typography.label,
+  },
+  panelFilter: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+  },
+  receivedJobCard: {
+    borderRadius: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  receivedTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  statusAndChevron: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobTitle: {
+    ...typography.h3,
+    flex: 1,
+  },
   statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
     borderRadius: radius.button,
   },
   statusText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  jobDate: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  counterpartRow: {
+  metaLine: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    justifyContent: 'space-between',
+    minHeight: 24,
   },
-  counterpartAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.avatar,
+  metaSeparator: {
+    width: '100%',
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: spacing.xs,
   },
-  counterpartInfo: {
-    flex: 1,
-  },
-  counterpartLabel: {
+  metaLabel: {
     ...typography.caption,
     color: colors.textSecondary,
   },
-  counterpartName: {
+  userInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  userAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  metaValue: {
+    ...typography.bodySmall,
+    color: colors.text,
+  },
+  dateValue: {
+    ...typography.bodySmall,
+    color: '#3F78B7',
+  },
+  activityValue: {
     ...typography.bodySmall,
     color: colors.text,
     fontWeight: '500',
   },
-  dueDate: {
+  dotsRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: 78,
+    zIndex: 5,
   },
-  dueDateText: {
-    ...typography.caption,
-    color: colors.textSecondary,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D6DEE8',
   },
-  empty: {
-    alignItems: 'center',
-    paddingTop: spacing.xxl * 2,
-    paddingHorizontal: spacing.xl,
+  dotActive: {
+    width: 34,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
   },
-  emptyTitle: {
+  reviewStars: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: spacing.xs,
+  },
+  sortBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  sortSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: spacing.screen,
+    paddingBottom: spacing.xxl,
+  },
+  sortTitle: {
     ...typography.h3,
     color: colors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.md,
   },
-  emptyText: {
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  sortOptionText: {
     ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    color: colors.text,
+  },
+  sortOptionTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

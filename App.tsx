@@ -10,6 +10,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { SidebarProvider } from './src/context/SidebarContext';
 import { CreateMenuProvider } from './src/context/CreateMenuContext';
 import { ProfileProvider } from './src/context/ProfileContext';
+import { UserJobsProvider } from './src/context/UserJobsContext';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -42,10 +43,12 @@ export default function App() {
         <SidebarProvider>
           <CreateMenuProvider>
             <ProfileProvider>
-              <NavigationContainer>
-                <StatusBar style="dark" />
-                <RootNavigator />
-              </NavigationContainer>
+              <UserJobsProvider>
+                <NavigationContainer>
+                  <StatusBar style="dark" />
+                  <RootNavigator />
+                </NavigationContainer>
+              </UserJobsProvider>
             </ProfileProvider>
           </CreateMenuProvider>
         </SidebarProvider>
