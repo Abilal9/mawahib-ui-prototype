@@ -63,6 +63,7 @@ export { default as JobsScreen } from './jobs/JobsScreen';
 export { default as JobListingDetailScreen } from './jobs/JobListingDetailScreen';
 export { default as PostJobScreen } from './jobs/PostJobScreen';
 export { default as JobInProgressScreen } from './jobs/JobInProgressScreen';
+export { default as WriteReviewScreen } from './jobs/WriteReviewScreen';
 
 // Payments
 export { default as ConfirmPaymentScreen } from './payments/ConfirmPaymentScreen';

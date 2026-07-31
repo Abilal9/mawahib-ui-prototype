@@ -8,12 +8,14 @@ import Button from '../../components/ui/Button';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getJobById } from '../../data/mock/jobs';
+import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
 export default function JobListingDetailScreen({
   route,
   navigation,
 }: ScreenProps<'JobListingDetail'>) {
+  const { openFromListing } = useUserJobs();
   const job = getJobById(route.params.jobId);
 
   if (!job) {
@@ -100,7 +102,12 @@ export default function JobListingDetailScreen({
         <Button
           title="Apply Now"
           fullWidth
-          onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+          onPress={() => {
+            const userJobId = openFromListing(job.id);
+            if (userJobId) {
+              navigation.navigate('JobInProgress', { jobId: userJobId });
+            }
+          }}
         />
       </View>
     </ScreenContainer>

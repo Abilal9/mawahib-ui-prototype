@@ -8,6 +8,7 @@ import {
   Modal,
   Pressable,
   TextInput,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +16,11 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useUserJobs } from '../../context/UserJobsContext';
+import {
+  formatMoney,
+  jobTotalPrice,
+  resolveJobDetails,
+} from '../../data/types/userJobs';
 import { ScreenProps } from '../../navigation/types';
 
 type DateMode = 'deadline' | 'duration';
@@ -69,13 +75,28 @@ function buildDateLabel(mode: DateMode, deadline: Date | null, from: Date | null
   return '';
 }
 
+function parseSlashDate(value: string): Date | null {
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return null;
+  const month = Number(match[1]) - 1;
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  const d = new Date(year, month, day);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function JobInProgressScreen({ route, navigation }: ScreenProps<'JobInProgress'>) {
   const { getJobById, acceptJob, declineJob, requestEdits } = useUserJobs();
   const userJob = getJobById(route.params.jobId);
+  const details = userJob ? resolveJobDetails(userJob) : null;
+  const totalPrice = details ? jobTotalPrice(details) : 0;
+  const canAct =
+    userJob?.type === 'received' && userJob.status === 'pending';
+
   const [declineOpen, setDeclineOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
-  const [editPrice, setEditPrice] = useState('1,600');
+  const [editPrice, setEditPrice] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
   const [dateMode, setDateMode] = useState<DateMode>('deadline');
@@ -107,15 +128,16 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
   }, [visibleMonth]);
 
   const openEdits = () => {
-    const initialDeadline = new Date(2025, 4, 14);
+    const initialDeadline =
+      parseSlashDate(details?.deadline ?? '') ?? new Date(2025, 4, 14);
     setDateMode('deadline');
     setActiveDurationField('from');
     setVisibleMonth(new Date(initialDeadline.getFullYear(), initialDeadline.getMonth(), 1));
     setDeadlineDate(initialDeadline);
     setFromDate(null);
     setToDate(null);
-    setEditPrice('1,600');
-    setEditNotes('');
+    setEditPrice(formatMoney(totalPrice));
+    setEditNotes(details?.notes ?? '');
     setEditsOpen(true);
   };
 
@@ -199,48 +221,58 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
           </View>
           <View>
             <Text style={styles.metaLabel}>Requested on</Text>
-            <Text style={styles.metaValueStrong}>1 Jan 2024, 2:30 PM</Text>
+            <Text style={styles.metaValueStrong}>{details!.requestedAt}</Text>
           </View>
         </View>
 
         <View style={styles.twoCol}>
           <View style={styles.col}>
             <Text style={styles.metaLabel}>Service Name</Text>
-            <Text style={styles.metaValueStrong}>Design Dashboard</Text>
+            <Text style={styles.metaValueStrong}>{details!.serviceName}</Text>
           </View>
           <View style={styles.col}>
             <Text style={styles.metaLabel}>Package Selected</Text>
-            <Text style={styles.metaValueStrong}>Standard</Text>
+            <Text style={styles.metaValueStrong}>{details!.packageName}</Text>
           </View>
         </View>
 
         <View style={styles.sectionBlock}>
           <Text style={styles.metaLabel}>Adds-on</Text>
-          <Text style={styles.metaValueStrong}>Export to Dev-ready Format</Text>
-          <Text style={styles.metaValueStrong}>Design System Kit</Text>
+          {details!.addons.length === 0 ? (
+            <Text style={styles.metaValueStrong}>None</Text>
+          ) : (
+            details!.addons.map((addon) => (
+              <Text key={addon.name} style={styles.metaValueStrong}>
+                {addon.name}
+              </Text>
+            ))
+          )}
         </View>
 
         <View style={styles.sectionBlock}>
           <Text style={styles.metaLabel}>Deadline Date</Text>
-          <Text style={styles.metaValueStrong}>05/14/2025</Text>
+          <Text style={styles.metaValueStrong}>{details!.deadline}</Text>
         </View>
 
-        <View style={styles.sectionBlock}>
-          <Text style={styles.metaLabel}>Location</Text>
-          <View style={styles.userInline}>
-            <Text style={styles.linkText}>https://share.googleV0pPts7OTNOeU4EqG</Text>
-            <Ionicons name="open-outline" size={16} color={colors.textSecondary} />
+        {details!.locationUrl ? (
+          <View style={styles.sectionBlock}>
+            <Text style={styles.metaLabel}>Location</Text>
+            <TouchableOpacity
+              style={styles.userInline}
+              onPress={() => Linking.openURL(details!.locationUrl!)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.linkText} numberOfLines={1}>
+                {details!.locationUrl}
+              </Text>
+              <Ionicons name="open-outline" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.sectionBlock}>
           <Text style={styles.metaLabel}>Notes</Text>
-          <Text style={styles.notes}>
-            Lorem ipsum dolor sit amet consectetur. Morbi facilisi egestas pharetra euismod. Aliquet
-            vehicula scelerisque est ornare dolor Lorem ipsum dolor sit amet consectetur. Morbi
-            facilisi egestas pharetra euismod. Aliquet vehicula scelerisque est ornare dolor
-            Lorem ipsum dolor sit amet consectetur.
-          </Text>
+          <Text style={styles.notes}>{details!.notes}</Text>
         </View>
 
         <View style={styles.sectionBlock}>
@@ -248,8 +280,8 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
           <View style={styles.attachment}>
             <Ionicons name="document-text-outline" size={22} color={colors.primary} />
             <View>
-              <Text style={styles.metaValueStrong}>Film1.pdf</Text>
-              <Text style={styles.metaLabel}>2.4 MB</Text>
+              <Text style={styles.metaValueStrong}>{details!.attachmentName}</Text>
+              <Text style={styles.metaLabel}>{details!.attachmentSize}</Text>
             </View>
           </View>
         </View>
@@ -259,17 +291,23 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.metaValueStrong}>Package price</Text>
-              <Text style={styles.metaValueStrong}>﷼ 1,000</Text>
+              <Text style={styles.metaValueStrong}>
+                {details!.currencySymbol} {formatMoney(details!.packagePrice)}
+              </Text>
             </View>
-            <Text style={[styles.metaValueStrong, { marginTop: 4 }]}>Adds-on :</Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.metaValueStrong}>Export to Dev-ready Format</Text>
-              <Text style={styles.metaValueStrong}>﷼ 300</Text>
-            </View>
-            <View style={styles.priceRow}>
-              <Text style={styles.metaValueStrong}>Design System Kit</Text>
-              <Text style={styles.metaValueStrong}>﷼ 300</Text>
-            </View>
+            {details!.addons.length > 0 ? (
+              <>
+                <Text style={[styles.metaValueStrong, { marginTop: 4 }]}>Adds-on :</Text>
+                {details!.addons.map((addon) => (
+                  <View key={addon.name} style={styles.priceRow}>
+                    <Text style={styles.metaValueStrong}>{addon.name}</Text>
+                    <Text style={styles.metaValueStrong}>
+                      {details!.currencySymbol} {formatMoney(addon.price)}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            ) : null}
             <View
               style={[
                 styles.priceRow,
@@ -277,36 +315,40 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
               ]}
             >
               <Text style={styles.totalLabel}>Total (Package + Add-ons)</Text>
-              <Text style={styles.totalValue}>﷼ 1,600</Text>
+              <Text style={styles.totalValue}>
+                {details!.currencySymbol} {formatMoney(totalPrice)}
+              </Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Button
-          title="Accept"
-          onPress={() => {
-            acceptJob(userJob.id);
-            navigation.goBack();
-          }}
-          fullWidth
-        />
-        <View style={styles.secondaryActions}>
+      {canAct ? (
+        <View style={styles.footer}>
           <Button
-            title="Request Edits"
-            variant="secondary"
-            onPress={openEdits}
-            style={styles.halfBtn}
+            title="Accept"
+            onPress={() => {
+              acceptJob(userJob.id);
+              navigation.goBack();
+            }}
+            fullWidth
           />
-          <Button
-            title="Decline"
-            variant="secondary"
-            onPress={() => setDeclineOpen(true)}
-            style={styles.halfBtn}
-          />
+          <View style={styles.secondaryActions}>
+            <Button
+              title="Request Edits"
+              variant="secondary"
+              onPress={openEdits}
+              style={styles.halfBtn}
+            />
+            <Button
+              title="Decline"
+              variant="secondary"
+              onPress={() => setDeclineOpen(true)}
+              style={styles.halfBtn}
+            />
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <Modal visible={declineOpen} transparent animationType="fade" onRequestClose={() => setDeclineOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setDeclineOpen(false)}>

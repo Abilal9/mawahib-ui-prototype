@@ -62,6 +62,7 @@ export type RootStackParamList = {
   Premium: undefined;
   PostJob: { step?: number };
   JobInProgress: { jobId: string };
+  WriteReview: { jobId: string; initialRating?: number };
   ConfirmPayment: { serviceId?: string; amount?: number };
   ApplePay: { amount?: number };
   ScanCard: undefined;

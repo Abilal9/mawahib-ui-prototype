@@ -57,6 +57,8 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
                   onPress={() => {
                     if (item.id === 'premium') navigation.navigate('Premium');
                     if (item.id === 'calendar') navigation.navigate('Calendar');
+                    if (item.id === 'language') navigation.navigate('ChangeLanguage');
+                    if (item.id === 'profile') navigation.navigate('Profile');
                   }}
                   activeOpacity={'toggle' in item && item.toggle ? 1 : 0.7}
                 >
@@ -82,7 +84,16 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
           </View>
         ))}
 
-        <TouchableOpacity style={styles.logoutButton} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          activeOpacity={0.8}
+          onPress={() =>
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SignIn' }],
+            })
+          }
+        >
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 

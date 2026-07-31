@@ -19,6 +19,7 @@ import {
 } from '../../data/mock/notifications';
 import { ScreenProps } from '../../navigation/types';
 import { Notification } from '../../data/types';
+import { useUserJobs } from '../../context/UserJobsContext';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -61,11 +62,13 @@ function NotificationItem({
   onPress,
   onAccept,
   onDecline,
+  onRate,
 }: {
   item: Notification;
   onPress: () => void;
   onAccept?: () => void;
   onDecline?: () => void;
+  onRate?: (rating: number) => void;
 }) {
   return (
     <TouchableOpacity
@@ -91,9 +94,19 @@ function NotificationItem({
 
         {item.showRating ? (
           <View style={styles.starsRow}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Ionicons key={i} name="star-outline" size={18} color={colors.border} />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => {
+              const value = i + 1;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  hitSlop={6}
+                  activeOpacity={0.75}
+                  onPress={() => onRate?.(value)}
+                >
+                  <Ionicons name="star-outline" size={18} color={colors.border} />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ) : null}
 
@@ -105,6 +118,7 @@ function NotificationItem({
 }
 
 export default function NotificationsScreen({ navigation }: ScreenProps<'Notifications'>) {
+  const { openFromListing } = useUserJobs();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
   const [items, setItems] = useState(initialNotifications);
 
@@ -207,11 +221,30 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
                 )
               );
               if (item.jobId) {
-                navigation.navigate('JobInProgress', { jobId: item.jobId });
+                const userJobId = openFromListing(item.jobId);
+                if (userJobId) {
+                  navigation.navigate('JobInProgress', { jobId: userJobId });
+                }
               }
             }}
             onDecline={() => {
               setItems((prev) => prev.filter((n) => n.id !== item.id));
+            }}
+            onRate={(rating) => {
+              setItems((prev) =>
+                prev.map((n) =>
+                  n.id === item.id ? { ...n, read: true, showRating: false } : n
+                )
+              );
+              if (item.jobId) {
+                const userJobId = openFromListing(item.jobId);
+                if (userJobId) {
+                  navigation.navigate('WriteReview', {
+                    jobId: userJobId,
+                    initialRating: rating,
+                  });
+                }
+              }
             }}
           />
         )}

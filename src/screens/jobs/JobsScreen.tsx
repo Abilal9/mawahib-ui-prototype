@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -91,15 +91,36 @@ function getStatusTone(status: UserJob['status']) {
 function JobFlowCard({
   job,
   onPress,
+  onStarPress,
   hideStatus,
   showReviewPrompt,
 }: {
   job: UserJob;
   onPress: () => void;
+  onStarPress?: (rating: number) => void;
   hideStatus?: boolean;
   showReviewPrompt?: boolean;
 }) {
   const tone = getStatusTone(job.status);
+  const showStars = showReviewPrompt || !!job.rating;
+  const [previewRating, setPreviewRating] = useState<number | null>(null);
+  const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimer.current) clearTimeout(navigateTimer.current);
+    };
+  }, []);
+
+  const displayedRating = previewRating ?? job.rating ?? 0;
+
+  const handleStarPress = (value: number) => {
+    setPreviewRating(value);
+    if (navigateTimer.current) clearTimeout(navigateTimer.current);
+    navigateTimer.current = setTimeout(() => {
+      onStarPress?.(value);
+    }, 220);
+  };
 
   return (
     <TouchableOpacity style={styles.receivedJobCard} onPress={onPress} activeOpacity={0.85}>
@@ -141,13 +162,31 @@ function JobFlowCard({
           </View>
         </>
       ) : null}
-      {showReviewPrompt ? (
+      {showStars ? (
         <>
           <View style={styles.metaSeparator} />
           <View style={styles.reviewStars}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Ionicons key={i} name="star" size={22} color={colors.border} />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => {
+              const value = i + 1;
+              const filled = displayedRating >= value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  hitSlop={8}
+                  activeOpacity={0.75}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    handleStarPress(value);
+                  }}
+                >
+                  <Ionicons
+                    name="star"
+                    size={22}
+                    color={filled ? colors.warning : colors.border}
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </>
       ) : null}
@@ -174,9 +213,12 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
 
   const receivedJobs = useMemo(
     () => userJobs.filter((j) => j.type === 'received'),
-    []
+    [userJobs]
   );
-  const sentJobs = useMemo(() => userJobs.filter((j) => j.type === 'sent'), []);
+  const sentJobs = useMemo(
+    () => userJobs.filter((j) => j.type === 'sent'),
+    [userJobs]
+  );
 
   const sectioned = useMemo(() => {
     const bySection = {
@@ -271,7 +313,14 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
                       <JobFlowCard
                         key={job.id}
                         job={job}
+                        showReviewPrompt={section.key === 'completed'}
                         onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                        onStarPress={(rating) =>
+                          navigation.navigate('WriteReview', {
+                            jobId: job.id,
+                            initialRating: rating,
+                          })
+                        }
                       />
                     ))}
                   </ScrollView>
@@ -334,6 +383,12 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
                         hideStatus={section.key === 'posted'}
                         showReviewPrompt={section.key === 'completed'}
                         onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                        onStarPress={(rating) =>
+                          navigation.navigate('WriteReview', {
+                            jobId: job.id,
+                            initialRating: rating,
+                          })
+                        }
                       />
                     ))}
                   </ScrollView>

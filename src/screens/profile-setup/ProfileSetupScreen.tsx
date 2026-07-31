@@ -28,7 +28,13 @@ export default function ProfileSetupScreen({ route, navigation }: ScreenProps<'P
   const goBack = () => {
     if (step > 1) {
       navigation.navigate('ProfileSetup', { step: step - 1 });
+      return;
     }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('AccountType');
   };
 
   return (
@@ -37,7 +43,7 @@ export default function ProfileSetupScreen({ route, navigation }: ScreenProps<'P
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${(step / TOTAL_STEPS) * 100}%` }]} />
       </View>
-      <StepComponent onNext={goNext} onBack={step > 1 ? goBack : undefined} step={step} totalSteps={TOTAL_STEPS} />
+      <StepComponent onNext={goNext} onBack={goBack} step={step} totalSteps={TOTAL_STEPS} />
     </ScreenContainer>
   );
 }
