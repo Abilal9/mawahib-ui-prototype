@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mawahib-prototype",
-    "slug": "mawahib-prototype",
+    "name": "mawahib-ui-prototype",
+    "slug": "mawahib-ui-prototype",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -1,0 +1,299 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import { toImageSource } from '../../utils/image';
+import { colors, spacing, typography } from '../../theme';
+import { User } from '../../data/types';
+
+export const PROFILE_COLLAPSE_DISTANCE = 100;
+/** Pink strip under nav — tall enough for the avatar without clipping under the bar */
+export const PROFILE_WAVE_MAX = 64;
+
+interface ProfileCollapsingHeaderProps {
+  user: User;
+  scrollY: Animated.Value;
+  children?: React.ReactNode;
+  onReviewsPress?: () => void;
+  onConnectionsPress?: () => void;
+  connectionsLabel?: string;
+}
+
+export default function ProfileCollapsingHeader({
+  user,
+  scrollY,
+  children,
+  onReviewsPress,
+  onConnectionsPress,
+  connectionsLabel,
+}: ProfileCollapsingHeaderProps) {
+  const rating = user.rating ?? 5;
+  const reviews = user.reviewCount ?? 0;
+  const connections = connectionsLabel ?? `${user.followers ?? 0} connections`;
+
+  const avatarSize = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [112, 64],
+    extrapolate: 'clamp',
+  });
+
+  const avatarRadius = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [56, 32],
+    extrapolate: 'clamp',
+  });
+
+  const avatarBorder = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [3, 2],
+    extrapolate: 'clamp',
+  });
+
+  // Keep avatar fully below the fixed nav so the circle isn't clipped
+  const avatarOverlap = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [-(PROFILE_WAVE_MAX - 4), -24],
+    extrapolate: 'clamp',
+  });
+
+  const infoPullUp = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [-56, -28],
+    extrapolate: 'clamp',
+  });
+
+  const infoPaddingTop = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [64, 40],
+    extrapolate: 'clamp',
+  });
+
+  const infoPaddingBottom = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [spacing.md, spacing.sm],
+    extrapolate: 'clamp',
+  });
+
+  const nameScale = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [1, 0.9],
+    extrapolate: 'clamp',
+  });
+
+  const metaOpacity = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE * 0.45, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [1, 0.45, 0],
+    extrapolate: 'clamp',
+  });
+
+  const metaMaxHeight = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [96, 0],
+    extrapolate: 'clamp',
+  });
+
+  const metaTranslateY = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [0, -12],
+    extrapolate: 'clamp',
+  });
+
+  const childrenOpacity = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE * 0.55, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [1, 0.4, 0],
+    extrapolate: 'clamp',
+  });
+
+  const childrenMaxHeight = scrollY.interpolate({
+    inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
+    outputRange: [72, 0],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View>
+      <View style={styles.waveSpacer} />
+
+      {/* Avatar sits on the pink, not inside a card */}
+      <Animated.View
+        style={[
+          styles.avatarWrap,
+          {
+            marginTop: avatarOverlap,
+            width: avatarSize,
+            height: avatarSize,
+            borderRadius: avatarRadius,
+            borderWidth: avatarBorder,
+          },
+        ]}
+      >
+        <Image
+          source={toImageSource(user.avatar)}
+          style={styles.avatarImage}
+          contentFit="cover"
+        />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.infoBlock,
+          {
+            marginTop: infoPullUp,
+            paddingTop: infoPaddingTop,
+            paddingBottom: infoPaddingBottom,
+          },
+        ]}
+      >
+        <Animated.View style={{ transform: [{ scale: nameScale }] }}>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{user.name}</Text>
+            {user.isVerified ? (
+              <View style={styles.verified}>
+                <Ionicons name="checkmark" size={10} color={colors.white} />
+              </View>
+            ) : null}
+          </View>
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            opacity: metaOpacity,
+            maxHeight: metaMaxHeight,
+            transform: [{ translateY: metaTranslateY }],
+            overflow: 'hidden',
+            alignItems: 'center',
+          }}
+        >
+          <Text style={styles.role}>{user.title ?? 'Creative Professional'}</Text>
+          {user.location ? (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.location}>{user.location}</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.ratingRow}
+            onPress={onReviewsPress}
+            activeOpacity={0.8}
+          >
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Ionicons
+                key={i}
+                name={i < Math.round(rating) ? 'star' : 'star-outline'}
+                size={14}
+                color="#F5A623"
+              />
+            ))}
+            <Text style={styles.ratingValue}>
+              {rating.toFixed(rating % 1 === 0 ? 0 : 1)}
+            </Text>
+            <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onConnectionsPress} activeOpacity={0.8}>
+            <Text style={styles.connections}>{connections}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+
+      {children ? (
+        <Animated.View
+          style={{
+            opacity: childrenOpacity,
+            maxHeight: childrenMaxHeight,
+            overflow: 'hidden',
+            backgroundColor: colors.white,
+          }}
+        >
+          {children}
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  waveSpacer: {
+    height: PROFILE_WAVE_MAX,
+    backgroundColor: 'transparent',
+  },
+  avatarWrap: {
+    alignSelf: 'center',
+    borderColor: colors.white,
+    overflow: 'hidden',
+    zIndex: 3,
+    backgroundColor: colors.borderLight,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  infoBlock: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.screen,
+    backgroundColor: colors.white,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  name: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  verified: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  role: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.xs,
+  },
+  location: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: spacing.md,
+  },
+  ratingValue: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  reviewsLink: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+    marginLeft: 2,
+  },
+  connections: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+});

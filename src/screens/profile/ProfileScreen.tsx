@@ -1,22 +1,26 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import ProfileTabs from '../../components/profile/ProfileTabs';
+import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
+import ProfileHeaderChrome, {
+  PROFILE_FIXED_BAR_BODY,
+} from '../../components/profile/ProfileHeaderChrome';
 import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
 import AboutTab from '../../components/profile/AboutTab';
 import { toImageSource } from '../../utils/image';
+import { shareProfile } from '../../utils/shareProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { posts } from '../../data/mock/posts';
@@ -24,14 +28,21 @@ import { ProfileTab, AboutSectionKey } from '../../data/mock/myProfile';
 import { Post } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
+const TABS_FALLBACK = 56;
 
 export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const [activeTab, setActiveTab] = React.useState<ProfileTab>('About');
+  const [tabsHeight, setTabsHeight] = React.useState(TABS_FALLBACK);
   const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, useEmptyProfile } = useMyProfile();
   const userPosts = posts.filter((p) => content.postIds.includes(p.id));
+
+  const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
+  const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
+  const tabContentMinHeight = Math.max(scrollViewport - tabsHeight, 240);
 
   const openAbout = (key: AboutSectionKey) => {
     navigation.navigate('EditAboutSection', { section: key });
@@ -41,82 +52,44 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
       <StatusBar style="light" />
 
-      {/* Fixed pink top bar — stays while tabs stick below */}
-      <LinearGradient
-        colors={['#E60076', '#F6339A']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.fixedBar, { paddingTop: insets.top }]}
-      >
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="chevron-back" size={22} color={colors.white} />
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>My Profile</Text>
-        <TouchableOpacity style={styles.navBtn} activeOpacity={0.85}>
-          <Ionicons name="share-outline" size={20} color={colors.white} />
-        </TouchableOpacity>
-      </LinearGradient>
+      <ProfileHeaderChrome
+        topInset={insets.top}
+        scrollY={scrollY}
+        onBack={() => navigation.goBack()}
+        rightIcon="share-outline"
+        onRightPress={() =>
+          shareProfile({ userId: user.id, userName: user.name })
+        }
+      />
 
-      <ScrollView
+      <Animated.ScrollView
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
         contentContainerStyle={styles.scrollContent}
+        scrollEventThrottle={16}
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
       >
-        {/* 0 — Profile summary (scrolls away) */}
-        <View>
-          <LinearGradient
-            colors={['#E60076', '#F6339A', '#FFB3D9']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBleed}
-          />
-          <View style={styles.profileCard}>
-            <Image
-              source={toImageSource(user.avatar)}
-              style={styles.avatar}
-              contentFit="cover"
-            />
-            <View style={styles.nameRow}>
-              <Text style={styles.name}>{user.name}</Text>
-              {user.isVerified ? (
-                <View style={styles.verified}>
-                  <Ionicons name="checkmark" size={10} color={colors.white} />
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.role}>{user.title}</Text>
-            {user.location ? (
-              <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-                <Text style={styles.location}>{user.location}</Text>
-              </View>
-            ) : null}
-            <TouchableOpacity
-              style={styles.ratingRow}
-              onPress={() => navigation.navigate('Reviews', { userId: user.id })}
-              activeOpacity={0.8}
-            >
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Ionicons key={i} name="star" size={14} color="#F5A623" />
-              ))}
-              <Text style={styles.ratingValue}>{user.rating ?? 5}</Text>
-              <Text style={styles.reviewsLink}>{user.reviewCount ?? 106} reviews</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('Connections')}>
-              <Text style={styles.connections}>{user.followers} connections</Text>
-            </TouchableOpacity>
-          </View>
+        <ProfileCollapsingHeader
+          user={user}
+          scrollY={scrollY}
+          onReviewsPress={() => navigation.navigate('Reviews', { userId: user.id })}
+          onConnectionsPress={() => navigation.navigate('Connections')}
+          connectionsLabel={`${user.followers} connections`}
+        />
+
+        <View onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}>
+          <ProfileTabs active={activeTab} onChange={setActiveTab} />
         </View>
 
-        {/* 1 — Sticky tabs (pin under fixed pink bar on scroll) */}
-        <ProfileTabs active={activeTab} onChange={setActiveTab} />
-
-        {/* 2 — Tab content */}
-        <View>
+        {/* Tall enough that short tabs can still scroll until sticky tabs pin */}
+        <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
             <>
               <AboutTab content={content} isOwn onAdd={openAbout} onEdit={openAbout} />
@@ -289,7 +262,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
               </View>
             ))}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </ScreenContainer>
   );
 }
@@ -352,107 +325,14 @@ function FeedPost({
 }
 
 const styles = StyleSheet.create({
-  fixedBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.sm,
-    zIndex: 20,
-  },
-  navBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navTitle: {
-    ...typography.h3,
-    color: colors.white,
+  scroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    zIndex: 2,
   },
   scrollContent: {
     paddingBottom: spacing.xxxl,
-  },
-  heroBleed: {
-    height: 48,
-  },
-  profileCard: {
-    marginTop: -28,
-    marginHorizontal: spacing.screen,
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 3,
-    borderColor: colors.white,
-    marginBottom: spacing.md,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  name: {
-    ...typography.h2,
-    color: colors.text,
-  },
-  verified: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  role: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: spacing.xs,
-  },
-  location: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    marginTop: spacing.md,
-  },
-  ratingValue: {
-    ...typography.caption,
-    color: colors.text,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  reviewsLink: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textDecorationLine: 'underline',
-    marginLeft: 2,
-  },
-  connections: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: spacing.sm,
+    backgroundColor: 'transparent',
   },
   demoEmpty: {
     marginHorizontal: spacing.screen,

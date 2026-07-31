@@ -40,6 +40,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+    zIndex: 10,
   },
   wrap: {
     flexDirection: 'row',
