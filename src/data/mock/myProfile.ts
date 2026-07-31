@@ -198,9 +198,8 @@ export const filledOwnProfile: ProfileContent = {
   services: [
     {
       id: 'ps1',
-      title: 'Designing Dashboards',
-      description:
-        'Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit.',
+      title: 'Design Dashboard',
+      description: 'Custom dashboard UI for data visualization',
       rating: 4.0,
       reviewCount: 1880,
       images: [
@@ -221,7 +220,7 @@ export const filledOwnProfile: ProfileContent = {
         },
         {
           name: 'Standard',
-          priceLabel: '2000',
+          priceLabel: '1500',
           delivery: '5 days delivery',
           includes: [
             'Everything in Basic',
@@ -241,8 +240,142 @@ export const filledOwnProfile: ProfileContent = {
         },
       ],
       addons: [
-        { id: 'a1', title: 'Export to Dev-ready Format', priceLabel: '+ 300' },
-        { id: 'a2', title: 'Design System Kit', priceLabel: '+ 300' },
+        { id: 'a1', title: 'Logo Design', priceLabel: '+ 1000' },
+        { id: 'a2', title: 'Social Media Content', priceLabel: '+ 1500' },
+      ],
+    },
+    {
+      id: 'ps2',
+      title: 'Logo Design',
+      description: 'Clean, scalable logo tailored to your brand',
+      rating: 4.8,
+      reviewCount: 420,
+      images: [
+        'https://images.unsplash.com/photo-1626785774573-4b7993143456?w=800&h=500&fit=crop',
+      ],
+      packages: [
+        {
+          name: 'Basic',
+          priceLabel: '800',
+          delivery: '2 days delivery',
+          includes: ['1 logo concept', '2 revisions', 'PNG & JPG files'],
+        },
+        {
+          name: 'Standard',
+          priceLabel: '1500',
+          delivery: '4 days delivery',
+          includes: ['3 concepts', 'Source files', 'Social kit'],
+        },
+        {
+          name: 'Premium',
+          priceLabel: '2500',
+          delivery: '7 days delivery',
+          includes: ['Full brand mark system', 'Unlimited revisions'],
+        },
+      ],
+      addons: [
+        { id: 'a3', title: 'Business Card Design', priceLabel: '+ 400' },
+        { id: 'a4', title: 'Brand Guidelines PDF', priceLabel: '+ 600' },
+      ],
+    },
+    {
+      id: 'ps3',
+      title: 'Event Photography',
+      description: 'Full event coverage with editing included',
+      rating: 4.9,
+      reviewCount: 210,
+      images: [
+        'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&h=500&fit=crop',
+      ],
+      packages: [
+        {
+          name: 'Basic',
+          priceLabel: '1200',
+          delivery: '5 days delivery',
+          includes: ['2 hours coverage', '50 edited photos'],
+        },
+        {
+          name: 'Standard',
+          priceLabel: '2200',
+          delivery: '7 days delivery',
+          includes: ['4 hours coverage', '150 edited photos'],
+        },
+        {
+          name: 'Premium',
+          priceLabel: '4000',
+          delivery: '10 days delivery',
+          includes: ['Full day', 'Highlights reel', 'Online gallery'],
+        },
+      ],
+      addons: [
+        { id: 'a5', title: 'Same-day Preview', priceLabel: '+ 500' },
+        { id: 'a6', title: 'Printed Album', priceLabel: '+ 900' },
+      ],
+    },
+    {
+      id: 'ps4',
+      title: 'Social Media Posts',
+      description: 'Templates for engaging social media content',
+      rating: 4.6,
+      reviewCount: 156,
+      images: [
+        'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=800&h=500&fit=crop',
+      ],
+      packages: [
+        {
+          name: 'Basic',
+          priceLabel: '600',
+          delivery: '3 days delivery',
+          includes: ['5 post templates', '1 platform'],
+        },
+        {
+          name: 'Standard',
+          priceLabel: '1200',
+          delivery: '5 days delivery',
+          includes: ['15 templates', '2 platforms', 'Captions'],
+        },
+        {
+          name: 'Premium',
+          priceLabel: '2000',
+          delivery: '7 days delivery',
+          includes: ['30 templates', 'All platforms', 'Story set'],
+        },
+      ],
+      addons: [
+        { id: 'a7', title: 'Reel Cover Pack', priceLabel: '+ 350' },
+      ],
+    },
+    {
+      id: 'ps5',
+      title: 'Branding Kit',
+      description: 'Fonts, colors, and assets to define your brand',
+      rating: 4.7,
+      reviewCount: 98,
+      images: [
+        'https://images.unsplash.com/photo-1634942537034-2531766767d1?w=800&h=500&fit=crop',
+      ],
+      packages: [
+        {
+          name: 'Basic',
+          priceLabel: '1000',
+          delivery: '5 days delivery',
+          includes: ['Logo lockups', 'Color palette', 'Type pairing'],
+        },
+        {
+          name: 'Standard',
+          priceLabel: '2000',
+          delivery: '8 days delivery',
+          includes: ['Everything in Basic', 'Social templates', 'Icon set'],
+        },
+        {
+          name: 'Premium',
+          priceLabel: '3500',
+          delivery: '12 days delivery',
+          includes: ['Full brand book', 'Presentation deck'],
+        },
+      ],
+      addons: [
+        { id: 'a8', title: 'Motion Logo', priceLabel: '+ 800' },
       ],
     },
   ],

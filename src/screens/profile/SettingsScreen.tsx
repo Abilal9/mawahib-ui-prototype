@@ -58,7 +58,7 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
                     if (item.id === 'premium') navigation.navigate('Premium');
                     if (item.id === 'calendar') navigation.navigate('Calendar');
                     if (item.id === 'language') navigation.navigate('ChangeLanguage');
-                    if (item.id === 'profile') navigation.navigate('Profile');
+                    if (item.id === 'profile') navigation.navigate('EditProfile');
                   }}
                   activeOpacity={'toggle' in item && item.toggle ? 1 : 0.7}
                 >

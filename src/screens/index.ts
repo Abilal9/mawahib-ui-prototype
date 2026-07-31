@@ -44,12 +44,14 @@ export { default as ChatScreen } from './messages/ChatScreen';
 // Profile
 export { default as ProfileScreen } from './profile/ProfileScreen';
 export { default as UserProfileScreen } from './profile/UserProfileScreen';
+export { default as EditProfileScreen } from './profile/EditProfileScreen';
 export { default as EditAboutSectionScreen } from './profile/EditAboutSectionScreen';
 export { default as AddPortfolioProjectScreen } from './profile/AddPortfolioProjectScreen';
 export { default as AddProfileServiceScreen } from './profile/AddProfileServiceScreen';
 export { default as PortfolioScreen } from './profile/PortfolioScreen';
 export { default as ServicesScreen } from './profile/ServicesScreen';
 export { default as ServiceDetailScreen } from './profile/ServiceDetailScreen';
+export { default as RequestServiceScreen } from './profile/RequestServiceScreen';
 export { default as CalendarScreen } from './profile/CalendarScreen';
 export { default as ConnectionsScreen } from './profile/ConnectionsScreen';
 export { default as ReviewsScreen } from './profile/ReviewsScreen';

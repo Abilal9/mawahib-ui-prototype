@@ -6,12 +6,17 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
+  Modal,
+  Pressable,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import { stripCurrencyGlyphs } from '../../utils/currency';
 import ProfileTabs from '../../components/profile/ProfileTabs';
 import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
 import ProfileHeaderChrome, {
@@ -28,6 +33,7 @@ import {
   getVisitorProfileContent,
   ProfileTab,
 } from '../../data/mock/myProfile';
+import { useConnections } from '../../context/ConnectionsContext';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -37,10 +43,19 @@ const TABS_FALLBACK = 56;
 
 export default function UserProfileScreen({ route, navigation }: ScreenProps<'UserProfile'>) {
   const [activeTab, setActiveTab] = useState<ProfileTab>('About');
-  const [connected, setConnected] = useState(false);
+  const [unconnectOpen, setUnconnectOpen] = useState(false);
   const [tabsHeight, setTabsHeight] = useState(TABS_FALLBACK);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
+  const {
+    getRelation,
+    requestConnect,
+    cancelOutgoing,
+    acceptRequest,
+    denyRequest,
+    disconnect,
+    getConversationId,
+  } = useConnections();
   const user = resolveProfileUser(route.params.userId) ?? getUserById(route.params.userId);
   const talent = talents.find((t) => t.user.id === route.params.userId);
 
@@ -56,6 +71,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     );
   }
 
+  const relation = getRelation(user.id);
   const content = getVisitorProfileContent(user.id);
   const profileUser = {
     ...user,
@@ -64,6 +80,48 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     reviewCount: talent?.reviewCount ?? user.reviewCount ?? 24,
   };
   const userPosts = posts.filter((p) => p.author.id === user.id);
+
+  const onConnectPress = () => {
+    if (relation === 'none') {
+      requestConnect(user.id);
+      return;
+    }
+    if (relation === 'outgoing') {
+      cancelOutgoing(user.id);
+      return;
+    }
+    if (relation === 'connected') {
+      setUnconnectOpen(true);
+    }
+  };
+
+  const onMessagePress = () => {
+    if (relation !== 'connected') {
+      Alert.alert(
+        'Connect to message',
+        'You can only message people you’re connected with. Send a connection request first.'
+      );
+      return;
+    }
+    const conversationId = getConversationId(user.id) ?? 'c1';
+    navigation.navigate('Chat', { conversationId });
+  };
+
+  const connectLabel =
+    relation === 'connected'
+      ? 'Connected'
+      : relation === 'outgoing'
+        ? 'Requested'
+        : relation === 'incoming'
+          ? 'Respond'
+          : 'Connect';
+
+  const connectIcon: keyof typeof Ionicons.glyphMap =
+    relation === 'connected'
+      ? 'checkmark'
+      : relation === 'outgoing'
+        ? 'time-outline'
+        : 'person-add-outline';
 
   return (
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
@@ -97,31 +155,65 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           user={profileUser}
           scrollY={scrollY}
           onReviewsPress={() => navigation.navigate('Reviews', { userId: user.id })}
-          onConnectionsPress={() => navigation.navigate('Connections')}
+          onConnectionsPress={() =>
+            navigation.navigate('Connections', { userId: user.id })
+          }
           connectionsLabel={`${user.followers} connections`}
         >
-          <View style={styles.ctaRow}>
-            <TouchableOpacity
-              style={[styles.connectBtn, connected && styles.connectBtnDone]}
-              onPress={() => setConnected((v) => !v)}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name={connected ? 'checkmark' : 'person-add-outline'}
-                size={18}
-                color={colors.white}
-              />
-              <Text style={styles.connectText}>{connected ? 'Connected' : 'Connect'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.messageBtn}
-              onPress={() => navigation.navigate('Chat', { conversationId: 'c1' })}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
-              <Text style={styles.messageText}>Message</Text>
-            </TouchableOpacity>
-          </View>
+          {relation === 'incoming' ? (
+            <View style={styles.ctaRow}>
+              <TouchableOpacity
+                style={styles.connectBtn}
+                onPress={() => acceptRequest(user.id)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark" size={18} color={colors.white} />
+                <Text style={styles.connectText}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.messageBtn}
+                onPress={() => denyRequest(user.id)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close" size={18} color={colors.primary} />
+                <Text style={styles.messageText}>Deny</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.ctaRow}>
+              <TouchableOpacity
+                style={[
+                  styles.connectBtn,
+                  relation === 'connected' && styles.connectBtnDone,
+                  relation === 'outgoing' && styles.connectBtnPending,
+                ]}
+                onPress={onConnectPress}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={connectIcon} size={18} color={colors.white} />
+                <Text style={styles.connectText}>{connectLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.messageBtn, relation !== 'connected' && styles.messageBtnDisabled]}
+                onPress={onMessagePress}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={18}
+                  color={relation === 'connected' ? colors.primary : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.messageText,
+                    relation !== 'connected' && styles.messageTextDisabled,
+                  ]}
+                >
+                  Message
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </ProfileCollapsingHeader>
 
         <View onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}>
@@ -161,7 +253,10 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                   key={service.id}
                   style={styles.serviceCard}
                   onPress={() =>
-                    navigation.navigate('ServiceDetail', { serviceId: service.id })
+                    navigation.navigate('ServiceDetail', {
+                      serviceId: service.id,
+                      userId: user.id,
+                    })
                   }
                 >
                   <Image
@@ -178,7 +273,16 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                       {service.packages.map((pkg) => (
                         <View key={pkg.name} style={styles.packageChip}>
                           <Text style={styles.packageName}>{pkg.name}</Text>
-                          <Text style={styles.packagePrice}>{pkg.priceLabel}</Text>
+                          <View style={styles.packagePriceRow}>
+                            <CurrencyIcon
+                              size={11}
+                              color={colors.text}
+                              location={user.location}
+                            />
+                            <Text style={styles.packagePrice}>
+                              {stripCurrencyGlyphs(pkg.priceLabel)}
+                            </Text>
+                          </View>
                         </View>
                       ))}
                     </View>
@@ -213,6 +317,40 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           )}
         </View>
       </Animated.ScrollView>
+
+      <Modal
+        visible={unconnectOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUnconnectOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setUnconnectOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Unconnect?</Text>
+            <Text style={styles.modalBody}>
+              Are you sure you want to unconnect? You’ll have to send a request again before
+              connecting with this user.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalDangerBtn}
+              onPress={() => {
+                disconnect(user.id);
+                setUnconnectOpen(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDangerText}>Unconnect</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setUnconnectOpen(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -247,6 +385,9 @@ const styles = StyleSheet.create({
   connectBtnDone: {
     backgroundColor: '#00A63E',
   },
+  connectBtnPending: {
+    backgroundColor: '#627D98',
+  },
   connectText: { ...typography.button, color: colors.white },
   messageBtn: {
     flex: 1,
@@ -260,7 +401,46 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     paddingVertical: spacing.md,
   },
+  messageBtnDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
   messageText: { ...typography.button, color: colors.primary },
+  messageTextDisabled: { color: colors.textSecondary },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.screen,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+  },
+  modalTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
+  modalBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.xl,
+  },
+  modalDangerBtn: {
+    backgroundColor: colors.error,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalDangerText: { ...typography.button, color: colors.white },
+  modalCancelBtn: {
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: { ...typography.button, color: colors.text },
   tabPad: {
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xxxl,
@@ -294,7 +474,13 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   packageName: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  packagePrice: { fontSize: 11, color: colors.text, marginTop: 2 },
+  packagePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  packagePrice: { fontSize: 11, color: colors.text },
   emptyCopy: {
     ...typography.body,
     color: colors.textSecondary,

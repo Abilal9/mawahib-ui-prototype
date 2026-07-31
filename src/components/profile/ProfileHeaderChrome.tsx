@@ -15,6 +15,9 @@ interface ProfileHeaderChromeProps {
   onBack: () => void;
   rightIcon: keyof typeof Ionicons.glyphMap;
   onRightPress?: () => void;
+  /** Optional icon shown to the left of the primary right action (e.g. edit next to share) */
+  secondaryRightIcon?: keyof typeof Ionicons.glyphMap;
+  onSecondaryRightPress?: () => void;
 }
 
 /** One continuous pink header: fixed top chrome + collapsing wave that blends into the phone top. */
@@ -24,6 +27,8 @@ export default function ProfileHeaderChrome({
   onBack,
   rightIcon,
   onRightPress,
+  secondaryRightIcon,
+  onSecondaryRightPress,
 }: ProfileHeaderChromeProps) {
   const barTop = Math.max(topInset - 6, 0);
   const fixedBarHeight = barTop + PROFILE_FIXED_BAR_BODY;
@@ -41,9 +46,20 @@ export default function ProfileHeaderChrome({
           <Ionicons name="chevron-back" size={20} color={colors.white} />
         </TouchableOpacity>
         <View style={styles.navSpacer} />
-        <TouchableOpacity style={styles.navBtn} onPress={onRightPress} activeOpacity={0.85}>
-          <Ionicons name={rightIcon} size={18} color={colors.white} />
-        </TouchableOpacity>
+        <View style={styles.rightActions}>
+          {secondaryRightIcon ? (
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={onSecondaryRightPress}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={secondaryRightIcon} size={18} color={colors.white} />
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.navBtn} onPress={onRightPress} activeOpacity={0.85}>
+            <Ionicons name={rightIcon} size={18} color={colors.white} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Animated.View
@@ -78,6 +94,11 @@ const styles = StyleSheet.create({
   },
   navSpacer: {
     flex: 1,
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   wave: {
     position: 'absolute',

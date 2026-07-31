@@ -19,6 +19,11 @@ interface ProfileContextValue {
   /** demo helper: start empty or switch to filled seed */
   useEmptyProfile: () => void;
   useFilledProfile: () => void;
+  updateProfileBasics: (patch: {
+    title?: string;
+    location?: string;
+    avatar?: string | number;
+  }) => void;
   setBio: (bio: string) => void;
   setLanguages: (languages: ProfileLanguage[]) => void;
   setTalents: (talents: string[]) => void;
@@ -27,6 +32,8 @@ interface ProfileContextValue {
   setCertifications: (certifications: ProfileCertification[]) => void;
   addPortfolioProject: (project: PortfolioProject) => void;
   addService: (service: ProfileService) => void;
+  updateService: (serviceId: string, service: ProfileService) => void;
+  removeService: (serviceId: string) => void;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
@@ -34,7 +41,7 @@ const ProfileContext = createContext<ProfileContextValue | undefined>(undefined)
 export function ProfileProvider({ children }: { children: ReactNode }) {
   // Own profile starts filled to match Figma Profile Setup Full screenshots
   const [content, setContent] = useState<ProfileContent>(filledOwnProfile);
-  const user = ownProfileUser;
+  const [user, setUser] = useState<User>(ownProfileUser);
 
   const value = useMemo<ProfileContextValue>(
     () => ({
@@ -42,6 +49,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       content,
       useEmptyProfile: () => setContent(emptyProfileContent),
       useFilledProfile: () => setContent(filledOwnProfile),
+      updateProfileBasics: (patch) =>
+        setUser((prev) => ({
+          ...prev,
+          ...patch,
+        })),
       setBio: (bio) => setContent((prev) => ({ ...prev, bio })),
       setLanguages: (languages) => setContent((prev) => ({ ...prev, languages })),
       setTalents: (talents) => setContent((prev) => ({ ...prev, talents })),
@@ -53,6 +65,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setContent((prev) => ({ ...prev, portfolio: [project, ...prev.portfolio] })),
       addService: (service) =>
         setContent((prev) => ({ ...prev, services: [service, ...prev.services] })),
+      updateService: (serviceId, service) =>
+        setContent((prev) => ({
+          ...prev,
+          services: prev.services.map((s) => (s.id === serviceId ? service : s)),
+        })),
+      removeService: (serviceId) =>
+        setContent((prev) => ({
+          ...prev,
+          services: prev.services.filter((s) => s.id !== serviceId),
+        })),
     }),
     [content, user]
   );

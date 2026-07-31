@@ -11,6 +11,7 @@ import { SidebarProvider } from './src/context/SidebarContext';
 import { CreateMenuProvider } from './src/context/CreateMenuContext';
 import { ProfileProvider } from './src/context/ProfileContext';
 import { UserJobsProvider } from './src/context/UserJobsContext';
+import { ConnectionsProvider } from './src/context/ConnectionsContext';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,10 +45,12 @@ export default function App() {
           <CreateMenuProvider>
             <ProfileProvider>
               <UserJobsProvider>
-                <NavigationContainer>
-                  <StatusBar style="dark" />
-                  <RootNavigator />
-                </NavigationContainer>
+                <ConnectionsProvider>
+                  <NavigationContainer>
+                    <StatusBar style="dark" />
+                    <RootNavigator />
+                  </NavigationContainer>
+                </ConnectionsProvider>
               </UserJobsProvider>
             </ProfileProvider>
           </CreateMenuProvider>

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useUserJobs } from '../../context/UserJobsContext';
 import {
@@ -291,9 +292,12 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.metaValueStrong}>Package price</Text>
-              <Text style={styles.metaValueStrong}>
-                {details!.currencySymbol} {formatMoney(details!.packagePrice)}
-              </Text>
+              <View style={styles.moneyRow}>
+                <CurrencyIcon size={14} color={colors.text} />
+                <Text style={styles.metaValueStrong}>
+                  {formatMoney(details!.packagePrice)}
+                </Text>
+              </View>
             </View>
             {details!.addons.length > 0 ? (
               <>
@@ -301,9 +305,12 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
                 {details!.addons.map((addon) => (
                   <View key={addon.name} style={styles.priceRow}>
                     <Text style={styles.metaValueStrong}>{addon.name}</Text>
-                    <Text style={styles.metaValueStrong}>
-                      {details!.currencySymbol} {formatMoney(addon.price)}
-                    </Text>
+                    <View style={styles.moneyRow}>
+                      <CurrencyIcon size={14} color={colors.text} />
+                      <Text style={styles.metaValueStrong}>
+                        {formatMoney(addon.price)}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </>
@@ -315,9 +322,10 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
               ]}
             >
               <Text style={styles.totalLabel}>Total (Package + Add-ons)</Text>
-              <Text style={styles.totalValue}>
-                {details!.currencySymbol} {formatMoney(totalPrice)}
-              </Text>
+              <View style={styles.moneyRow}>
+                <CurrencyIcon size={14} color={colors.primary} />
+                <Text style={styles.totalValue}>{formatMoney(totalPrice)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -511,7 +519,7 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
 
             <Text style={styles.priceLabel}>Updated total price</Text>
             <View style={styles.priceInputRow}>
-              <Text style={styles.currencyPrefix}>﷼</Text>
+              <CurrencyIcon size={16} color={colors.text} />
               <TextInput
                 placeholder="0"
                 placeholderTextColor={colors.textSecondary}
@@ -815,9 +823,10 @@ const styles = StyleSheet.create({
     minHeight: 42,
     gap: spacing.xs,
   },
-  currencyPrefix: {
-    ...typography.bodySmall,
-    color: colors.text,
+  moneyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   priceInput: {
     flex: 1,

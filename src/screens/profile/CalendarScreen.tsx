@@ -6,34 +6,49 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
   CALENDAR_MONTH,
-  calendarEvents,
   getEventsForDay,
 } from '../../data/mock/calendar';
 import { ScreenProps } from '../../navigation/types';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function clampDay(year: number, month: number, day: number) {
+  return Math.min(day, daysInMonth(year, month));
+}
+
 export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) {
-  const [currentMonth] = useState(CALENDAR_MONTH);
-  const daysInMonth = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() + 1,
-    0
-  ).getDate();
-  const firstDay = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth(),
-    1
-  ).getDay();
+  const [currentMonth, setCurrentMonth] = useState(CALENDAR_MONTH);
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const totalDays = daysInMonth(year, month);
+  const firstDay = new Date(year, month, 1).getDay();
   const [selectedDay, setSelectedDay] = useState(14);
 
-  const monthName = currentMonth.toLocaleString('default', {
+  const monthLabel = currentMonth.toLocaleString('default', {
     month: 'long',
     year: 'numeric',
   });
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const eventDays = calendarEvents.map((event) => event.date);
-  const dayEvents = getEventsForDay(selectedDay);
+  const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+  const days = Array.from({ length: totalDays }, (_, i) => i + 1);
+  const dayEvents = getEventsForDay(year, month, selectedDay);
+
+  const shiftMonth = (delta: number) => {
+    const next = new Date(year, month + delta, 1);
+    const nextYear = next.getFullYear();
+    const nextMonth = next.getMonth();
+    const today = new Date();
+    const isCurrentMonth =
+      nextYear === today.getFullYear() && nextMonth === today.getMonth();
+
+    setCurrentMonth(next);
+    setSelectedDay(
+      isCurrentMonth ? today.getDate() : clampDay(nextYear, nextMonth, selectedDay)
+    );
+  };
 
   return (
     <ScreenContainer padded={false}>
@@ -43,18 +58,16 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Calendar</Text>
-        <TouchableOpacity style={styles.backButton}>
-          <Ionicons name="add" size={24} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.monthHeader}>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={8}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.monthName}>{monthName}</Text>
-          <TouchableOpacity>
+          <Text style={styles.monthName}>{monthLabel}</Text>
+          <TouchableOpacity onPress={() => shiftMonth(1)} hitSlop={8}>
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -72,25 +85,34 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
             <View key={`empty-${index}`} style={styles.dayCell} />
           ))}
           {days.map((day) => {
-            const hasEvent = eventDays.includes(day);
+            const dayDots = getEventsForDay(year, month, day);
             const isSelected = day === selectedDay;
             return (
               <TouchableOpacity
                 key={day}
-                style={[styles.dayCell, isSelected && styles.daySelected]}
+                style={styles.dayCell}
                 onPress={() => setSelectedDay(day)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
-                  {day}
-                </Text>
-                {hasEvent && (
-                  <View
-                    style={[
-                      styles.eventDot,
-                      isSelected && styles.eventDotSelected,
-                    ]}
-                  />
+                <View style={[styles.dayInner, isSelected && styles.daySelected]}>
+                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
+                    {day}
+                  </Text>
+                </View>
+                {dayDots.length > 0 ? (
+                  <View style={styles.eventDotsRow}>
+                    {dayDots.slice(0, 3).map((event) => (
+                      <View
+                        key={event.id}
+                        style={[
+                          styles.eventDot,
+                          { backgroundColor: isSelected ? colors.white : event.color },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.eventDotSpacer} />
                 )}
               </TouchableOpacity>
             );
@@ -98,7 +120,9 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
         </View>
 
         <View style={styles.eventsSection}>
-          <Text style={styles.eventsTitle}>Events on July {selectedDay}</Text>
+          <Text style={styles.eventsTitle}>
+            Events on {monthName} {selectedDay}
+          </Text>
           {dayEvents.length === 0 ? (
             <Text style={styles.noEvents}>No events scheduled</Text>
           ) : (
@@ -160,29 +184,42 @@ const styles = StyleSheet.create({
   dayCell: {
     width: '14.28%',
     aspectRatio: 1,
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
+  },
+  dayInner: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
   },
   daySelected: {
     backgroundColor: colors.primary,
-    borderRadius: radius.full,
   },
   dayText: { ...typography.body, color: colors.text },
   dayTextSelected: {
     color: colors.white,
     fontFamily: typography.label.fontFamily,
   },
-  eventDot: {
-    position: 'absolute',
-    bottom: 6,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
+  eventDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    marginTop: 4,
+    minHeight: 5,
   },
-  eventDotSelected: {
-    backgroundColor: colors.white,
+  eventDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  eventDotSpacer: {
+    width: 5,
+    height: 5,
+    marginTop: 4,
   },
   eventsSection: { padding: spacing.screen, paddingTop: spacing.xl },
   eventsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.lg },

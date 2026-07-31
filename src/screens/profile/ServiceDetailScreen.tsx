@@ -1,21 +1,45 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
+import { stripCurrencyGlyphs } from '../../utils/currency';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getServiceById } from '../../data/mock/services';
+import { getVisitorProfileContent } from '../../data/mock/myProfile';
+import { resolveProfileUser } from '../../data/mock/resolveUser';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
 export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'ServiceDetail'>) {
   const catalogService = getServiceById(route.params.serviceId);
-  const { content } = useMyProfile();
-  const profileService = content.services.find((s) => s.id === route.params.serviceId);
-  const [activePackage, setActivePackage] = React.useState(0);
+  const ownerUserId = route.params.userId;
+  const isVisitorView = Boolean(ownerUserId);
+  const { user: me, content, removeService } = useMyProfile();
+  const owner = ownerUserId ? resolveProfileUser(ownerUserId) : undefined;
+
+  const profileService = isVisitorView
+    ? getVisitorProfileContent(ownerUserId!).services.find(
+        (s) => s.id === route.params.serviceId
+      )
+    : content.services.find((s) => s.id === route.params.serviceId);
+
+  const currencyLocation = isVisitorView ? owner?.location : me.location;
+
+  const [activePackage, setActivePackage] = useState(0);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!catalogService && !profileService) {
     return (
@@ -34,7 +58,9 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
         <ScrollView
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[2]}
-          contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+          contentContainerStyle={{
+            paddingBottom: isVisitorView ? spacing.xxxl + 72 : spacing.xxxl,
+          }}
         >
           <View style={styles.imageContainer}>
             <Image
@@ -50,10 +76,23 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
           <View style={styles.content}>
             <View style={styles.titleRow}>
               <Text style={styles.title}>{profileService.title}</Text>
-              <View style={styles.ownerActions}>
-                <Ionicons name="pencil-outline" size={20} color={colors.primary} />
-                <Ionicons name="trash-outline" size={20} color={colors.error} />
-              </View>
+              {!isVisitorView ? (
+                <View style={styles.ownerActions}>
+                  <TouchableOpacity
+                    hitSlop={8}
+                    onPress={() =>
+                      navigation.navigate('AddProfileService', {
+                        serviceId: profileService.id,
+                      })
+                    }
+                  >
+                    <Ionicons name="pencil-outline" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity hitSlop={8} onPress={() => setDeleteOpen(true)}>
+                    <Ionicons name="trash-outline" size={20} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
             <Text style={styles.description}>{profileService.description}</Text>
           </View>
@@ -84,10 +123,16 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
               <View style={styles.packageCard}>
                 <View style={styles.packageCardHeader}>
                   <Text style={styles.packageCardName}>{pkg.name}</Text>
-                  <Text style={styles.packageCardPrice}>
-                    <Text style={styles.currency}>﷼ </Text>
-                    {pkg.priceLabel}
-                  </Text>
+                  <View style={styles.packageCardPriceRow}>
+                    <CurrencyIcon
+                      size={18}
+                      color={colors.primary}
+                      location={currencyLocation}
+                    />
+                    <Text style={styles.packageCardPrice}>
+                      {stripCurrencyGlyphs(pkg.priceLabel)}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.deliveryRow}>
                   <Ionicons name="time-outline" size={16} color={colors.primary} />
@@ -108,18 +153,78 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                 {profileService.addons.map((addon) => (
                   <View key={addon.id} style={styles.addonRow}>
                     <Text style={styles.addonTitle}>{addon.title}</Text>
-                    <Text style={styles.addonPrice}>{addon.priceLabel}</Text>
+                    <View style={styles.addonPriceRow}>
+                      <CurrencyIcon
+                        size={14}
+                        color={colors.primary}
+                        location={currencyLocation}
+                      />
+                      <Text style={styles.addonPrice}>
+                        {stripCurrencyGlyphs(addon.priceLabel)}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </>
             ) : null}
           </View>
         </ScrollView>
+
+        {isVisitorView ? (
+          <View style={styles.footer}>
+            <Button
+              title="Apply"
+              fullWidth
+              onPress={() =>
+                navigation.navigate('RequestService', {
+                  userId: ownerUserId!,
+                  serviceId: profileService.id,
+                  packageName: pkg?.name,
+                })
+              }
+            />
+          </View>
+        ) : null}
+
+        <Modal
+          visible={deleteOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDeleteOpen(false)}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => setDeleteOpen(false)}>
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+              <Text style={styles.modalTitle}>Delete service?</Text>
+              <Text style={styles.modalBody}>
+                Are you sure you want to delete “{profileService.title}”? This can’t be undone.
+              </Text>
+              <TouchableOpacity
+                style={styles.modalDangerBtn}
+                onPress={() => {
+                  removeService(profileService.id);
+                  setDeleteOpen(false);
+                  navigation.goBack();
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalDangerText}>Delete</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setDeleteOpen(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </ScreenContainer>
     );
   }
 
   const service = catalogService!;
+  const providerLocation = service.provider.location;
 
   return (
     <ScreenContainer padded={false}>
@@ -162,8 +267,10 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
           <View style={styles.metaCards}>
             <View style={styles.metaCard}>
-              <Ionicons name="cash-outline" size={20} color={colors.primary} />
-              <Text style={styles.metaValue}>{service.currency} {service.price.toLocaleString()}</Text>
+              <View style={styles.metaPriceRow}>
+                <CurrencyIcon size={18} color={colors.primary} location={providerLocation} />
+                <Text style={styles.metaValueInline}>{service.price.toLocaleString()}</Text>
+              </View>
               <Text style={styles.metaLabel}>Price</Text>
             </View>
             <View style={styles.metaCard}>
@@ -180,8 +287,13 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
       <View style={styles.footer}>
         <Button
-          title={`Book Now · ${service.currency} ${service.price.toLocaleString()}`}
-          onPress={() => navigation.navigate('ConfirmPayment', { serviceId: service.id, amount: service.price })}
+          title="Book Now"
+          onPress={() =>
+            navigation.navigate('ConfirmPayment', {
+              serviceId: service.id,
+              amount: service.price,
+            })
+          }
           fullWidth
         />
       </View>
@@ -245,8 +357,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   packageCardName: { ...typography.h3, color: colors.primary },
+  packageCardPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   packageCardPrice: { ...typography.h3, color: colors.primary },
-  currency: { color: colors.primary },
+  addonPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -284,6 +397,13 @@ const styles = StyleSheet.create({
     padding: spacing.lg, alignItems: 'center',
     borderWidth: 1, borderColor: colors.borderLight,
   },
+  metaPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  metaValueInline: { ...typography.label, color: colors.text },
   metaValue: { ...typography.label, color: colors.text, marginTop: spacing.sm },
   metaLabel: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   sectionTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.md, marginTop: spacing.md },
@@ -292,4 +412,38 @@ const styles = StyleSheet.create({
     padding: spacing.screen, borderTopWidth: 1,
     borderTopColor: colors.borderLight, backgroundColor: colors.white,
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.screen,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+  },
+  modalTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
+  modalBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.xl,
+  },
+  modalDangerBtn: {
+    backgroundColor: colors.error,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalDangerText: { ...typography.button, color: colors.white },
+  modalCancelBtn: {
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: { ...typography.button, color: colors.text },
 });

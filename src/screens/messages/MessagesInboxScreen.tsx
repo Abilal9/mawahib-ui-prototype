@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -6,6 +6,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { conversations } from '../../data/mock/messages';
+import { useConnections } from '../../context/ConnectionsContext';
 import { TabScreenProps } from '../../navigation/types';
 
 function formatTime(dateStr: string): string {
@@ -17,6 +18,12 @@ function formatTime(dateStr: string): string {
 }
 
 export default function MessagesInboxScreen({ navigation }: TabScreenProps<'MessagesTab'>) {
+  const { isConnected } = useConnections();
+  const visible = useMemo(
+    () => conversations.filter((c) => isConnected(c.participant.id)),
+    [isConnected]
+  );
+
   return (
     <ScreenContainer padded={false} safeBottom={false}>
       <StatusBar style="dark" />
@@ -25,10 +32,15 @@ export default function MessagesInboxScreen({ navigation }: TabScreenProps<'Mess
       </View>
 
       <FlatList
-        data={conversations}
+        data={visible}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            Messages appear here once you’re connected with someone.
+          </Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.conversation}
@@ -61,6 +73,13 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.screen, paddingVertical: spacing.lg },
   headerTitle: { ...typography.h2, color: colors.text },
   list: { paddingHorizontal: spacing.screen, paddingBottom: 120 },
+  empty: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+  },
   conversation: {
     flexDirection: 'row',
     alignItems: 'center',

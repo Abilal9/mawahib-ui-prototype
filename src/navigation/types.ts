@@ -25,11 +25,12 @@ export type RootStackParamList = {
   SignUp: undefined;
   Profile: undefined;
   UserProfile: { userId: string };
+  EditProfile: undefined;
   EditAboutSection: {
     section: 'bio' | 'languages' | 'talents' | 'education' | 'experience' | 'certifications';
   };
   AddPortfolioProject: undefined;
-  AddProfileService: undefined;
+  AddProfileService: { serviceId?: string } | undefined;
   JobListingDetail: { jobId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
@@ -52,9 +53,14 @@ export type RootStackParamList = {
   Chat: { conversationId: string };
   Portfolio: { userId?: string };
   Services: { userId?: string };
-  ServiceDetail: { serviceId: string };
+  ServiceDetail: { serviceId: string; userId?: string };
+  RequestService: {
+    userId: string;
+    serviceId?: string;
+    packageName?: 'Basic' | 'Standard' | 'Premium';
+  };
   Calendar: undefined;
-  Connections: undefined;
+  Connections: { userId?: string } | undefined;
   Reviews: { userId?: string } | undefined;
   Documentation: undefined;
   ChangeLanguage: undefined;

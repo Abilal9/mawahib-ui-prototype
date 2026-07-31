@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { services } from '../../data/mock/services';
 import { getUserById } from '../../data/mock/users';
@@ -50,7 +51,14 @@ export default function ServicesScreen({ route, navigation }: ScreenProps<'Servi
               <Text style={styles.title}>{item.title}</Text>
               <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
               <View style={styles.footer}>
-                <Text style={styles.price}>{item.currency} {item.price.toLocaleString()}</Text>
+                <View style={styles.priceRow}>
+                  <CurrencyIcon
+                    size={14}
+                    color={colors.primary}
+                    location={item.provider.location}
+                  />
+                  <Text style={styles.price}>{item.price.toLocaleString()}</Text>
+                </View>
                 <View style={styles.rating}>
                   <Ionicons name="star" size={14} color={colors.warning} />
                   <Text style={styles.ratingText}>{item.rating} ({item.reviewCount})</Text>
@@ -84,6 +92,7 @@ const styles = StyleSheet.create({
   title: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
   description: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.md },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   price: { ...typography.label, color: colors.primary },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingText: { ...typography.caption, color: colors.textSecondary },

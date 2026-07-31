@@ -23,12 +23,14 @@ import {
   ChatScreen,
   ProfileScreen,
   UserProfileScreen,
+  EditProfileScreen,
   EditAboutSectionScreen,
   AddPortfolioProjectScreen,
   AddProfileServiceScreen,
   PortfolioScreen,
   ServicesScreen,
   ServiceDetailScreen,
+  RequestServiceScreen,
   CalendarScreen,
   ConnectionsScreen,
   ReviewsScreen,
@@ -72,6 +74,7 @@ export default function RootNavigator() {
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="EditAboutSection" component={EditAboutSectionScreen} />
       <Stack.Screen name="AddPortfolioProject" component={AddPortfolioProjectScreen} />
       <Stack.Screen name="AddProfileService" component={AddProfileServiceScreen} />
@@ -88,6 +91,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Portfolio" component={PortfolioScreen} />
       <Stack.Screen name="Services" component={ServicesScreen} />
       <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
+      <Stack.Screen name="RequestService" component={RequestServiceScreen} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
       <Stack.Screen name="Connections" component={ConnectionsScreen} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} />

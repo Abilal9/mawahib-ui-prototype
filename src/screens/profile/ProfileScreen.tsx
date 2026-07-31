@@ -12,6 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import { stripCurrencyGlyphs } from '../../utils/currency';
 import ProfileTabs from '../../components/profile/ProfileTabs';
 import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
 import ProfileHeaderChrome, {
@@ -56,6 +58,8 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
         topInset={insets.top}
         scrollY={scrollY}
         onBack={() => navigation.goBack()}
+        secondaryRightIcon="create-outline"
+        onSecondaryRightPress={() => navigation.navigate('EditProfile')}
         rightIcon="share-outline"
         onRightPress={() =>
           shareProfile({ userId: user.id, userName: user.name })
@@ -218,10 +222,16 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                       {service.packages.map((pkg) => (
                         <View key={pkg.name} style={styles.priceRow}>
                           <Text style={styles.priceLabel}>{pkg.name}</Text>
-                          <Text style={styles.priceValue}>
-                            <Text style={styles.currency}>﷼ </Text>
-                            {pkg.priceLabel}
-                          </Text>
+                          <View style={styles.priceValueRow}>
+                            <CurrencyIcon
+                              size={12}
+                              color={colors.primary}
+                              location={user.location}
+                            />
+                            <Text style={styles.priceValue}>
+                              {stripCurrencyGlyphs(pkg.priceLabel)}
+                            </Text>
+                          </View>
                         </View>
                       ))}
                     </View>
@@ -426,8 +436,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   priceLabel: { ...typography.caption, color: colors.textSecondary },
+  priceValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   priceValue: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  currency: { color: colors.primary },
   feedCard: {
     backgroundColor: colors.white,
     borderRadius: radius.card,

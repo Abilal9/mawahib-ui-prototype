@@ -2,8 +2,8 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { userJobs as seedJobs } from '../data/mock/userJobs';
 import { getJobById as getListingById } from '../data/mock/jobs';
 import { users } from '../data/mock/users';
-import { UserJob, UserJobDetails } from '../data/types/userJobs';
-import { Job } from '../data/types';
+import { User, Job } from '../data/types';
+import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
 
 interface RequestEditsPayload {
   date: string;
@@ -17,11 +17,27 @@ interface SubmitReviewPayload {
   images?: string[];
 }
 
+export interface CreateServiceRequestPayload {
+  provider: User;
+  serviceName: string;
+  packageName: string;
+  packagePrice: number;
+  addons: UserJobAddon[];
+  deadline?: string;
+  dateLabel?: string;
+  locationUrl?: string;
+  notes?: string;
+  attachmentName?: string;
+  attachmentSize?: string;
+}
+
 interface UserJobsContextValue {
   jobs: UserJob[];
   getJobById: (id: string) => UserJob | undefined;
   /** Create or reuse a received pending request from an explore listing; returns user-job id */
   openFromListing: (listingId: string) => string | undefined;
+  /** Client applies to a provider service — pending until provider accepts (then pending-payment) */
+  createServiceRequest: (payload: CreateServiceRequestPayload) => string;
   acceptJob: (id: string) => void;
   declineJob: (id: string, reason?: string) => void;
   requestEdits: (id: string, payload: RequestEditsPayload) => void;
@@ -98,6 +114,47 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         const created = userJobFromListing(listing);
         setJobs((prev) => [created, ...prev]);
         return created.id;
+      },
+      createServiceRequest: (payload) => {
+        const id = `uj-req-${Date.now()}`;
+        const deadline = payload.deadline?.trim() || undefined;
+        const dateLabel =
+          payload.dateLabel?.trim() || deadline || 'Flexible';
+        const created: UserJob = {
+          id,
+          title: payload.serviceName,
+          type: 'sent',
+          status: 'pending',
+          statusLabel: 'Pending',
+          counterpart: payload.provider,
+          date: dateLabel,
+          dueDate: deadline,
+          createdAt: nowIso(),
+          section: 'requests',
+          activityLabel: 'Requested',
+          activityValue: 'Just Now',
+          details: {
+            serviceName: payload.serviceName,
+            packageName: payload.packageName,
+            addons: payload.addons,
+            deadline: deadline ?? 'Flexible',
+            locationUrl: payload.locationUrl?.trim() || undefined,
+            notes: payload.notes?.trim() || '',
+            attachmentName: payload.attachmentName?.trim() || '',
+            attachmentSize: payload.attachmentSize?.trim() || '',
+            packagePrice: payload.packagePrice,
+            currencySymbol: '',
+            requestedAt: new Date().toLocaleString('en-US', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            }),
+          },
+        };
+        setJobs((prev) => [created, ...prev]);
+        return id;
       },
       acceptJob: (id) => {
         setJobs((prev) =>
