@@ -21,9 +21,17 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { ServicePackage } from '../../data/mock/myProfile';
 import { ScreenProps } from '../../navigation/types';
 
+/**
+ * Multi-step wizard to create or edit a profile service.
+ *
+ * Steps: (1) name / description / media → (2) Basic/Standard/Premium packages →
+ * (3) optional add-ons → (4) review & publish into ProfileContext.
+ * Pass `serviceId` in route params to edit an existing service instead of creating one.
+ */
 const TOTAL_STEPS = 4;
 const MAX_MEDIA = 10;
 
+/** Prototype stand-ins for a real media picker — `addMedia` cycles through these URLs. */
 const SAMPLE_MEDIA = [
   'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=400&h=400&fit=crop',
   'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=400&h=400&fit=crop',
@@ -40,23 +48,27 @@ const EMPTY_PACKAGE: PackageDraft = { price: '0', delivery: '', features: [] };
 
 const PACKAGE_TABS: PackageName[] = ['Basic', 'Standard', 'Premium'];
 
+/** Digits-only price → locale-formatted display string (currency icon is rendered separately). */
 function formatMoney(value: string) {
   const digits = value.replace(/[^\d]/g, '');
   if (!digits) return '0';
   return Number(digits).toLocaleString('en-US');
 }
 
+/** Pull a numeric draft value out of a stored price label like "1,200" or "+ 50". */
 function digitsFromLabel(label: string) {
   const digits = label.replace(/[^\d]/g, '');
   return digits ? String(Number(digits)) : '0';
 }
 
+/** Keep TextInput state as a plain digit string (leading zeros stripped). */
 function normalizePriceInput(text: string) {
   const digits = text.replace(/[^\d]/g, '');
   if (!digits) return '0';
   return String(Number(digits));
 }
 
+/** Hydrate the three package drafts when opening the wizard in edit mode. */
 function packagesFromService(service: {
   packages: ServicePackage[];
 }): Record<PackageName, PackageDraft> {
@@ -169,6 +181,7 @@ export default function AddProfileServiceScreen({
     setAddonPrice('0');
   };
 
+  // Back within the wizard first; only leave the screen from step 1.
   const goBack = () => {
     if (step > 1) {
       setStep((s) => s - 1);
@@ -185,6 +198,11 @@ export default function AddProfileServiceScreen({
     publish();
   };
 
+  /**
+   * Map wizard drafts → ProfileService and persist.
+   * Basic is always included; Standard/Premium only if the user filled any field.
+   * Empty delivery/features get prototype-friendly placeholders so cards still render.
+   */
   const publish = () => {
     const builtPackages: ServicePackage[] = PACKAGE_TABS.filter((key) => {
       if (key === 'Basic') return true;

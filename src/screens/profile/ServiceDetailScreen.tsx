@@ -23,6 +23,14 @@ import { resolveProfileUser } from '../../data/mock/resolveUser';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
+/**
+ * Service detail with three data paths:
+ * - Own profile service (`userId` omitted): edit/delete via ProfileContext.
+ * - Visitor profile service (`userId` set): Apply → RequestService wizard (pending job).
+ * - Catalog fallback: explore listing with Book Now → ConfirmPayment.
+ *
+ * Currency icons use the service owner's location (visitor/catalog) or the signed-in user (own).
+ */
 export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'ServiceDetail'>) {
   const catalogService = getServiceById(route.params.serviceId);
   const ownerUserId = route.params.userId;
@@ -30,6 +38,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   const { user: me, content, removeService } = useMyProfile();
   const owner = ownerUserId ? resolveProfileUser(ownerUserId) : undefined;
 
+  // Prefer profile-shaped services (packages/addons); fall back to catalog below if missing.
   const profileService = isVisitorView
     ? getVisitorProfileContent(ownerUserId!).services.find(
         (s) => s.id === route.params.serviceId

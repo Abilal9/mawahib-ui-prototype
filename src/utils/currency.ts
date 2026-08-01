@@ -1,5 +1,11 @@
+/**
+ * Location → currency helpers for price UI.
+ * Screens render CurrencyIcon + a glyph-stripped numeric label rather than embedding ﷼/⃁ in strings.
+ */
+
 export type AppCurrency = 'SAR' | 'AED';
 
+/** Substrings matched (case-insensitive) against a profile location to pick AED. */
 const UAE_LOCATION_MARKERS = [
   'uae',
   'united arab emirates',

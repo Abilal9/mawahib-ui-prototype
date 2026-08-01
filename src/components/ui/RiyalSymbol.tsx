@@ -3,6 +3,10 @@ import { ImageStyle, StyleProp } from 'react-native';
 import { Image } from 'expo-image';
 import { colors } from '../../theme';
 
+/**
+ * SAR-only glyph. Prefer CurrencyIcon when the display should follow profile location (SAR/AED).
+ */
+
 const RIYAL_LOGO = require('../../../assets/images/saudi-riyal-symbol.png');
 
 type Props = {

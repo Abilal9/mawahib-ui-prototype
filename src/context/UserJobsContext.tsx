@@ -5,6 +5,12 @@ import { users } from '../data/mock/users';
 import { User, Job } from '../data/types';
 import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
 
+/**
+ * In-memory jobs store for the prototype.
+ * Seeds mock user-jobs and exposes helpers to open listing-based requests,
+ * create visitor service requests (pending, no payment), and advance job status.
+ */
+
 interface RequestEditsPayload {
   date: string;
   packagePrice: string;
@@ -115,6 +121,11 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         setJobs((prev) => [created, ...prev]);
         return created.id;
       },
+      /**
+       * Client → provider Apply path: insert a `sent` / `pending` request (not pending-payment).
+       * Currency glyph left empty so UI can render location-aware CurrencyIcon instead.
+       * Returns the new user-job id for optional navigation.
+       */
       createServiceRequest: (payload) => {
         const id = `uj-req-${Date.now()}`;
         const deadline = payload.deadline?.trim() || undefined;
@@ -143,6 +154,7 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
             attachmentName: payload.attachmentName?.trim() || '',
             attachmentSize: payload.attachmentSize?.trim() || '',
             packagePrice: payload.packagePrice,
+            // Intentionally blank — screens use CurrencyIcon from location.
             currencySymbol: '',
             requestedAt: new Date().toLocaleString('en-US', {
               day: 'numeric',

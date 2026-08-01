@@ -13,6 +13,12 @@ import {
 } from '../data/mock/myProfile';
 import { User } from '../data/types';
 
+/**
+ * Signed-in user's editable profile (bio, portfolio, services, etc.).
+ * Service create/edit/delete from AddProfileServiceScreen / ServiceDetailScreen
+ * mutate `content.services` here; visitor profiles stay in mock helpers.
+ */
+
 interface ProfileContextValue {
   user: User;
   content: ProfileContent;
@@ -65,11 +71,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setContent((prev) => ({ ...prev, portfolio: [project, ...prev.portfolio] })),
       addService: (service) =>
         setContent((prev) => ({ ...prev, services: [service, ...prev.services] })),
+      /** Full replacement by id — wizard republishes the whole ProfileService object. */
       updateService: (serviceId, service) =>
         setContent((prev) => ({
           ...prev,
           services: prev.services.map((s) => (s.id === serviceId ? service : s)),
         })),
+      /** Used by ServiceDetail delete confirm; removes from the owner's list only. */
       removeService: (serviceId) =>
         setContent((prev) => ({
           ...prev,

@@ -24,6 +24,13 @@ import { stripCurrencyGlyphs } from '../../utils/currency';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
+/**
+ * Visitor multi-step flow to request a provider's service (no payment yet).
+ *
+ * Steps: service+package → add-ons → notes → attachments → schedule → location → review.
+ * Optional steps (2–6) can be skipped; Apply creates a pending sent job via
+ * `createServiceRequest`, then shows a success screen that resets navigation to Jobs.
+ */
 const TOTAL_STEPS = 7;
 
 const MOCK_FILES = [
@@ -38,6 +45,7 @@ type PackageName = ServicePackage['name'];
 type ScheduleMode = 'deadline' | 'duration';
 type Attachment = { id: string; name: string; size: string };
 
+/** Numeric amount from a stored price label; strips legacy currency glyphs first. */
 function parsePrice(label: string) {
   const digits = stripCurrencyGlyphs(label).replace(/[^\d]/g, '');
   return digits ? Number(digits) : 0;
@@ -179,6 +187,7 @@ export default function RequestServiceScreen({
     }
   };
 
+  // Clear this step's draft so a skipped optional field never leaks into the payload.
   const skipStep = () => {
     if (step === 2) setSelectedAddonIds([]);
     if (step === 3) setNotes('');
@@ -197,6 +206,7 @@ export default function RequestServiceScreen({
     goNext();
   };
 
+  /** Switching service resets package + add-ons so they stay valid for the new offering. */
   const selectService = (service: ProfileService) => {
     setSelectedServiceId(service.id);
     setSelectedPackage(service.packages[0]?.name ?? null);
@@ -219,6 +229,11 @@ export default function RequestServiceScreen({
     ]);
   };
 
+  /**
+   * Deadline mode: single selected day.
+   * Duration mode: first tap sets "from", second tap sets "to"; tapping an earlier
+   * day restarts the range so from ≤ to always holds.
+   */
   const onPickCalendarDay = (day: number) => {
     const picked = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
     if (scheduleMode === 'deadline') {
@@ -240,6 +255,10 @@ export default function RequestServiceScreen({
     setRangeTo(picked);
   };
 
+  /**
+   * Persist a pending sent request (no payment). Duration mode stores the range end
+   * as `deadline` and the full "from – to" string as `dateLabel` for UI display.
+   */
   const sendRequest = () => {
     if (!provider || !selectedService || !selectedPackage) return;
 
@@ -267,6 +286,7 @@ export default function RequestServiceScreen({
     setSent(true);
   };
 
+  /** Drop the request stack so Back from Jobs doesn't return into the wizard. */
   const goToJobs = () => {
     navigation.reset({
       index: 0,
@@ -274,6 +294,7 @@ export default function RequestServiceScreen({
     });
   };
 
+  // Success state replaces the wizard; Done / back both reset into JobsTab.
   if (sent) {
     const name = provider?.name ?? 'The provider';
     return (
