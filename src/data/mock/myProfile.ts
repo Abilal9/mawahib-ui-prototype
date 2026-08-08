@@ -379,12 +379,13 @@ export const filledOwnProfile: ProfileContent = {
       ],
     },
   ],
-  postIds: ['p-figma', 'p1'],
+  postIds: ['p-own-1', 'p-own-2', 'p-own-3'],
 };
 
 export const ownProfileUser: User = {
   ...currentUser,
-  name: 'Olivia Rhye',
+  name: 'Ahmad Bilal',
+  username: 'ahmad.bilal',
   title: 'Event Photographer',
   location: 'Riyadh, Saudi Arabia',
   rating: 4,
@@ -413,6 +414,16 @@ export const ABOUT_SECTION_LABELS: Record<AboutSectionKey, string> = {
   education: 'Education',
   experience: 'Experience',
   certifications: 'Certifications',
+};
+
+/** Empty-state CTA copy for own profile About sections */
+export const ABOUT_SECTION_ADD_LABELS: Record<AboutSectionKey, string> = {
+  bio: 'Add a bio',
+  languages: 'Add languages',
+  talents: 'Add talents',
+  education: 'Add education',
+  experience: 'Add experience',
+  certifications: 'Add certifications',
 };
 
 export function isAboutSectionFilled(content: ProfileContent, key: AboutSectionKey) {

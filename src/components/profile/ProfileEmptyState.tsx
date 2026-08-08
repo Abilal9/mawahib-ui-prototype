@@ -29,8 +29,12 @@ export default function ProfileEmptyState({
       {showHeaderAdd && headerTitle ? (
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{headerTitle}</Text>
-          <TouchableOpacity onPress={onHeaderAdd ?? onPress} hitSlop={8}>
-            <Ionicons name="add" size={22} color={colors.primary} />
+          <TouchableOpacity
+            style={styles.actionIconBtn}
+            onPress={onHeaderAdd ?? onPress}
+            hitSlop={8}
+          >
+            <Ionicons name="add-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -61,6 +65,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.h3,
     color: colors.text,
+  },
+  actionIconBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   body: {
     alignItems: 'center',

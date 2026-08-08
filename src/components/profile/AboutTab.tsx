@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
   ABOUT_SECTION_KEYS,
+  ABOUT_SECTION_ADD_LABELS,
   ABOUT_SECTION_LABELS,
   AboutSectionKey,
   ProfileContent,
   TALENT_CHIP_STYLES,
   isAboutSectionFilled,
 } from '../../data/mock/myProfile';
+
+/** Display-only preview length (~2–3 lines on typical phone widths). */
+const BIO_PREVIEW_CHARS = 150;
 
 interface AboutTabProps {
   content: ProfileContent;
@@ -18,23 +22,56 @@ interface AboutTabProps {
   onEdit: (key: AboutSectionKey) => void;
 }
 
+function ExpandableBio({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const needsTruncation = text.length > BIO_PREVIEW_CHARS;
+
+  if (!needsTruncation) {
+    return <Text style={styles.bioText}>{text}</Text>;
+  }
+
+  if (expanded) {
+    return (
+      <Text style={styles.bioText}>
+        {text}{' '}
+        <Text
+          style={styles.seeMore}
+          onPress={() => setExpanded(false)}
+          accessibilityRole="button"
+          accessibilityLabel="See less"
+        >
+          see less
+        </Text>
+      </Text>
+    );
+  }
+
+  return (
+    <Text style={styles.bioText}>
+      {`${text.slice(0, BIO_PREVIEW_CHARS).trimEnd()}... `}
+      <Text
+        style={styles.seeMore}
+        onPress={() => setExpanded(true)}
+        accessibilityRole="button"
+        accessibilityLabel="See more"
+      >
+        see more
+      </Text>
+    </Text>
+  );
+}
+
 export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProps) {
   const anyFilled = ABOUT_SECTION_KEYS.some((key) => isAboutSectionFilled(content, key));
 
-  if (!anyFilled) {
+  // Visitor with nothing filled: labels only (no add CTAs)
+  if (!anyFilled && !isOwn) {
     return (
       <View style={styles.list}>
         {ABOUT_SECTION_KEYS.map((key) => (
-          <TouchableOpacity
-            key={key}
-            style={styles.emptyRow}
-            onPress={() => (isOwn ? onAdd(key) : undefined)}
-            activeOpacity={isOwn ? 0.8 : 1}
-            disabled={!isOwn}
-          >
+          <View key={key} style={styles.emptyRow}>
             <Text style={styles.emptyLabel}>{ABOUT_SECTION_LABELS[key]}</Text>
-            {isOwn ? <Ionicons name="add" size={22} color={colors.primary} /> : null}
-          </TouchableOpacity>
+          </View>
         ))}
       </View>
     );
@@ -45,7 +82,7 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
       {content.bio ? (
         <View style={styles.section}>
           <SectionHeader title="Bio" isOwn={isOwn} onEdit={() => onEdit('bio')} />
-          <Text style={styles.bioText}>{content.bio}</Text>
+          <ExpandableBio text={content.bio} />
         </View>
       ) : null}
 
@@ -191,6 +228,7 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
         </View>
       ) : null}
 
+      {/* Own profile: always show add rows for empty sections (even when all empty) */}
       {isOwn &&
         ABOUT_SECTION_KEYS.filter((key) => !isAboutSectionFilled(content, key)).map((key) => (
           <TouchableOpacity
@@ -199,8 +237,10 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
             onPress={() => onAdd(key)}
             activeOpacity={0.8}
           >
-            <Text style={styles.emptyLabel}>{ABOUT_SECTION_LABELS[key]}</Text>
-            <Ionicons name="add" size={22} color={colors.primary} />
+            <Text style={styles.emptyLabel}>{ABOUT_SECTION_ADD_LABELS[key]}</Text>
+            <View style={styles.actionIconBtn}>
+              <Ionicons name="add-outline" size={20} color={colors.primary} />
+            </View>
           </TouchableOpacity>
         ))}
     </View>
@@ -224,13 +264,13 @@ function SectionHeader({
       {isOwn ? (
         <View style={styles.actions}>
           {onEdit ? (
-            <TouchableOpacity onPress={onEdit} hitSlop={8} style={styles.iconBtn}>
-              <Ionicons name="pencil-outline" size={16} color={colors.textTertiary} />
+            <TouchableOpacity style={styles.actionIconBtn} onPress={onEdit} hitSlop={8}>
+              <Ionicons name="pencil-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
           ) : null}
           {onAdd ? (
-            <TouchableOpacity onPress={onAdd} hitSlop={8}>
-              <Ionicons name="add" size={22} color={colors.primary} />
+            <TouchableOpacity style={styles.actionIconBtn} onPress={onAdd} hitSlop={8}>
+              <Ionicons name="add-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -280,14 +320,11 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  iconBtn: {
+  actionIconBtn: {
     width: 28,
     height: 28,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -295,6 +332,10 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textTertiary,
     lineHeight: 20,
+  },
+  seeMore: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   langRow: {
     flexDirection: 'row',

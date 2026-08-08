@@ -23,14 +23,17 @@ export type RootStackParamList = {
   AccountType: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  SignupSuccess: undefined;
   Profile: undefined;
   UserProfile: { userId: string };
   EditProfile: undefined;
   EditAboutSection: {
     section: 'bio' | 'languages' | 'talents' | 'education' | 'experience' | 'certifications';
   };
-  AddPortfolioProject: undefined;
+  AddPortfolioProject: { projectId?: string } | undefined;
   AddProfileService: { serviceId?: string } | undefined;
+  ManageProfileList: { type: 'portfolio' | 'services' };
+  PortfolioProjectDetail: { projectId: string; userId?: string };
   JobListingDetail: { jobId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
@@ -43,6 +46,7 @@ export type RootStackParamList = {
   ExploreEmpty: undefined;
   Notifications: undefined;
   PostDetail: { postId: string };
+  UserPosts: { userId?: string } | undefined;
   CreateMenu: undefined;
   PostCreate: undefined;
   PhotoCapture: undefined;

@@ -4,16 +4,21 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
+import { useMyProfile } from '../../context/ProfileContext';
+import { ProfileSetupStepProps } from './stepProps';
 
-interface StepProps {
-  onNext: () => void;
-  onBack?: () => void;
-  step: number;
-  totalSteps: number;
-}
+const SETUP_PORTFOLIO_ID = 'setup-portfolio';
 
-export default function ProfileSetupStep3({ onNext, onBack, step, totalSteps }: StepProps) {
-  const [photos, setPhotos] = useState<string[]>([]);
+export default function ProfileSetupStep3({
+  onNext,
+  onBack,
+  onSave,
+  step,
+  totalSteps,
+}: ProfileSetupStepProps) {
+  const { content, setPortfolio } = useMyProfile();
+  const existing = content.portfolio.find((p) => p.id === SETUP_PORTFOLIO_ID);
+  const [photos, setPhotos] = useState<string[]>(existing?.images ?? []);
 
   const addPlaceholder = () => {
     const placeholders = [
@@ -26,10 +31,39 @@ export default function ProfileSetupStep3({ onNext, onBack, step, totalSteps }: 
     }
   };
 
+  const persist = () => {
+    const others = content.portfolio.filter((p) => p.id !== SETUP_PORTFOLIO_ID);
+    if (photos.length === 0) {
+      setPortfolio(others);
+      return;
+    }
+    setPortfolio([
+      {
+        id: SETUP_PORTFOLIO_ID,
+        title: 'My work',
+        description: 'Added during profile setup',
+        images: photos,
+      },
+      ...others,
+    ]);
+  };
+
+  const handleContinue = () => {
+    persist();
+    onNext();
+  };
+
+  const handleSave = () => {
+    persist();
+    onSave();
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Text style={styles.stepLabel}>Step {step} of {totalSteps}</Text>
+        <Text style={styles.stepLabel}>
+          Step {step} of {totalSteps}
+        </Text>
         <Text style={styles.title}>Portfolio Photos</Text>
         <Text style={styles.subtitle}>Upload your best work to showcase your talent</Text>
 
@@ -55,8 +89,12 @@ export default function ProfileSetupStep3({ onNext, onBack, step, totalSteps }: 
       </ScrollView>
 
       <View style={styles.footer}>
-        {onBack && <Button title="Back" variant="outline" onPress={onBack} style={styles.backButton} />}
-        <Button title="Continue" onPress={onNext} fullWidth />
+        {onBack ? (
+          <Button title="Back" variant="outline" onPress={onBack} style={styles.secondary} />
+        ) : null}
+        <Button title="Continue" onPress={handleContinue} fullWidth />
+        <Button title="Save & exit" variant="ghost" onPress={handleSave} fullWidth style={styles.secondary} />
+        <Button title="Skip" variant="ghost" onPress={onNext} fullWidth />
       </View>
     </View>
   );
@@ -85,5 +123,5 @@ const styles = StyleSheet.create({
   },
   addText: { ...typography.caption, color: colors.primary, marginTop: spacing.xs },
   footer: { paddingBottom: spacing.lg },
-  backButton: { marginBottom: spacing.md },
+  secondary: { marginBottom: spacing.sm },
 });

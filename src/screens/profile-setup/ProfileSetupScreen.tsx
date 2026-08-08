@@ -4,37 +4,39 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import ProfileSetupStep1 from './ProfileSetupStep1';
 import ProfileSetupStep2 from './ProfileSetupStep2';
-import ProfileSetupStep3 from './ProfileSetupStep3';
-import ProfileSetupStep4 from './ProfileSetupStep4';
-import ProfileSetupStep5 from './ProfileSetupStep5';
 import { colors, spacing } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
-const STEPS = [ProfileSetupStep1, ProfileSetupStep2, ProfileSetupStep3, ProfileSetupStep4, ProfileSetupStep5];
+const STEPS = [ProfileSetupStep1, ProfileSetupStep2];
 const TOTAL_STEPS = STEPS.length;
 
 export default function ProfileSetupScreen({ route, navigation }: ScreenProps<'ProfileSetup'>) {
   const step = Math.min(Math.max(route.params?.step ?? 1, 1), TOTAL_STEPS);
   const StepComponent = STEPS[step - 1];
 
+  const exitToProfile = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({
+      index: 1,
+      routes: [{ name: 'MainTabs' }, { name: 'Profile' }],
+    });
+  };
+
   const goNext = () => {
     if (step < TOTAL_STEPS) {
       navigation.navigate('ProfileSetup', { step: step + 1 });
-    } else {
-      navigation.navigate('MainTabs');
+      return;
     }
+    exitToProfile();
   };
 
   const goBack = () => {
     if (step > 1) {
       navigation.navigate('ProfileSetup', { step: step - 1 });
-      return;
     }
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-      return;
-    }
-    navigation.navigate('AccountType');
   };
 
   return (
@@ -43,7 +45,13 @@ export default function ProfileSetupScreen({ route, navigation }: ScreenProps<'P
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${(step / TOTAL_STEPS) * 100}%` }]} />
       </View>
-      <StepComponent onNext={goNext} onBack={goBack} step={step} totalSteps={TOTAL_STEPS} />
+      <StepComponent
+        onNext={goNext}
+        onBack={step > 1 ? goBack : undefined}
+        onSave={exitToProfile}
+        step={step}
+        totalSteps={TOTAL_STEPS}
+      />
     </ScreenContainer>
   );
 }

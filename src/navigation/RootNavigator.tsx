@@ -10,6 +10,7 @@ import {
   SignInScreen,
   SignUpScreen,
   ConfirmCodeScreen,
+  SignupSuccessScreen,
   ProfileSetupScreen,
   ExploreEmptyScreen,
   NotificationsScreen,
@@ -27,6 +28,9 @@ import {
   EditAboutSectionScreen,
   AddPortfolioProjectScreen,
   AddProfileServiceScreen,
+  ManageProfileListScreen,
+  PortfolioProjectDetailScreen,
+  UserPostsScreen,
   PortfolioScreen,
   ServicesScreen,
   ServiceDetailScreen,
@@ -70,6 +74,7 @@ export default function RootNavigator() {
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="ConfirmCode" component={ConfirmCodeScreen} />
+      <Stack.Screen name="SignupSuccess" component={SignupSuccessScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
@@ -78,6 +83,9 @@ export default function RootNavigator() {
       <Stack.Screen name="EditAboutSection" component={EditAboutSectionScreen} />
       <Stack.Screen name="AddPortfolioProject" component={AddPortfolioProjectScreen} />
       <Stack.Screen name="AddProfileService" component={AddProfileServiceScreen} />
+      <Stack.Screen name="ManageProfileList" component={ManageProfileListScreen} />
+      <Stack.Screen name="PortfolioProjectDetail" component={PortfolioProjectDetailScreen} />
+      <Stack.Screen name="UserPosts" component={UserPostsScreen} />
       <Stack.Screen name="ExploreEmpty" component={ExploreEmptyScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />

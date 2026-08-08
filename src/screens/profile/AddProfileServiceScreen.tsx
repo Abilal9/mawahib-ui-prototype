@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import ReorderableMediaGrid from '../../components/ui/ReorderableMediaGrid';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ServicePackage } from '../../data/mock/myProfile';
@@ -100,6 +101,7 @@ export default function AddProfileServiceScreen({
   const isEditing = Boolean(existing);
 
   const [step, setStep] = useState(1);
+  const [mediaDragging, setMediaDragging] = useState(false);
 
   // Step 1
   const [name, setName] = useState(existing?.title ?? '');
@@ -202,8 +204,9 @@ export default function AddProfileServiceScreen({
    * Map wizard drafts → ProfileService and persist.
    * Basic is always included; Standard/Premium only if the user filled any field.
    * Empty delivery/features get prototype-friendly placeholders so cards still render.
+   * Mid-flow Save uses the same builder so incomplete packages are allowed.
    */
-  const publish = () => {
+  const persistService = () => {
     const builtPackages: ServicePackage[] = PACKAGE_TABS.filter((key) => {
       if (key === 'Basic') return true;
       const p = packages[key];
@@ -243,8 +246,21 @@ export default function AddProfileServiceScreen({
     } else {
       addService(payload);
     }
+  };
+
+  const publish = () => {
+    persistService();
     navigation.goBack();
   };
+
+  /** Save progress from any step without finishing the wizard (name required). */
+  const saveProgress = () => {
+    if (!name.trim()) return;
+    persistService();
+    navigation.goBack();
+  };
+
+  const canSave = name.trim().length > 0;
 
   const footerPrimaryDisabled =
     (step === 1 && !canNextStep1) || (step === 2 && !canNextStep2);
@@ -302,6 +318,7 @@ export default function AddProfileServiceScreen({
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!mediaDragging}
         >
           {step === 1 ? (
             <>
@@ -335,30 +352,17 @@ export default function AddProfileServiceScreen({
                   {media.length}/{MAX_MEDIA}
                 </Text>
               </View>
-              <View style={styles.mediaGrid}>
-                {media.map((uri, i) => (
-                  <View key={`${uri}-${i}`} style={styles.mediaSlot}>
-                    <Image source={{ uri }} style={styles.mediaImage} contentFit="cover" />
-                    {i === 4 ? (
-                      <View style={styles.playOverlay}>
-                        <Ionicons name="play" size={18} color={colors.white} />
-                      </View>
-                    ) : null}
-                    <TouchableOpacity
-                      style={styles.mediaRemove}
-                      onPress={() => setMedia((prev) => prev.filter((_, idx) => idx !== i))}
-                      hitSlop={6}
-                    >
-                      <Ionicons name="close" size={12} color={colors.white} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                {media.length < MAX_MEDIA ? (
-                  <TouchableOpacity style={styles.mediaAdd} onPress={addMedia} activeOpacity={0.85}>
-                    <Ionicons name="add" size={28} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+              <Text style={styles.mediaHint}>
+                First image is the cover. Hold the grip to drag and reorder.
+              </Text>
+              <ReorderableMediaGrid
+                uris={media}
+                onChange={setMedia}
+                maxItems={MAX_MEDIA}
+                onAdd={addMedia}
+                videoIndex={media.length > 4 ? 4 : undefined}
+                onDraggingChange={setMediaDragging}
+              />
             </>
           ) : null}
 
@@ -594,12 +598,21 @@ export default function AddProfileServiceScreen({
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
           {step === 1 ? (
-            <Button
-              title="Next"
-              fullWidth
-              disabled={footerPrimaryDisabled}
-              onPress={goNext}
-            />
+            <View style={styles.footerStack}>
+              <Button
+                title="Next"
+                fullWidth
+                disabled={footerPrimaryDisabled}
+                onPress={goNext}
+              />
+              <Button
+                title="Save"
+                variant="outline"
+                fullWidth
+                disabled={!canSave}
+                onPress={saveProgress}
+              />
+            </View>
           ) : step === 4 ? (
             <Button
               title={isEditing ? 'Update Service' : 'Publish Service'}
@@ -607,20 +620,29 @@ export default function AddProfileServiceScreen({
               onPress={publish}
             />
           ) : (
-            <View style={styles.footerRow}>
+            <View style={styles.footerStack}>
+              <View style={styles.footerRow}>
+                <Button
+                  title="Skip"
+                  variant="outline"
+                  style={styles.skipBtn}
+                  textStyle={{ color: colors.textSecondary }}
+                  disabled={footerPrimaryDisabled}
+                  onPress={goNext}
+                />
+                <Button
+                  title="Next"
+                  style={styles.footerHalf}
+                  disabled={footerPrimaryDisabled}
+                  onPress={goNext}
+                />
+              </View>
               <Button
-                title="Skip"
-                variant="outline"
-                style={styles.skipBtn}
-                textStyle={{ color: colors.textSecondary }}
-                disabled={footerPrimaryDisabled}
-                onPress={goNext}
-              />
-              <Button
-                title="Next"
-                style={styles.footerHalf}
-                disabled={footerPrimaryDisabled}
-                onPress={goNext}
+                title="Save"
+                variant="ghost"
+                fullWidth
+                disabled={!canSave}
+                onPress={saveProgress}
               />
             </View>
           )}
@@ -715,46 +737,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   mediaCount: { ...typography.caption, color: colors.textSecondary },
-  mediaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  mediaSlot: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: radius.button,
-    overflow: 'hidden',
-    backgroundColor: colors.borderLight,
-  },
-  mediaImage: { width: '100%', height: '100%' },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mediaRemove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mediaAdd: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: radius.button,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
+  mediaHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   packageTabs: {
     flexDirection: 'row',
@@ -918,6 +904,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
   },
+  footerStack: { gap: spacing.sm },
   footerRow: { flexDirection: 'row', gap: spacing.sm },
   footerHalf: { flex: 1 },
   skipBtn: {

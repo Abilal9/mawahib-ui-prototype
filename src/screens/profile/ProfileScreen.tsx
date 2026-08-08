@@ -20,14 +20,18 @@ import ProfileHeaderChrome, {
   PROFILE_FIXED_BAR_BODY,
 } from '../../components/profile/ProfileHeaderChrome';
 import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
+import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import AboutTab from '../../components/profile/AboutTab';
-import { toImageSource } from '../../utils/image';
 import { shareProfile } from '../../utils/shareProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { posts } from '../../data/mock/posts';
-import { ProfileTab, AboutSectionKey } from '../../data/mock/myProfile';
-import { Post } from '../../data/types';
+import {
+  ProfileTab,
+  AboutSectionKey,
+  ABOUT_SECTION_KEYS,
+  isAboutSectionFilled,
+} from '../../data/mock/myProfile';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -41,6 +45,15 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, useEmptyProfile } = useMyProfile();
   const userPosts = posts.filter((p) => content.postIds.includes(p.id));
+
+  const aboutIncomplete = ABOUT_SECTION_KEYS.some(
+    (key) => !isAboutSectionFilled(content, key)
+  );
+  const profileNeedsWork =
+    aboutIncomplete ||
+    content.portfolio.length === 0 ||
+    content.services.length === 0 ||
+    userPosts.length === 0;
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
@@ -96,6 +109,24 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
             <>
+              {profileNeedsWork ? (
+                <TouchableOpacity
+                  style={styles.completeBanner}
+                  onPress={() => navigation.navigate('ProfileSetup', { step: 1 })}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.completeBannerIcon}>
+                    <Ionicons name="person-circle-outline" size={22} color={colors.primary} />
+                  </View>
+                  <View style={styles.completeBannerText}>
+                    <Text style={styles.completeBannerTitle}>Complete your profile</Text>
+                    <Text style={styles.completeBannerSub}>
+                      Add services, portfolio, and more so clients can find you.
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ) : null}
               <AboutTab content={content} isOwn onAdd={openAbout} onEdit={openAbout} />
               {content.bio ? (
                 <TouchableOpacity style={styles.demoEmpty} onPress={useEmptyProfile}>
@@ -109,9 +140,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             (content.portfolio.length === 0 ? (
               <ProfileEmptyState
                 icon="briefcase-outline"
-                title="Your Portfolio is Empty"
-                description="Publishing projects makes you 5x more discoverable by recruiters."
-                cta="Add Project"
+                title="Complete your portfolio"
+                description="Add your first project so clients can see what you create."
+                cta="Add project"
                 onPress={() => navigation.navigate('AddPortfolioProject')}
                 showHeaderAdd
                 headerTitle="Portfolio"
@@ -122,36 +153,78 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                   <Text style={styles.sectionTitle}>Portfolio</Text>
                   <View style={styles.headerActions}>
                     <TouchableOpacity
+                      style={styles.actionIconBtn}
+                      onPress={() =>
+                        navigation.navigate('ManageProfileList', { type: 'portfolio' })
+                      }
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="pencil-outline"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionIconBtn}
                       onPress={() => navigation.navigate('AddPortfolioProject')}
                     >
-                      <Ionicons name="add" size={22} color={colors.primary} />
+                      <Ionicons name="add-outline" size={20} color={colors.primary} />
                     </TouchableOpacity>
-                    <Ionicons name="download-outline" size={20} color={colors.textSecondary} />
-                    <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
+                    <TouchableOpacity
+                      style={styles.actionIconBtn}
+                      onPress={() =>
+                        shareProfile({ userId: user.id, userName: user.name })
+                      }
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="share-outline"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
                   </View>
                 </View>
                 {content.portfolio.map((project) => (
-                  <View key={project.id} style={styles.projectCard}>
+                  <TouchableOpacity
+                    key={project.id}
+                    style={styles.projectCard}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      navigation.navigate('PortfolioProjectDetail', {
+                        projectId: project.id,
+                      })
+                    }
+                  >
                     <Text style={styles.projectTitle}>{project.title}</Text>
-                    <Text style={styles.projectDesc}>{project.description}</Text>
+                    <Text style={styles.projectDesc} numberOfLines={2}>
+                      {project.description}
+                    </Text>
                     <View style={styles.mediaGrid}>
-                      {project.images.map((uri, index) => (
-                        <View key={`${project.id}-${index}`} style={styles.mediaItem}>
-                          <Image
-                            source={{ uri }}
-                            style={styles.mediaImage}
-                            contentFit="cover"
-                          />
-                          {project.hasVideo &&
-                          index === (project.videoIndex ?? project.images.length - 1) ? (
-                            <View style={styles.playOverlay}>
-                              <Ionicons name="play" size={18} color={colors.white} />
-                            </View>
-                          ) : null}
-                        </View>
-                      ))}
+                      {project.images.slice(0, 3).map((uri, imgIndex) => {
+                        const videoIdx =
+                          project.videoIndex ?? project.images.length - 1;
+                        return (
+                          <View
+                            key={`${project.id}-${imgIndex}`}
+                            style={styles.mediaItem}
+                          >
+                            <Image
+                              source={{ uri }}
+                              style={styles.mediaImage}
+                              contentFit="cover"
+                            />
+                            {project.hasVideo && imgIndex === videoIdx ? (
+                              <View style={styles.playOverlay}>
+                                <Ionicons name="play" size={18} color={colors.white} />
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             ))}
@@ -160,9 +233,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             (content.services.length === 0 ? (
               <ProfileEmptyState
                 icon="document-text-outline"
-                title="Your Services Are Empty"
-                description="Add services to start receiving requests."
-                cta="Add Service"
+                title="Add a service"
+                description="List what you offer so clients can send you requests."
+                cta="Add service"
                 onPress={() => navigation.navigate('AddProfileService')}
                 showHeaderAdd
                 headerTitle="Services"
@@ -171,9 +244,27 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
               <View style={styles.tabPad}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Services</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('AddProfileService')}>
-                    <Ionicons name="add" size={22} color={colors.primary} />
-                  </TouchableOpacity>
+                  <View style={styles.headerActions}>
+                    <TouchableOpacity
+                      style={styles.actionIconBtn}
+                      onPress={() =>
+                        navigation.navigate('ManageProfileList', { type: 'services' })
+                      }
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="pencil-outline"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionIconBtn}
+                      onPress={() => navigation.navigate('AddProfileService')}
+                    >
+                      <Ionicons name="add-outline" size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 {content.services.map((service) => (
                   <TouchableOpacity
@@ -181,7 +272,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                     style={styles.serviceCard}
                     activeOpacity={0.9}
                     onPress={() =>
-                      navigation.navigate('ServiceDetail', { serviceId: service.id })
+                      navigation.navigate('ServiceDetail', {
+                        serviceId: service.id,
+                      })
                     }
                   >
                     <View style={styles.serviceImageWrap}>
@@ -206,14 +299,18 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                         <Text style={styles.serviceTitle}>{service.title}</Text>
                         <TouchableOpacity
                           style={styles.ratingInline}
-                          onPress={() => navigation.navigate('Reviews', { userId: user.id })}
+                          onPress={() =>
+                            navigation.navigate('Reviews', { userId: user.id })
+                          }
                           activeOpacity={0.8}
                         >
                           <Ionicons name="star" size={14} color="#F5A623" />
                           <Text style={styles.ratingInlineText}>
                             {service.rating.toFixed(1)}
                           </Text>
-                          <Text style={styles.reviewCount}>({service.reviewCount})</Text>
+                          <Text style={styles.reviewCount}>
+                            ({service.reviewCount})
+                          </Text>
                         </TouchableOpacity>
                       </View>
                       <Text style={styles.serviceDesc} numberOfLines={2}>
@@ -244,9 +341,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             (userPosts.length === 0 ? (
               <ProfileEmptyState
                 icon="grid-outline"
-                title="No Posts Yet"
-                description="Share updates to stay active."
-                cta="Add Post"
+                title="Share your first post"
+                description="Post updates to stay active and grow your audience."
+                cta="Create post"
                 onPress={() => navigation.navigate('PostCreate')}
                 showHeaderAdd
                 headerTitle="Posts"
@@ -255,12 +352,15 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
               <View style={styles.tabPad}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Posts</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('PostCreate')}>
-                    <Ionicons name="add" size={22} color={colors.primary} />
+                  <TouchableOpacity
+                    style={styles.actionIconBtn}
+                    onPress={() => navigation.navigate('PostCreate')}
+                  >
+                    <Ionicons name="add-outline" size={20} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
-                {userPosts.map((post) => (
-                  <FeedPost
+                {userPosts.slice(0, 2).map((post) => (
+                  <ProfileFeedPost
                     key={post.id}
                     post={post}
                     onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
@@ -269,68 +369,21 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                     }
                   />
                 ))}
+                {userPosts.length > 2 ? (
+                  <TouchableOpacity
+                    style={styles.viewMoreBtn}
+                    onPress={() => navigation.navigate('UserPosts')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.viewMoreText}>View more</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ))}
         </View>
       </Animated.ScrollView>
     </ScreenContainer>
-  );
-}
-
-function FeedPost({
-  post,
-  onPress,
-  onAuthorPress,
-}: {
-  post: Post;
-  onPress: () => void;
-  onAuthorPress: () => void;
-}) {
-  const truncated =
-    post.caption.length > 110 ? `${post.caption.slice(0, 110)}...` : post.caption;
-
-  return (
-    <TouchableOpacity style={styles.feedCard} onPress={onPress} activeOpacity={0.95}>
-      <TouchableOpacity
-        style={styles.feedHeader}
-        onPress={onAuthorPress}
-        activeOpacity={0.85}
-      >
-        <Image
-          source={toImageSource(post.author.avatar)}
-          style={styles.feedAvatar}
-          contentFit="cover"
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.feedName}>{post.author.name}</Text>
-          <Text style={styles.feedMeta}>
-            {post.role ?? post.author.title ?? 'Creator'} · {post.timeAgo ?? '2h'}
-          </Text>
-        </View>
-      </TouchableOpacity>
-      <Text style={styles.feedCaption}>
-        {truncated}
-        {post.caption.length > 110 ? (
-          <Text style={styles.seeMore}> See more</Text>
-        ) : null}
-      </Text>
-      {post.images[0] ? (
-        <Image source={{ uri: post.images[0] }} style={styles.feedImage} contentFit="cover" />
-      ) : null}
-      <View style={styles.feedActions}>
-        <View style={styles.feedAction}>
-          <Ionicons name="thumbs-up-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.feedCount}>{post.likes}</Text>
-        </View>
-        <View style={styles.feedAction}>
-          <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.feedCount}>{post.comments}</Text>
-        </View>
-        <Ionicons name="arrow-redo-outline" size={18} color={colors.textSecondary} />
-        <View style={{ flex: 1 }} />
-        <Ionicons name="bookmark-outline" size={18} color={colors.textSecondary} />
-      </View>
-    </TouchableOpacity>
   );
 }
 
@@ -343,6 +396,40 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxxl,
     backgroundColor: 'transparent',
+  },
+  completeBanner: {
+    marginHorizontal: spacing.screen,
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    backgroundColor: colors.primary + '0F',
+    borderWidth: 1,
+    borderColor: colors.primary + '33',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  completeBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeBannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  completeBannerTitle: {
+    ...typography.label,
+    color: colors.text,
+  },
+  completeBannerSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   demoEmpty: {
     marginHorizontal: spacing.screen,
@@ -369,7 +456,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: { ...typography.h3, color: colors.text },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  actionIconBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   projectCard: { gap: spacing.sm },
   projectTitle: { ...typography.bodyMedium, color: colors.text, fontWeight: '600' },
   projectDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
@@ -438,30 +531,20 @@ const styles = StyleSheet.create({
   priceLabel: { ...typography.caption, color: colors.textSecondary },
   priceValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   priceValue: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  feedCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  feedHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  feedAvatar: { width: 40, height: 40, borderRadius: 20 },
-  feedName: { ...typography.label, color: colors.text },
-  feedMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  feedCaption: { ...typography.bodySmall, color: colors.text, lineHeight: 20 },
-  seeMore: { color: colors.primary },
-  feedImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: radius.card,
-  },
-  feedActions: {
+  viewMoreBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.primary + '55',
+    backgroundColor: colors.primary + '0A',
   },
-  feedAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  feedCount: { ...typography.caption, color: colors.textSecondary },
+  viewMoreText: {
+    ...typography.button,
+    color: colors.primary,
+    fontSize: 15,
+  },
 });

@@ -121,7 +121,7 @@ export default function EditAboutSectionScreen({
   };
 
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.white}>
       <StatusBar style="dark" />
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
@@ -145,6 +145,8 @@ export default function EditAboutSectionScreen({
               onChangeText={setBio}
               multiline
               placeholder="Tell people about yourself"
+              maxLength={BIO_MAX_LENGTH}
+              showCount
             />
           )}
 
@@ -206,22 +208,35 @@ export default function EditAboutSectionScreen({
   );
 }
 
+const BIO_MAX_LENGTH = 500;
+
 function Field({
   label,
   value,
   onChangeText,
   multiline,
   placeholder,
+  maxLength,
+  showCount,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   multiline?: boolean;
   placeholder?: string;
+  maxLength?: number;
+  showCount?: boolean;
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>{label}</Text>
+        {showCount && maxLength != null ? (
+          <Text style={styles.charCount}>
+            {value.length}/{maxLength}
+          </Text>
+        ) : null}
+      </View>
       <TextInput
         style={[styles.input, multiline && styles.inputMultiline]}
         value={value}
@@ -230,6 +245,7 @@ function Field({
         placeholderTextColor={colors.textSecondary}
         multiline={multiline}
         textAlignVertical={multiline ? 'top' : 'center'}
+        maxLength={maxLength}
       />
     </View>
   );
@@ -254,7 +270,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   field: { gap: spacing.sm },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   label: { ...typography.label, color: colors.text },
+  charCount: { ...typography.caption, color: colors.textSecondary },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

@@ -25,7 +25,10 @@ interface ProfileContextValue {
   /** demo helper: start empty or switch to filled seed */
   useEmptyProfile: () => void;
   useFilledProfile: () => void;
+  /** After basic signup — empty content with name/city, ready for MainTabs */
+  applySignupProfile: (basics: { name: string; location: string }) => void;
   updateProfileBasics: (patch: {
+    name?: string;
     title?: string;
     location?: string;
     avatar?: string | number;
@@ -37,9 +40,15 @@ interface ProfileContextValue {
   setExperience: (experience: ProfileExperience[]) => void;
   setCertifications: (certifications: ProfileCertification[]) => void;
   addPortfolioProject: (project: PortfolioProject) => void;
+  setPortfolio: (portfolio: PortfolioProject[]) => void;
+  updatePortfolioProject: (projectId: string, project: PortfolioProject) => void;
+  removePortfolioProject: (projectId: string) => void;
   addService: (service: ProfileService) => void;
+  setServices: (services: ProfileService[]) => void;
   updateService: (serviceId: string, service: ProfileService) => void;
   removeService: (serviceId: string) => void;
+  /** Remove a post from the owner's profile list (by id). */
+  removePostId: (postId: string) => void;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
@@ -54,7 +63,25 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       user,
       content,
       useEmptyProfile: () => setContent(emptyProfileContent),
-      useFilledProfile: () => setContent(filledOwnProfile),
+      useFilledProfile: () => {
+        setContent(filledOwnProfile);
+        setUser(ownProfileUser);
+      },
+      applySignupProfile: ({ name, location }) => {
+        setContent(emptyProfileContent);
+        setUser({
+          ...ownProfileUser,
+          name,
+          location,
+          title: '',
+          bio: '',
+          rating: 0,
+          reviewCount: 0,
+          followers: 0,
+          following: 0,
+          posts: 0,
+        });
+      },
       updateProfileBasics: (patch) =>
         setUser((prev) => ({
           ...prev,
@@ -69,8 +96,20 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setContent((prev) => ({ ...prev, certifications })),
       addPortfolioProject: (project) =>
         setContent((prev) => ({ ...prev, portfolio: [project, ...prev.portfolio] })),
+      setPortfolio: (portfolio) => setContent((prev) => ({ ...prev, portfolio })),
+      updatePortfolioProject: (projectId, project) =>
+        setContent((prev) => ({
+          ...prev,
+          portfolio: prev.portfolio.map((p) => (p.id === projectId ? project : p)),
+        })),
+      removePortfolioProject: (projectId) =>
+        setContent((prev) => ({
+          ...prev,
+          portfolio: prev.portfolio.filter((p) => p.id !== projectId),
+        })),
       addService: (service) =>
         setContent((prev) => ({ ...prev, services: [service, ...prev.services] })),
+      setServices: (services) => setContent((prev) => ({ ...prev, services })),
       /** Full replacement by id — wizard republishes the whole ProfileService object. */
       updateService: (serviceId, service) =>
         setContent((prev) => ({
@@ -82,6 +121,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setContent((prev) => ({
           ...prev,
           services: prev.services.filter((s) => s.id !== serviceId),
+        })),
+      removePostId: (postId) =>
+        setContent((prev) => ({
+          ...prev,
+          postIds: prev.postIds.filter((id) => id !== postId),
         })),
     }),
     [content, user]

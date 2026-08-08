@@ -32,13 +32,13 @@ export default function TurnOnNotificationsScreen({
       <View style={styles.footer}>
         <Button
           title="Enable Notifications"
-          onPress={() => navigation.navigate('ProfileSetup', { step: 1 })}
+          onPress={() => navigation.navigate('SignupSuccess')}
           fullWidth
         />
         <Button
           title="Maybe Later"
           variant="ghost"
-          onPress={() => navigation.navigate('ProfileSetup', { step: 1 })}
+          onPress={() => navigation.navigate('SignupSuccess')}
           style={styles.laterButton}
         />
       </View>

@@ -23,6 +23,7 @@ import ProfileHeaderChrome, {
   PROFILE_FIXED_BAR_BODY,
 } from '../../components/profile/ProfileHeaderChrome';
 import AboutTab from '../../components/profile/AboutTab';
+import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getUserById } from '../../data/mock/users';
@@ -38,7 +39,6 @@ import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
-const POST_SIZE = MEDIA;
 const TABS_FALLBACK = 56;
 
 export default function UserProfileScreen({ route, navigation }: ScreenProps<'UserProfile'>) {
@@ -227,21 +227,58 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
 
           {activeTab === 'Portfolio' && (
             <View style={styles.tabPad}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Portfolio</Text>
+                <TouchableOpacity
+                  style={styles.actionIconBtn}
+                  onPress={() =>
+                    shareProfile({ userId: user.id, userName: user.name })
+                  }
+                  hitSlop={8}
+                >
+                  <Ionicons name="share-outline" size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
               {content.portfolio.map((project) => (
-                <View key={project.id} style={styles.projectCard}>
+                <TouchableOpacity
+                  key={project.id}
+                  style={styles.projectCard}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    navigation.navigate('PortfolioProjectDetail', {
+                      projectId: project.id,
+                      userId: user.id,
+                    })
+                  }
+                >
                   <Text style={styles.projectTitle}>{project.title}</Text>
-                  <Text style={styles.projectDesc}>{project.description}</Text>
+                  <Text style={styles.projectDesc} numberOfLines={2}>
+                    {project.description}
+                  </Text>
                   <View style={styles.mediaGrid}>
-                    {project.images.map((uri, index) => (
-                      <Image
-                        key={`${project.id}-${index}`}
-                        source={{ uri }}
-                        style={styles.mediaImage}
-                        contentFit="cover"
-                      />
-                    ))}
+                    {project.images.slice(0, 3).map((uri, index) => {
+                      const videoIdx =
+                        project.videoIndex ?? project.images.length - 1;
+                      return (
+                        <View
+                          key={`${project.id}-${index}`}
+                          style={styles.mediaImageWrap}
+                        >
+                          <Image
+                            source={{ uri }}
+                            style={styles.mediaImage}
+                            contentFit="cover"
+                          />
+                          {project.hasVideo && index === videoIdx ? (
+                            <View style={styles.playOverlay}>
+                              <Ionicons name="play" size={18} color={colors.white} />
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    })}
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -297,21 +334,35 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
               {userPosts.length === 0 ? (
                 <Text style={styles.emptyCopy}>No posts yet.</Text>
               ) : (
-                <View style={styles.postsGrid}>
-                  {userPosts.map((post) => (
-                    <TouchableOpacity
+                <>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Posts</Text>
+                  </View>
+                  {userPosts.slice(0, 2).map((post) => (
+                    <ProfileFeedPost
                       key={post.id}
-                      style={styles.postItem}
-                      onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
-                    >
-                      <Image
-                        source={{ uri: post.images[0] }}
-                        style={styles.postImage}
-                        contentFit="cover"
-                      />
-                    </TouchableOpacity>
+                      post={post}
+                      onPress={() =>
+                        navigation.navigate('PostDetail', { postId: post.id })
+                      }
+                      onAuthorPress={() =>
+                        navigation.navigate('UserProfile', { userId: post.author.id })
+                      }
+                    />
                   ))}
-                </View>
+                  {userPosts.length > 2 ? (
+                    <TouchableOpacity
+                      style={styles.viewMoreBtn}
+                      onPress={() =>
+                        navigation.navigate('UserPosts', { userId: user.id })
+                      }
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.viewMoreText}>View more</Text>
+                      <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                  ) : null}
+                </>
               )}
             </View>
           )}
@@ -441,6 +492,18 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   modalCancelText: { ...typography.button, color: colors.text },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: { ...typography.h3, color: colors.text },
+  actionIconBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabPad: {
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xxxl,
@@ -450,10 +513,22 @@ const styles = StyleSheet.create({
   projectTitle: { ...typography.bodyMedium, color: colors.text, fontWeight: '600' },
   projectDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
   mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
-  mediaImage: {
+  mediaImageWrap: {
     width: MEDIA,
     height: MEDIA,
     borderRadius: radius.button,
+    overflow: 'hidden',
+    backgroundColor: colors.borderLight,
+  },
+  mediaImage: {
+    width: '100%',
+    height: '100%',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   serviceCard: {
     backgroundColor: colors.white,
@@ -487,12 +562,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xxl,
   },
-  postsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  postItem: {
-    width: POST_SIZE,
-    height: POST_SIZE,
+  viewMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
     borderRadius: radius.button,
-    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.primary + '55',
+    backgroundColor: colors.primary + '0A',
   },
-  postImage: { width: '100%', height: '100%' },
+  viewMoreText: {
+    ...typography.button,
+    color: colors.primary,
+    fontSize: 15,
+  },
 });

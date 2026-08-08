@@ -4,33 +4,90 @@ import { Ionicons } from '@expo/vector-icons';
 import TextInput from '../../components/ui/TextInput';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
+import { useMyProfile } from '../../context/ProfileContext';
+import { ProfileService } from '../../data/mock/myProfile';
+import { ProfileSetupStepProps } from './stepProps';
 
 interface ServiceDraft {
   title: string;
   price: string;
 }
 
-interface StepProps {
-  onNext: () => void;
-  onBack?: () => void;
-  step: number;
-  totalSteps: number;
+const SETUP_SERVICE_PREFIX = 'setup-service-';
+
+function draftsFromContent(services: ProfileService[]): ServiceDraft[] {
+  const fromSetup = services
+    .filter((s) => s.id.startsWith(SETUP_SERVICE_PREFIX))
+    .map((s) => ({
+      title: s.title,
+      price: s.packages[0]?.priceLabel?.replace(/[^\d.]/g, '') ?? '',
+    }));
+  return fromSetup.length > 0 ? fromSetup : [{ title: '', price: '' }];
 }
 
-export default function ProfileSetupStep4({ onNext, onBack, step, totalSteps }: StepProps) {
-  const [services, setServices] = useState<ServiceDraft[]>([{ title: '', price: '' }]);
+export default function ProfileSetupStep4({
+  onNext,
+  onBack,
+  onSave,
+  step,
+  totalSteps,
+}: ProfileSetupStepProps) {
+  const { content, setServices } = useMyProfile();
+  const [services, setLocalServices] = useState<ServiceDraft[]>(() =>
+    draftsFromContent(content.services)
+  );
 
-  const addService = () => setServices([...services, { title: '', price: '' }]);
+  const addService = () => setLocalServices([...services, { title: '', price: '' }]);
   const updateService = (index: number, field: keyof ServiceDraft, value: string) => {
     const updated = [...services];
     updated[index] = { ...updated[index], [field]: value };
-    setServices(updated);
+    setLocalServices(updated);
+  };
+
+  const persist = () => {
+    const drafts = services.filter((s) => s.title.trim());
+    const withoutSetup = content.services.filter((s) => !s.id.startsWith(SETUP_SERVICE_PREFIX));
+    if (drafts.length === 0) {
+      setServices(withoutSetup);
+      return;
+    }
+    const setupServices: ProfileService[] = drafts.map((s, i) => ({
+      id: `${SETUP_SERVICE_PREFIX}${i}`,
+      title: s.title.trim(),
+      description: 'Added during profile setup',
+      rating: 0,
+      reviewCount: 0,
+      images: [
+        'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=400&h=300&fit=crop',
+      ],
+      packages: [
+        {
+          name: 'Basic',
+          priceLabel: s.price.trim() ? `${s.price.trim()} AED` : '—',
+          delivery: '3 days',
+          includes: ['As discussed'],
+        },
+      ],
+    }));
+    setServices([...setupServices, ...withoutSetup]);
+  };
+
+  const handleContinue = () => {
+    persist();
+    onNext();
+  };
+
+  const handleSave = () => {
+    persist();
+    onSave();
   };
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Text style={styles.stepLabel}>Step {step} of {totalSteps}</Text>
+        <Text style={styles.stepLabel}>
+          Step {step} of {totalSteps}
+        </Text>
         <Text style={styles.title}>Your Services</Text>
         <Text style={styles.subtitle}>Add services you offer to clients</Text>
 
@@ -60,8 +117,12 @@ export default function ProfileSetupStep4({ onNext, onBack, step, totalSteps }: 
       </ScrollView>
 
       <View style={styles.footer}>
-        {onBack && <Button title="Back" variant="outline" onPress={onBack} style={styles.backButton} />}
-        <Button title="Continue" onPress={onNext} fullWidth />
+        {onBack ? (
+          <Button title="Back" variant="outline" onPress={onBack} style={styles.secondary} />
+        ) : null}
+        <Button title="Continue" onPress={handleContinue} fullWidth />
+        <Button title="Save & exit" variant="ghost" onPress={handleSave} fullWidth style={styles.secondary} />
+        <Button title="Skip" variant="ghost" onPress={onNext} fullWidth />
       </View>
     </View>
   );
@@ -83,8 +144,13 @@ const styles = StyleSheet.create({
   },
   serviceLabel: { ...typography.label, color: colors.textTertiary, marginBottom: spacing.md },
   inputNoMargin: { marginBottom: spacing.md },
-  addButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
   addButtonText: { ...typography.bodyMedium, color: colors.primary },
   footer: { paddingBottom: spacing.lg },
-  backButton: { marginBottom: spacing.md },
+  secondary: { marginBottom: spacing.sm },
 });

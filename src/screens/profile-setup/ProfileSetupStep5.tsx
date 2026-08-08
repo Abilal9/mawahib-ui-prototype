@@ -2,18 +2,18 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
+import { ProfileSetupStepProps } from './stepProps';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const TIME_SLOTS = ['9 AM - 12 PM', '12 PM - 3 PM', '3 PM - 6 PM', '6 PM - 9 PM'];
 
-interface StepProps {
-  onNext: () => void;
-  onBack?: () => void;
-  step: number;
-  totalSteps: number;
-}
-
-export default function ProfileSetupStep5({ onNext, onBack, step, totalSteps }: StepProps) {
+export default function ProfileSetupStep5({
+  onNext,
+  onBack,
+  onSave,
+  step,
+  totalSteps,
+}: ProfileSetupStepProps) {
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
   const [selectedSlots, setSelectedSlots] = useState<string[]>(['9 AM - 12 PM', '3 PM - 6 PM']);
 
@@ -24,7 +24,9 @@ export default function ProfileSetupStep5({ onNext, onBack, step, totalSteps }: 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Text style={styles.stepLabel}>Step {step} of {totalSteps}</Text>
+        <Text style={styles.stepLabel}>
+          Step {step} of {totalSteps}
+        </Text>
         <Text style={styles.title}>Availability</Text>
         <Text style={styles.subtitle}>When are you available for work?</Text>
 
@@ -53,7 +55,9 @@ export default function ProfileSetupStep5({ onNext, onBack, step, totalSteps }: 
               onPress={() => toggle(slot, selectedSlots, setSelectedSlots)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.chipText, selectedSlots.includes(slot) && styles.chipTextSelected]}>
+              <Text
+                style={[styles.chipText, selectedSlots.includes(slot) && styles.chipTextSelected]}
+              >
                 {slot}
               </Text>
             </TouchableOpacity>
@@ -62,8 +66,12 @@ export default function ProfileSetupStep5({ onNext, onBack, step, totalSteps }: 
       </ScrollView>
 
       <View style={styles.footer}>
-        {onBack && <Button title="Back" variant="outline" onPress={onBack} style={styles.backButton} />}
+        {onBack ? (
+          <Button title="Back" variant="outline" onPress={onBack} style={styles.secondary} />
+        ) : null}
         <Button title="Complete Setup" onPress={onNext} fullWidth />
+        <Button title="Save & exit" variant="ghost" onPress={onSave} fullWidth style={styles.secondary} />
+        <Button title="Skip" variant="ghost" onPress={onNext} fullWidth />
       </View>
     </View>
   );
@@ -75,7 +83,12 @@ const styles = StyleSheet.create({
   stepLabel: { ...typography.caption, color: colors.primary, marginBottom: spacing.sm },
   title: { ...typography.h2, color: colors.text, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xxl },
-  sectionTitle: { ...typography.label, color: colors.text, marginBottom: spacing.md, marginTop: spacing.lg },
+  sectionTitle: {
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.md,
+    marginTop: spacing.lg,
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chipColumn: { gap: spacing.sm },
   chip: {
@@ -98,5 +111,5 @@ const styles = StyleSheet.create({
   chipText: { ...typography.bodySmall, color: colors.text },
   chipTextSelected: { color: colors.white },
   footer: { paddingBottom: spacing.lg },
-  backButton: { marginBottom: spacing.md },
+  secondary: { marginBottom: spacing.sm },
 });

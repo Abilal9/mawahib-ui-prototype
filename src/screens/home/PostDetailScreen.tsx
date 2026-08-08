@@ -7,6 +7,10 @@ import {
   StyleSheet,
   Dimensions,
   TextInput,
+  Modal,
+  Pressable,
+  Share,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +19,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getPostById } from '../../data/mock/posts';
+import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -27,10 +32,13 @@ const MOCK_COMMENTS = [
 
 export default function PostDetailScreen({ route, navigation }: ScreenProps<'PostDetail'>) {
   const post = getPostById(route.params.postId);
+  const { user, removePostId } = useMyProfile();
   const [activeImage, setActiveImage] = useState(0);
   const [comment, setComment] = useState('');
   const [liked, setLiked] = useState(post?.isLiked ?? false);
   const [likeCount, setLikeCount] = useState(post?.likes ?? 0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!post) {
     return (
@@ -40,9 +48,33 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
     );
   }
 
+  // Only the real author gets the ⋯ menu (Share / Delete) — not posts merely listed on a profile.
+  const isOwnPost = post.author.id === user.id;
+
   const handleLike = () => {
     setLiked(!liked);
     setLikeCount(liked ? likeCount - 1 : likeCount + 1);
+  };
+
+  const sharePost = async () => {
+    setMenuOpen(false);
+    const url = `https://mawahib.app/p/${post.id}`;
+    const message = `Check out this post on Mawahib`;
+    try {
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { message, url }
+          : { message: `${message}\n${url}`, title: 'Mawahib' }
+      );
+    } catch {
+      // dismissed
+    }
+  };
+
+  const confirmDelete = () => {
+    removePostId(post.id);
+    setDeleteOpen(false);
+    navigation.goBack();
   };
 
   return (
@@ -53,25 +85,47 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="share-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {isOwnPost ? (
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.headerButton} onPress={sharePost} hitSlop={8}>
+              <Ionicons name="share-outline" size={22} color={colors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           style={styles.authorRow}
-          onPress={() => navigation.navigate('UserProfile', { userId: post.author.id })}
-          activeOpacity={0.8}
+          onPress={() => {
+            if (isOwnPost) return;
+            navigation.navigate('UserProfile', { userId: post.author.id });
+          }}
+          activeOpacity={isOwnPost ? 1 : 0.8}
+          disabled={isOwnPost}
         >
           <Image source={toImageSource(post.author.avatar)} style={styles.avatar} contentFit="cover" />
           <View style={styles.authorInfo}>
             <Text style={styles.authorName}>{post.author.name}</Text>
-            <Text style={styles.authorUsername}>@{post.author.username}</Text>
+            {post.role || post.author.title ? (
+              <Text style={styles.authorMeta}>
+                {post.role ?? post.author.title}
+              </Text>
+            ) : null}
           </View>
-          <TouchableOpacity style={styles.followButton}>
-            <Text style={styles.followText}>Follow</Text>
-          </TouchableOpacity>
+          {!isOwnPost ? (
+            <TouchableOpacity style={styles.followButton}>
+              <Text style={styles.followText}>Follow</Text>
+            </TouchableOpacity>
+          ) : null}
         </TouchableOpacity>
 
         <ScrollView
@@ -115,7 +169,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
 
         <Text style={styles.likes}>{likeCount.toLocaleString()} likes</Text>
         <Text style={styles.caption}>
-          <Text style={styles.captionAuthor}>@{post.author.username} </Text>
+          <Text style={styles.captionAuthor}>{post.author.name} </Text>
           {post.caption}
         </Text>
 
@@ -151,6 +205,70 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           <Text style={[styles.postComment, !comment.trim() && styles.postCommentDisabled]}>Post</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setMenuOpen(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <TouchableOpacity style={styles.sheetRow} onPress={sharePost} activeOpacity={0.85}>
+              <Ionicons name="share-outline" size={22} color={colors.text} />
+              <Text style={styles.sheetRowText}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sheetRow}
+              onPress={() => {
+                setMenuOpen(false);
+                setDeleteOpen(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="trash-outline" size={22} color={colors.error} />
+              <Text style={[styles.sheetRowText, styles.sheetRowDanger]}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sheetRow, styles.sheetCancel]}
+              onPress={() => setMenuOpen(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={deleteOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setDeleteOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Delete post?</Text>
+            <Text style={styles.modalBody}>
+              Are you sure you want to delete this post? This can’t be undone.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalDangerBtn}
+              onPress={confirmDelete}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDangerText}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setDeleteOpen(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -164,7 +282,76 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerRight: { minWidth: 40, alignItems: 'flex-end' },
   headerTitle: { ...typography.h3, color: colors.text },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  sheetRowText: { ...typography.bodyMedium, color: colors.text },
+  sheetRowDanger: { color: colors.error },
+  sheetCancel: {
+    borderBottomWidth: 0,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  sheetCancelText: {
+    ...typography.button,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    width: '100%',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+  },
+  modalTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
+  modalBody: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  modalDangerBtn: {
+    backgroundColor: colors.error,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalDangerText: { ...typography.button, color: colors.white },
+  modalCancelBtn: {
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: { ...typography.button, color: colors.text },
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,7 +362,7 @@ const styles = StyleSheet.create({
   avatar: { width: 44, height: 44, borderRadius: radius.avatar },
   authorInfo: { flex: 1 },
   authorName: { ...typography.label, color: colors.text },
-  authorUsername: { ...typography.caption, color: colors.textSecondary },
+  authorMeta: { ...typography.caption, color: colors.textSecondary },
   followButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,

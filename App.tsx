@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
@@ -39,23 +40,25 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <SidebarProvider>
-          <CreateMenuProvider>
-            <ProfileProvider>
-              <UserJobsProvider>
-                <ConnectionsProvider>
-                  <NavigationContainer>
-                    <StatusBar style="dark" />
-                    <RootNavigator />
-                  </NavigationContainer>
-                </ConnectionsProvider>
-              </UserJobsProvider>
-            </ProfileProvider>
-          </CreateMenuProvider>
-        </SidebarProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <SidebarProvider>
+            <CreateMenuProvider>
+              <ProfileProvider>
+                <UserJobsProvider>
+                  <ConnectionsProvider>
+                    <NavigationContainer>
+                      <StatusBar style="dark" />
+                      <RootNavigator />
+                    </NavigationContainer>
+                  </ConnectionsProvider>
+                </UserJobsProvider>
+              </ProfileProvider>
+            </CreateMenuProvider>
+          </SidebarProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

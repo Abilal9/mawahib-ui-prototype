@@ -16,10 +16,20 @@ import TextInput from '../../components/ui/TextInput';
 import Button from '../../components/ui/Button';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackScreenProps } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
+import { useMyProfile } from '../../context/ProfileContext';
 
 export default function SignInScreen({ navigation }: RootStackScreenProps<'SignIn'>) {
+  const { signIn } = useAuth();
+  const { useFilledProfile } = useMyProfile();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const handleLogIn = () => {
+    useFilledProfile();
+    signIn();
+    navigation.replace('MainTabs');
+  };
 
   return (
     <ScreenContainer>
@@ -62,7 +72,7 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          <Button title="Log In" onPress={() => navigation.replace('MainTabs')} />
+          <Button title="Log In" onPress={handleLogIn} />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />

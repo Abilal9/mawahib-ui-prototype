@@ -20,13 +20,31 @@ import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
-  const { accountType } = useAuth();
+  const { accountType, setSignUpBasics } = useAuth();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [city, setCity] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
 
   const accountLabel = accountType === 'business' ? 'Business' : 'Talent';
+  const canSubmit =
+    agreed &&
+    name.trim().length > 0 &&
+    email.trim().length > 0 &&
+    city.trim().length > 0 &&
+    password.length > 0 &&
+    password === confirmPassword;
+
+  const handleSignUp = () => {
+    setSignUpBasics({
+      name: name.trim(),
+      email: email.trim(),
+      city: city.trim(),
+    });
+    navigation.navigate('ConfirmCode', { email: email.trim() });
+  };
 
   return (
     <ScreenContainer>
@@ -52,12 +70,28 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
           </Text>
 
           <TextInput
+            label="Full Name"
+            placeholder="Your name"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+
+          <TextInput
             label="Email"
             placeholder="Enter your email"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+          />
+
+          <TextInput
+            label="City"
+            placeholder="City, Country"
+            value={city}
+            onChangeText={setCity}
+            autoCapitalize="words"
           />
 
           <TextInput
@@ -90,9 +124,9 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
 
           <Button
             title="Sign Up"
-            onPress={() => navigation.navigate('ConfirmCode', { email })}
+            onPress={handleSignUp}
             fullWidth
-            disabled={!agreed || !email || !password || password !== confirmPassword}
+            disabled={!canSubmit}
             style={styles.signUpButton}
           />
 
