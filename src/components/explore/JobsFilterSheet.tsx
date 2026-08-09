@@ -30,12 +30,16 @@ interface JobsFilterSheetProps {
   onReset: () => void;
 }
 
+/** Includes real statuses used in seed/UI (`done` alias of completed, sent-for-review, etc.) */
 const STATUS_OPTIONS: { id: JobsFilters['status']; label: string }[] = [
   { id: 'all', label: 'All statuses' },
-  { id: 'pending', label: 'New requests' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'sent-for-review', label: 'Sent for review' },
+  { id: 'pending-payment', label: 'Pending payment' },
   { id: 'in-progress', label: 'In progress' },
-  { id: 'sent', label: 'Sent' },
+  { id: 'upcoming', label: 'Upcoming' },
   { id: 'completed', label: 'Completed' },
+  { id: 'done', label: 'Done' },
   { id: 'declined', label: 'Declined' },
 ];
 

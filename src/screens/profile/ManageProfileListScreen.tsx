@@ -25,10 +25,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
-import {
-  PortfolioProject,
-  ProfileService,
-} from '../../data/mock/myProfile';
+import { PortfolioProject, ProfileService } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
 if (

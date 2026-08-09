@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -18,14 +18,11 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import AppHeader from '../../components/ui/AppHeader';
 import { colors, spacing, radius, typography } from '../../theme';
-import { posts } from '../../data/mock/posts';
-import { stories } from '../../data/mock/stories';
-import { jobs } from '../../data/mock/jobs';
-import { services } from '../../data/mock/services';
-import { talents } from '../../data/mock/talents';
-import { notifications } from '../../data/mock/notifications';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { usePosts } from '../../context/PostsContext';
+import { useNotifications } from '../../context/NotificationsContext';
+import { catalogService, jobService } from '../../services';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
@@ -356,20 +353,26 @@ function TalentMatchCard({
 export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const { open: openSidebar } = useSidebar();
   const { user: me } = useMyProfile();
+  const { posts } = usePosts();
+  const { unreadCount } = useNotifications();
+  const stories = catalogService.listStories();
   const [feedPosts, setFeedPosts] = useState(posts);
-  const [jobList, setJobList] = useState(jobs);
-  const [serviceList, setServiceList] = useState(services);
-  const [talentList, setTalentList] = useState(talents);
+  const [jobList, setJobList] = useState(() => jobService.listSync());
+  const [serviceList, setServiceList] = useState(() => catalogService.listServices());
+  const [talentList, setTalentList] = useState(() => catalogService.listTalents());
   const [refreshing, setRefreshing] = useState(false);
-  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    setFeedPosts(posts);
+  }, [posts]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS));
     setFeedPosts(posts.map((p) => ({ ...p })));
-    setJobList([...jobs]);
-    setServiceList([...services]);
-    setTalentList([...talents]);
+    setJobList([...jobService.listSync()]);
+    setServiceList([...catalogService.listServices()]);
+    setTalentList([...catalogService.listTalents()]);
     setRefreshing(false);
   };
 

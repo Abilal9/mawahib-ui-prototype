@@ -40,7 +40,7 @@ export const conversations: Conversation[] = [
 ];
 
 export const messages: Message[] = [
-  { id: 'm1', conversationId: 'c1', senderId: 'u2', text: 'Hey Layla! I saw your latest portfolio piece', createdAt: '2026-07-12T14:00:00Z', read: true },
+  { id: 'm1', conversationId: 'c1', senderId: 'u2', text: 'Hey Ahmad! I saw your latest portfolio piece', createdAt: '2026-07-12T14:00:00Z', read: true },
   { id: 'm2', conversationId: 'c1', senderId: 'u1', text: 'Thanks Omar! Glad you liked it 😊', createdAt: '2026-07-12T14:10:00Z', read: true },
   { id: 'm3', conversationId: 'c1', senderId: 'u2', text: 'The designs look amazing! Can we schedule a call tomorrow?', createdAt: '2026-07-12T14:30:00Z', read: false },
   { id: 'm4', conversationId: 'c2', senderId: 'u3', text: 'Hi! Here are the photos from yesterday\'s session', createdAt: '2026-07-12T10:00:00Z', read: true },

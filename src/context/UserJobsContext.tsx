@@ -1,14 +1,12 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { userJobs as seedJobs } from '../data/mock/userJobs';
-import { getJobById as getListingById } from '../data/mock/jobs';
-import { users } from '../data/mock/users';
-import { User, Job } from '../data/types';
+import { User, JobListing } from '../data/types';
 import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
+import { jobService, userService } from '../services';
+import { repositories } from '../repositories';
 
 /**
  * In-memory jobs store for the prototype.
- * Seeds mock user-jobs and exposes helpers to open listing-based requests,
- * create visitor service requests (pending, no payment), and advance job status.
+ * Seeds via userJob repository; listing lookups via jobService.
  */
 
 interface RequestEditsPayload {
@@ -32,9 +30,21 @@ export interface CreateServiceRequestPayload {
   deadline?: string;
   dateLabel?: string;
   locationUrl?: string;
+  country?: string;
+  city?: string;
+  locationDetails?: string;
   notes?: string;
   attachmentName?: string;
   attachmentSize?: string;
+}
+
+export interface CreatePostedJobPayload {
+  title: string;
+  description?: string;
+  location?: string;
+  budget?: string;
+  jobType?: JobListing['type'];
+  skills?: string[];
 }
 
 interface UserJobsContextValue {
@@ -49,11 +59,17 @@ interface UserJobsContextValue {
   openFromListing: (listingId: string) => string | undefined;
   /** Client applies to a provider service — pending until provider accepts (then pending-payment) */
   createServiceRequest: (payload: CreateServiceRequestPayload) => string;
+  /** Business posts a job listing + a "posted" UserJob row */
+  createPostedJob: (payload: CreatePostedJobPayload) => string;
   acceptJob: (id: string) => void;
   declineJob: (id: string, reason?: string) => void;
   requestEdits: (id: string, payload: RequestEditsPayload) => void;
   /** After client pays a pending-payment job → moves to in-progress */
   markJobPaid: (id: string) => void;
+  /** in-progress → completed (canonical terminal success; `done` treated as alias in filters) */
+  markJobCompleted: (id: string) => void;
+  /** Provider re-accepts after sent-for-review → pending-payment */
+  acceptAfterReview: (id: string) => void;
   submitReview: (id: string, payload: SubmitReviewPayload) => void;
 }
 
@@ -63,7 +79,7 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function detailsFromListing(listing: Job): UserJobDetails {
+function detailsFromListing(listing: JobListing): UserJobDetails {
   return {
     serviceName: listing.title,
     packageName: listing.type.replace('-', ' '),
@@ -86,7 +102,8 @@ function detailsFromListing(listing: Job): UserJobDetails {
 }
 
 /** Provider applying to a posted job → sent pending application (not a received request). */
-function applicationFromListing(listing: Job): UserJob {
+function applicationFromListing(listing: JobListing): UserJob {
+  const directory = userService.listSync();
   return {
     id: `uj-apply-${listing.id}`,
     listingId: listing.id,
@@ -95,10 +112,10 @@ function applicationFromListing(listing: Job): UserJob {
     status: 'pending',
     statusLabel: 'Pending',
     counterpart: {
-      ...users[1],
+      ...directory[1],
       id: `listing-${listing.id}`,
       name: listing.company,
-      avatar: listing.logo ?? users[1].avatar,
+      avatar: listing.logo ?? directory[1]?.avatar,
       title: listing.location,
     },
     date: listing.salary,
@@ -110,44 +127,56 @@ function applicationFromListing(listing: Job): UserJob {
   };
 }
 
-function applyToListingId(
-  jobs: UserJob[],
-  listingId: string,
-  setJobs: React.Dispatch<React.SetStateAction<UserJob[]>>
-): string | undefined {
-  const existing = jobs.find(
+function findExistingApplication(jobs: UserJob[], listingId: string) {
+  return jobs.find(
     (j) => (j.listingId === listingId || j.id === listingId) && j.type === 'sent'
   );
-  if (existing) return existing.id;
-
-  const listing = getListingById(listingId);
-  if (!listing) return undefined;
-
-  const created = applicationFromListing(listing);
-  setJobs((prev) => [created, ...prev]);
-  return created.id;
 }
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
-  const [jobs, setJobs] = useState<UserJob[]>(seedJobs);
+  const [jobs, setJobs] = useState<UserJob[]>(() => repositories.userJobs.list());
+
+  const syncJobs = (updater: (prev: UserJob[]) => UserJob[]) => {
+    setJobs((prev) => {
+      const next = updater(prev);
+      repositories.userJobs.replaceAll(next);
+      return next;
+    });
+  };
 
   const value = useMemo<UserJobsContextValue>(
     () => ({
       jobs,
       getJobById: (id) =>
         jobs.find((j) => j.id === id || j.listingId === id),
-      applyToListing: (listingId) => applyToListingId(jobs, listingId, setJobs),
-      openFromListing: (listingId) => applyToListingId(jobs, listingId, setJobs),
-      /**
-       * Client → provider Apply path: insert a `sent` / `pending` request (not pending-payment).
-       * Currency glyph left empty so UI can render location-aware CurrencyIcon instead.
-       * Returns the new user-job id for optional navigation.
-       */
+      applyToListing: (listingId) => {
+        const existing = findExistingApplication(jobs, listingId);
+        if (existing) return existing.id;
+        const listing = jobService.getByIdSync(listingId);
+        if (!listing) return undefined;
+        const created = applicationFromListing(listing);
+        syncJobs((prev) => [created, ...prev]);
+        return created.id;
+      },
+      openFromListing: (listingId) => {
+        const existing = findExistingApplication(jobs, listingId);
+        if (existing) return existing.id;
+        const listing = jobService.getByIdSync(listingId);
+        if (!listing) return undefined;
+        const created = applicationFromListing(listing);
+        syncJobs((prev) => [created, ...prev]);
+        return created.id;
+      },
       createServiceRequest: (payload) => {
         const id = `uj-req-${Date.now()}`;
         const deadline = payload.deadline?.trim() || undefined;
         const dateLabel =
           payload.dateLabel?.trim() || deadline || 'Flexible';
+        const locationParts = [
+          payload.locationDetails?.trim(),
+          payload.city?.trim(),
+          payload.country?.trim(),
+        ].filter(Boolean);
         const created: UserJob = {
           id,
           title: payload.serviceName,
@@ -167,11 +196,17 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
             addons: payload.addons,
             deadline: deadline ?? 'Flexible',
             locationUrl: payload.locationUrl?.trim() || undefined,
-            notes: payload.notes?.trim() || '',
+            notes: [
+              payload.notes?.trim() || '',
+              locationParts.length
+                ? `Location: ${locationParts.join(', ')}`
+                : '',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
             attachmentName: payload.attachmentName?.trim() || '',
             attachmentSize: payload.attachmentSize?.trim() || '',
             packagePrice: payload.packagePrice,
-            // Intentionally blank — screens use CurrencyIcon from location.
             currencySymbol: '',
             requestedAt: new Date().toLocaleString('en-US', {
               day: 'numeric',
@@ -182,11 +217,45 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
             }),
           },
         };
-        setJobs((prev) => [created, ...prev]);
+        syncJobs((prev) => [created, ...prev]);
+        return id;
+      },
+      createPostedJob: (payload) => {
+        const me = userService.getCurrentSync();
+        const listing = jobService.createListing({
+          title: payload.title.trim() || 'Untitled job',
+          company: me.name,
+          type: payload.jobType ?? 'freelance',
+          location: payload.location?.trim() || me.location || 'Remote',
+          salary: payload.budget?.trim() || 'Negotiable',
+          description: payload.description?.trim() || 'Job posted from Mawahib.',
+          skills: payload.skills ?? [],
+          status: 'open',
+          logo: typeof me.avatar === 'string' ? me.avatar : undefined,
+          exploreTag: 'Design',
+        });
+        const id = `uj-posted-${listing.id}`;
+        const created: UserJob = {
+          id,
+          listingId: listing.id,
+          title: listing.title,
+          type: 'received',
+          status: 'pending',
+          statusLabel: 'Open',
+          counterpart: me,
+          date: listing.salary,
+          createdAt: nowIso(),
+          section: 'posted',
+          jobType: listing.type,
+          activityLabel: 'Posted',
+          activityValue: 'Just Now',
+          details: detailsFromListing(listing),
+        };
+        syncJobs((prev) => [created, ...prev]);
         return id;
       },
       acceptJob: (id) => {
-        setJobs((prev) =>
+        syncJobs((prev) =>
           prev.map((job) =>
             job.id === id
               ? {
@@ -202,8 +271,25 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
           )
         );
       },
+      acceptAfterReview: (id) => {
+        syncJobs((prev) =>
+          prev.map((job) =>
+            job.id === id
+              ? {
+                  ...job,
+                  status: 'pending-payment',
+                  statusLabel: 'Pending Payment',
+                  section: 'requests',
+                  createdAt: nowIso(),
+                  activityLabel: 'Accepted',
+                  activityValue: 'Just Now',
+                }
+              : job
+          )
+        );
+      },
       markJobPaid: (id) => {
-        setJobs((prev) =>
+        syncJobs((prev) =>
           prev.map((job) =>
             job.id === id
               ? {
@@ -219,8 +305,25 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
           )
         );
       },
+      markJobCompleted: (id) => {
+        syncJobs((prev) =>
+          prev.map((job) =>
+            job.id === id
+              ? {
+                  ...job,
+                  status: 'completed',
+                  statusLabel: 'Completed',
+                  section: 'completed',
+                  createdAt: nowIso(),
+                  activityLabel: 'Completed',
+                  activityValue: 'Just Now',
+                }
+              : job
+          )
+        );
+      },
       declineJob: (id, reason) => {
-        setJobs((prev) =>
+        syncJobs((prev) =>
           prev.map((job) =>
             job.id === id
               ? {
@@ -237,7 +340,7 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         );
       },
       requestEdits: (id, payload) => {
-        setJobs((prev) =>
+        syncJobs((prev) =>
           prev.map((job) => {
             if (job.id !== id) return job;
             const priceDigits = payload.packagePrice.replace(/[^\d]/g, '');
@@ -274,7 +377,7 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       },
       submitReview: (id, payload) => {
         const rating = Math.min(5, Math.max(1, Math.round(payload.rating)));
-        setJobs((prev) =>
+        syncJobs((prev) =>
           prev.map((job) =>
             job.id === id
               ? {

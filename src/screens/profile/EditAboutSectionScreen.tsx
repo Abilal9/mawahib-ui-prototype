@@ -16,11 +16,8 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
-import {
-  ABOUT_SECTION_LABELS,
-  AboutSectionKey,
-  filledOwnProfile,
-} from '../../data/mock/myProfile';
+import { ABOUT_SECTION_LABELS, AboutSectionKey } from '../../data/types';
+import { profileService } from '../../services';
 import { ScreenProps } from '../../navigation/types';
 
 export default function EditAboutSectionScreen({
@@ -31,12 +28,13 @@ export default function EditAboutSectionScreen({
   const insets = useSafeAreaInsets();
   const profile = useMyProfile();
   const label = ABOUT_SECTION_LABELS[section];
+  const filledSeed = profileService.getFilledContent();
 
-  const [bio, setBio] = useState(profile.content.bio || filledOwnProfile.bio);
+  const [bio, setBio] = useState(profile.content.bio || filledSeed.bio);
   const [talentsText, setTalentsText] = useState(
     (profile.content.talents.length
       ? profile.content.talents
-      : filledOwnProfile.talents
+      : filledSeed.talents
     ).join(', ')
   );
   const [languageName, setLanguageName] = useState('English');

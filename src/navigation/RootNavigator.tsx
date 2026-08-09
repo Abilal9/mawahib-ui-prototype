@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MainTabs from './MainTabs';
 import {
   SplashScreen1,
@@ -12,12 +14,10 @@ import {
   ConfirmCodeScreen,
   SignupSuccessScreen,
   ProfileSetupScreen,
-  ExploreEmptyScreen,
   NotificationsScreen,
   PostDetailScreen,
   PostCreateScreen,
   PhotoCaptureScreen,
-  VideoCaptureScreen,
   PhotoEditScreen,
   VideoEditScreen,
   VideoTrimScreen,
@@ -31,8 +31,6 @@ import {
   ManageProfileListScreen,
   PortfolioProjectDetailScreen,
   UserPostsScreen,
-  PortfolioScreen,
-  ServicesScreen,
   ServiceDetailScreen,
   RequestServiceScreen,
   CalendarScreen,
@@ -53,8 +51,35 @@ import {
   FullPhotoPreviewScreen,
 } from '../screens';
 import { RootStackParamList } from './types';
+import { useAuth } from '../context/AuthContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/**
+ * Gates MainTabs behind mock isSignedIn. Auth/onboarding screens stay registered
+ * so SignIn/SignupSuccess can still reset navigation without remount races.
+ *
+ * Orphaned screens intentionally unregistered (files kept for later reuse):
+ * ExploreEmpty, Portfolio, Services, VideoCapture, CreateMenu,
+ * ProfileSetupStep1–5 as routes, MessagesEmpty.
+ */
+function MainTabsGate() {
+  const { isSignedIn } = useAuth();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' }],
+      });
+    }
+  }, [isSignedIn, navigation]);
+
+  if (!isSignedIn) return null;
+  return <MainTabs />;
+}
 
 export default function RootNavigator() {
   return (
@@ -76,7 +101,7 @@ export default function RootNavigator() {
       <Stack.Screen name="ConfirmCode" component={ConfirmCodeScreen} />
       <Stack.Screen name="SignupSuccess" component={SignupSuccessScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="MainTabs" component={MainTabsGate} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
@@ -86,18 +111,14 @@ export default function RootNavigator() {
       <Stack.Screen name="ManageProfileList" component={ManageProfileListScreen} />
       <Stack.Screen name="PortfolioProjectDetail" component={PortfolioProjectDetailScreen} />
       <Stack.Screen name="UserPosts" component={UserPostsScreen} />
-      <Stack.Screen name="ExploreEmpty" component={ExploreEmptyScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} />
       <Stack.Screen name="PostCreate" component={PostCreateScreen} />
       <Stack.Screen name="PhotoCapture" component={PhotoCaptureScreen} />
-      <Stack.Screen name="VideoCapture" component={VideoCaptureScreen} />
       <Stack.Screen name="PhotoEdit" component={PhotoEditScreen} />
       <Stack.Screen name="VideoEdit" component={VideoEditScreen} />
       <Stack.Screen name="VideoTrim" component={VideoTrimScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
-      <Stack.Screen name="Portfolio" component={PortfolioScreen} />
-      <Stack.Screen name="Services" component={ServicesScreen} />
       <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
       <Stack.Screen name="RequestService" component={RequestServiceScreen} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />

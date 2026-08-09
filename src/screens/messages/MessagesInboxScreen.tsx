@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { conversations } from '../../data/mock/messages';
+import { messageService } from '../../services';
 import { useConnections } from '../../context/ConnectionsContext';
 import { TabScreenProps } from '../../navigation/types';
 
@@ -19,9 +19,10 @@ function formatTime(dateStr: string): string {
 
 export default function MessagesInboxScreen({ navigation }: TabScreenProps<'MessagesTab'>) {
   const { isConnected } = useConnections();
+  const conversations = messageService.listConversationsSync();
   const visible = useMemo(
     () => conversations.filter((c) => isConnected(c.participant.id)),
-    [isConnected]
+    [conversations, isConnected]
   );
 
   return (

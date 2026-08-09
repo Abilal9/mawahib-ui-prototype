@@ -1,12 +1,26 @@
 import { Conversation, Message } from '../data/types';
-import { conversations, getMessagesByConversation } from '../data/mock/messages';
+import { repositories } from '../repositories';
+
+const repo = repositories.messages;
 
 export const messageService = {
   async listConversations(): Promise<Conversation[]> {
-    return conversations;
+    return repo.listConversations();
+  },
+
+  listConversationsSync(): Conversation[] {
+    return repo.listConversations();
+  },
+
+  getConversationById(id: string): Conversation | undefined {
+    return repo.getConversationById(id);
   },
 
   async getMessages(conversationId: string): Promise<Message[]> {
-    return getMessagesByConversation(conversationId);
+    return repo.getMessages(conversationId);
+  },
+
+  getMessagesSync(conversationId: string): Message[] {
+    return repo.getMessages(conversationId);
   },
 };

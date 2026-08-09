@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing, radius, typography } from '../../theme';
-import { ProfileTab } from '../../data/mock/myProfile';
+import { ProfileTab } from '../../data/types';
 
 const TABS: ProfileTab[] = ['About', 'Portfolio', 'Services', 'Posts'];
 

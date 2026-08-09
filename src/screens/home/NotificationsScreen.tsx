@@ -12,7 +12,6 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
-  notifications as initialNotifications,
   NOTIFICATION_TABS,
   NotificationTab,
   filterNotifications,
@@ -21,6 +20,7 @@ import { ScreenProps } from '../../navigation/types';
 import { Notification } from '../../data/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 
 function formatTime(dateStr: string): string {
@@ -122,16 +122,23 @@ function NotificationItem({
 export default function NotificationsScreen({ navigation }: ScreenProps<'Notifications'>) {
   const { getJobById, acceptJob, declineJob } = useUserJobs();
   const { user: me } = useMyProfile();
+  const {
+    notifications,
+    markRead,
+    markAllRead,
+    clearActions,
+    clearRatingPrompt,
+    remove,
+  } = useNotifications();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
-  const [items, setItems] = useState(initialNotifications);
 
   const filtered = useMemo(
-    () => filterNotifications(items, activeTab),
-    [items, activeTab]
+    () => filterNotifications(notifications, activeTab),
+    [notifications, activeTab]
   );
 
   const clearAll = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    markAllRead();
   };
 
   const resolveUserJobId = (item: Notification) => {
@@ -147,9 +154,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
   };
 
   const openNotification = (item: Notification) => {
-    setItems((prev) =>
-      prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
-    );
+    markRead(item.id);
 
     switch (item.type) {
       case 'job': {
@@ -246,11 +251,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
               if (userJobId) {
                 acceptJob(userJobId);
               }
-              setItems((prev) =>
-                prev.map((n) =>
-                  n.id === item.id ? { ...n, read: true, actions: undefined } : n
-                )
-              );
+              clearActions(item.id);
               if (userJobId) {
                 navigation.navigate('JobInProgress', { jobId: userJobId });
               } else {
@@ -262,14 +263,10 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
               if (userJobId) {
                 declineJob(userJobId);
               }
-              setItems((prev) => prev.filter((n) => n.id !== item.id));
+              remove(item.id);
             }}
             onRate={(rating) => {
-              setItems((prev) =>
-                prev.map((n) =>
-                  n.id === item.id ? { ...n, read: true, showRating: false } : n
-                )
-              );
+              clearRatingPrompt(item.id);
               const userJobId = resolveUserJobId(item);
               if (userJobId) {
                 navigation.navigate('WriteReview', {

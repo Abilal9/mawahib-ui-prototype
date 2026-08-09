@@ -1,26 +1,11 @@
-export interface ReviewItem {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorAvatar: string;
-  timeAgo: string;
-  rating: number;
-  serviceName: string;
-  body: string;
-  image?: string;
-}
+export type {
+  ReviewItem,
+  Review,
+  ReviewDistribution,
+  ReviewsBundle,
+} from '../types/reviews';
 
-export interface ReviewDistribution {
-  stars: 1 | 2 | 3 | 4 | 5;
-  percent: number;
-}
-
-export interface ReviewsBundle {
-  average: number;
-  total: number;
-  distribution: ReviewDistribution[];
-  reviews: ReviewItem[];
-}
+import type { ReviewItem, ReviewsBundle } from '../types/reviews';
 
 const LOREM =
   'Amet minim mollit non deserunt ullamco est sit aliqua dolor do amet sint. Velit officia consequat duis enim velit mollit.';

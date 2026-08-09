@@ -18,8 +18,8 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getVisitorProfileContent, ProfileService, ServicePackage } from '../../data/mock/myProfile';
-import { resolveProfileUser } from '../../data/mock/resolveUser';
+import { ProfileService, ServicePackage } from '../../data/types';
+import { profileService, userService } from '../../services';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
@@ -84,9 +84,9 @@ export default function RequestServiceScreen({
   const insets = useSafeAreaInsets();
   const { createServiceRequest } = useUserJobs();
 
-  const provider = resolveProfileUser(route.params.userId);
+  const provider = userService.resolveProfileUser(route.params.userId);
   const services = useMemo(
-    () => getVisitorProfileContent(route.params.userId).services,
+    () => profileService.getVisitorContent(route.params.userId).services,
     [route.params.userId]
   );
   const currencyLocation = provider?.location;
@@ -279,6 +279,9 @@ export default function RequestServiceScreen({
             : undefined,
       dateLabel: dateSummary || undefined,
       locationUrl: mapsLink.trim() || undefined,
+      country: country.trim() || undefined,
+      city: city.trim() || undefined,
+      locationDetails: locationDetails.trim() || undefined,
       notes: notes.trim() || undefined,
       attachmentName: attachments[0]?.name,
       attachmentSize: attachments[0]?.size,

@@ -1,22 +1,30 @@
 import { User } from '../types';
 
+/**
+ * Canonical signed-in seed user (u1).
+ * ProfileContext may overlay signup edits, but id/name/avatar start here.
+ */
 export const currentUser: User = {
   id: 'u1',
-  name: 'Layla Al-Rashid',
-  username: 'layla.design',
-  avatar: require('../../../assets/images/avatar-default.png'),
+  name: 'Ahmad Bilal',
+  username: 'ahmad.bilal',
+  avatar:
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
   coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=800&h=300&fit=crop',
-  bio: 'UI/UX Designer & Creative Director based in Dubai. Passionate about crafting beautiful digital experiences.',
-  location: 'Dubai, UAE',
-  skills: ['UI Design', 'Figma', 'Branding', 'Motion Design'],
-  followers: 12400,
+  bio: 'Event photographer capturing moments that matter across the region.',
+  location: 'Riyadh, Saudi Arabia',
+  skills: ['Photography', 'Events', 'Retouching', 'Lightroom'],
+  followers: 200,
   following: 890,
   posts: 156,
   isVerified: true,
-  title: 'UI/UX Designer',
-  rating: 4.9,
-  reviewCount: 47,
+  title: 'Event Photographer',
+  rating: 4,
+  reviewCount: 72,
 };
+
+/** Alias — same person as currentUser (no Layla/Ahmad split). */
+export const ownProfileUser: User = currentUser;
 
 export const users: User[] = [
   currentUser,
@@ -167,4 +175,3 @@ export const users: User[] = [
 
 export const getUserById = (id: string): User | undefined =>
   users.find((u) => u.id === id);
-

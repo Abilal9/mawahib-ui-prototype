@@ -3,15 +3,22 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
-import { services } from '../../data/mock/services';
-import { getUserById } from '../../data/mock/users';
-import { ScreenProps } from '../../navigation/types';
+import { catalogService, userService } from '../../services';
+import { RootStackParamList } from '../../navigation/types';
 
-export default function ServicesScreen({ route, navigation }: ScreenProps<'Services'>) {
-  const user = route.params?.userId ? getUserById(route.params.userId) : undefined;
+type Props = {
+  route: { params?: { userId?: string } };
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+};
+
+/** Unregistered in RootNavigator — kept for optional reuse. */
+export default function ServicesScreen({ route, navigation }: Props) {
+  const user = route.params?.userId ? userService.getByIdSync(route.params.userId) : undefined;
+  const services = catalogService.listServices();
   const list = user
     ? services.filter((service) => service.provider.id === user.id)
     : services;
@@ -26,7 +33,10 @@ export default function ServicesScreen({ route, navigation }: ScreenProps<'Servi
         <Text style={styles.headerTitle}>
           {user ? `${user.name.split(' ')[0]}'s Services` : 'Services'}
         </Text>
-        <TouchableOpacity style={styles.backButton}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate('AddProfileService')}
+        >
           <Ionicons name="add" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>

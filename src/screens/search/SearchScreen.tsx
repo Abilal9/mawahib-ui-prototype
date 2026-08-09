@@ -15,9 +15,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { talents, recentSearches } from '../../data/mock/talents';
-import { jobs } from '../../data/mock/jobs';
-import { services } from '../../data/mock/services';
+import { recentSearches } from '../../data/mock/talents';
 import {
   exploreTabs,
   chipsForTab,
@@ -31,12 +29,28 @@ import {
   normalizeExploreTab,
 } from '../../utils/explore';
 import { TabScreenProps } from '../../navigation/types';
-import { Job, Service, Talent, TalentConnectStatus } from '../../data/types';
+import {
+  Job,
+  Service,
+  Talent,
+  TalentConnectStatus,
+  ConnectionRelation,
+} from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useConnections } from '../../context/ConnectionsContext';
+import { catalogService, jobService } from '../../services';
 import { openUserProfile } from '../../utils/openUserProfile';
+
+function relationToConnectStatus(relation: ConnectionRelation): TalentConnectStatus {
+  if (relation === 'connected') return 'added';
+  if (relation === 'outgoing' || relation === 'incoming') return 'request-sent';
+  return 'connect';
+}
 
 export default function SearchScreen({ navigation, route }: TabScreenProps<'SearchTab'>) {
   const { user: me } = useMyProfile();
+  const { getRelation, requestConnect, cancelOutgoing, disconnect, acceptRequest } =
+    useConnections();
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searches, setSearches] = useState(recentSearches);
@@ -46,7 +60,10 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   const [chip, setChip] = useState<string | null>(null);
   const [filters, setFilters] = useState(defaultExploreFilters);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [connectState, setConnectState] = useState<Record<string, TalentConnectStatus>>({});
+
+  const talents = catalogService.listTalents();
+  const jobs = jobService.listSync();
+  const services = catalogService.listServices();
 
   useEffect(() => {
     if (route.params?.contentType) {
@@ -59,15 +76,15 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
 
   const talentResults = useMemo(
     () => filterTalents(talents, query, chip, filters),
-    [query, chip, filters]
+    [talents, query, chip, filters]
   );
   const jobResults = useMemo(
     () => filterJobs(jobs, query, chip, filters),
-    [query, chip, filters]
+    [jobs, query, chip, filters]
   );
   const serviceResults = useMemo(
     () => filterServices(services, query, chip, filters),
-    [query, chip, filters]
+    [services, query, chip, filters]
   );
 
   const results =
@@ -79,11 +96,23 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
 
   const removeSearch = (term: string) => setSearches((prev) => prev.filter((s) => s !== term));
 
-  const cycleConnect = (id: string, current?: TalentConnectStatus) => {
-    const order: TalentConnectStatus[] = ['connect', 'request-sent', 'added'];
-    const start = connectState[id] ?? current ?? 'connect';
-    const next = order[(order.indexOf(start) + 1) % order.length];
-    setConnectState((prev) => ({ ...prev, [id]: next }));
+  const handleConnect = (userId: string) => {
+    const relation = getRelation(userId);
+    if (relation === 'none') {
+      requestConnect(userId);
+      return;
+    }
+    if (relation === 'outgoing') {
+      cancelOutgoing(userId);
+      return;
+    }
+    if (relation === 'incoming') {
+      acceptRequest(userId);
+      return;
+    }
+    if (relation === 'connected') {
+      disconnect(userId);
+    }
   };
 
   return (
@@ -220,9 +249,9 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                 <TalentCard
                   key={talent.id}
                   talent={talent}
-                  connectStatus={connectState[talent.id] ?? talent.connectStatus ?? 'connect'}
+                  connectStatus={relationToConnectStatus(getRelation(talent.user.id))}
                   onPress={() => openUserProfile(navigation, talent.user.id, me.id)}
-                  onConnect={() => cycleConnect(talent.id, talent.connectStatus)}
+                  onConnect={() => handleConnect(talent.user.id)}
                 />
               ))}
 

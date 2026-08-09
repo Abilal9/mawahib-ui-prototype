@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getServiceById } from '../../data/mock/services';
+import { catalogService } from '../../services';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
@@ -16,7 +16,9 @@ const CARDS = [
 
 export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<'ConfirmPayment'>) {
   const { markJobPaid } = useUserJobs();
-  const service = route.params?.serviceId ? getServiceById(route.params.serviceId) : null;
+  const service = route.params?.serviceId
+    ? catalogService.getServiceById(route.params.serviceId)
+    : null;
   const jobId = route.params?.jobId;
   const amount = route.params?.amount ?? service?.price ?? 0;
   const [selectedCard, setSelectedCard] = useState('c1');
@@ -89,10 +91,7 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
         <TouchableOpacity
           style={styles.applePayLink}
           onPress={() => {
-            if (jobId) {
-              markJobPaid(jobId);
-            }
-            navigation.navigate('ApplePay', { amount });
+            navigation.navigate('ApplePay', { amount, jobId });
           }}
         >
           <Text style={styles.applePayText}>Pay with Apple Pay</Text>

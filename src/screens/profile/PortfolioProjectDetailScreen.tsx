@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getVisitorProfileContent } from '../../data/mock/myProfile';
+import { profileService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
@@ -33,7 +33,7 @@ export default function PortfolioProjectDetailScreen({
   const [deleteOpen, setDeleteOpen] = React.useState(false);
 
   const project = isVisitorView
-    ? getVisitorProfileContent(ownerUserId!).portfolio.find(
+    ? profileService.getVisitorContent(ownerUserId!).portfolio.find(
         (p) => p.id === route.params.projectId
       )
     : content.portfolio.find((p) => p.id === route.params.projectId);
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     height: HERO_HEIGHT,
   },
   playOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   thumbImage: { width: '100%', height: '100%' },
   thumbPlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',

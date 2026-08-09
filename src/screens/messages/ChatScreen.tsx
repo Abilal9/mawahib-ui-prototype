@@ -15,15 +15,14 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getConversationById, getMessagesByConversation } from '../../data/mock/messages';
-import { currentUser } from '../../data/mock/users';
+import { messageService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
-  const conversation = getConversationById(route.params.conversationId);
-  const initialMessages = getMessagesByConversation(route.params.conversationId);
+  const conversation = messageService.getConversationById(route.params.conversationId);
+  const initialMessages = messageService.getMessagesSync(route.params.conversationId);
   const { user: me } = useMyProfile();
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState('');
@@ -48,7 +47,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       {
         id: `m${Date.now()}`,
         conversationId: conversation.id,
-        senderId: currentUser.id,
+        senderId: me.id,
         text: text.trim(),
         createdAt: new Date().toISOString(),
         read: true,
@@ -91,7 +90,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
-            const isMe = item.senderId === currentUser.id;
+            const isMe = item.senderId === me.id;
             return (
               <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
                 <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>

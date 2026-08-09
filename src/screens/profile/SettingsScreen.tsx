@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
 const SETTINGS_SECTIONS = [
@@ -44,6 +45,8 @@ const SETTINGS_SECTIONS = [
 
 export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
   const { signOut } = useAuth();
+  const { resetToSeed } = useMyProfile();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   return (
     <ScreenContainer padded={false}>
@@ -99,7 +102,11 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
                     <Text style={styles.rowValue}>{item.value}</Text>
                   )}
                   {'toggle' in item && item.toggle ? (
-                    <Switch value={true} trackColor={{ true: colors.primary }} />
+                    <Switch
+                      value={notificationsEnabled}
+                      onValueChange={setNotificationsEnabled}
+                      trackColor={{ true: colors.primary }}
+                    />
                   ) : (
                     <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                   )}
@@ -114,6 +121,7 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
           activeOpacity={0.8}
           onPress={() => {
             signOut();
+            resetToSeed();
             navigation.reset({
               index: 0,
               routes: [{ name: 'SignIn' }],

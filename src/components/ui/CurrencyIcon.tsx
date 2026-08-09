@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleProp, ViewStyle } from 'react-native';
+import { StyleProp, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { colors } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -16,7 +16,7 @@ const DIRHAM_LOGO = require('../../../assets/images/uae-dirham-symbol.png');
 type Props = {
   size?: number;
   color?: string;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<ImageStyle>;
   /** Override location; defaults to the signed-in user's profile location. */
   location?: string | null;
 };

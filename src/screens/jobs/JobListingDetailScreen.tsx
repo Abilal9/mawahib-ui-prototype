@@ -7,7 +7,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getJobById } from '../../data/mock/jobs';
+import { jobService } from '../../services';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
@@ -16,7 +16,7 @@ export default function JobListingDetailScreen({
   navigation,
 }: ScreenProps<'JobListingDetail'>) {
   const { applyToListing } = useUserJobs();
-  const job = getJobById(route.params.jobId);
+  const job = jobService.getByIdSync(route.params.jobId);
 
   if (!job) {
     return (

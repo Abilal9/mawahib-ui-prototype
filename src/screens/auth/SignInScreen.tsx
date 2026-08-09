@@ -24,8 +24,10 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
   const { useFilledProfile } = useMyProfile();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
 
   const handleLogIn = () => {
+    if (!canSubmit) return;
     useFilledProfile();
     signIn();
     navigation.replace('MainTabs');
@@ -72,7 +74,7 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          <Button title="Log In" onPress={handleLogIn} />
+          <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit} />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />

@@ -5,7 +5,7 @@ import TextInput from '../../components/ui/TextInput';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
-import { ProfileService } from '../../data/mock/myProfile';
+import { ProfileService } from '../../data/types';
 import { ProfileSetupStepProps } from './stepProps';
 
 interface ServiceDraft {

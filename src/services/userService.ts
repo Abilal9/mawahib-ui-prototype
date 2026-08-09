@@ -1,16 +1,34 @@
 import { User } from '../data/types';
-import { users, currentUser, getUserById } from '../data/mock/users';
+import { repositories } from '../repositories';
+
+const repo = repositories.users;
 
 export const userService = {
   async getCurrent(): Promise<User> {
-    return currentUser;
+    return repo.getCurrent();
+  },
+
+  getCurrentSync(): User {
+    return repo.getCurrent();
   },
 
   async list(): Promise<User[]> {
-    return users;
+    return repo.list();
+  },
+
+  listSync(): User[] {
+    return repo.list();
   },
 
   async getById(id: string): Promise<User | undefined> {
-    return getUserById(id);
+    return repo.getById(id);
+  },
+
+  getByIdSync(id: string): User | undefined {
+    return repo.getById(id);
+  },
+
+  resolveProfileUser(userId: string): User | undefined {
+    return repo.resolveProfileUser(userId);
   },
 };

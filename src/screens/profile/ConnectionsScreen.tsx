@@ -14,9 +14,7 @@ import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { getConnectionsForUser } from '../../data/mock/connections';
-import { getUserById } from '../../data/mock/users';
-import { resolveProfileUser } from '../../data/mock/resolveUser';
+import { connectionService, userService } from '../../services';
 import { User } from '../../data/types';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
@@ -36,10 +34,11 @@ export default function ConnectionsScreen({
   );
 
   const viewedUser = viewedUserId
-    ? resolveProfileUser(viewedUserId) ?? getUserById(viewedUserId)
+    ? userService.resolveProfileUser(viewedUserId) ??
+      userService.getByIdSync(viewedUserId)
     : undefined;
   const visitorConnections = useMemo(
-    () => (viewedUserId ? getConnectionsForUser(viewedUserId) : []),
+    () => (viewedUserId ? connectionService.getConnectionsForUser(viewedUserId) : []),
     [viewedUserId]
   );
 

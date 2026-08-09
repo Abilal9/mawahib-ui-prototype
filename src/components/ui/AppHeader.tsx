@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
-import { currentUser } from '../../data/mock/users';
+import { useMyProfile } from '../../context/ProfileContext';
 
 interface AppHeaderProps {
   onAvatarPress?: () => void;
@@ -24,13 +24,14 @@ export default function AppHeader({
   notificationCount = 0,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useMyProfile();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.row}>
         <View style={styles.leftSlot}>
           <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
-            <Image source={toImageSource(currentUser.avatar)} style={styles.avatar} />
+            <Image source={toImageSource(user.avatar)} style={styles.avatar} />
           </TouchableOpacity>
         </View>
 

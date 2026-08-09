@@ -1,8 +1,5 @@
 import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
 import {
-  emptyProfileContent,
-  filledOwnProfile,
-  ownProfileUser,
   ProfileContent,
   ProfileEducation,
   ProfileExperience,
@@ -10,13 +7,13 @@ import {
   ProfileLanguage,
   PortfolioProject,
   ProfileService,
-} from '../data/mock/myProfile';
-import { User } from '../data/types';
+  User,
+} from '../data/types';
+import { profileService } from '../services';
 
 /**
  * Signed-in user's editable profile (bio, portfolio, services, etc.).
- * Service create/edit/delete from AddProfileServiceScreen / ServiceDetailScreen
- * mutate `content.services` here; visitor profiles stay in mock helpers.
+ * Seeded via profileService → mock profile repository.
  */
 
 interface ProfileContextValue {
@@ -49,28 +46,34 @@ interface ProfileContextValue {
   removeService: (serviceId: string) => void;
   /** Remove a post from the owner's profile list (by id). */
   removePostId: (postId: string) => void;
+  /** Append a newly created post id to the owner's profile list. */
+  addPostId: (postId: string) => void;
+  resetToSeed: () => void;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
+const seedUser = () => profileService.getSeedUser();
+const seedFilled = () => profileService.getFilledContent();
+const seedEmpty = () => profileService.getEmptyContent();
+
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  // Own profile starts filled to match Figma Profile Setup Full screenshots
-  const [content, setContent] = useState<ProfileContent>(filledOwnProfile);
-  const [user, setUser] = useState<User>(ownProfileUser);
+  const [content, setContent] = useState<ProfileContent>(seedFilled);
+  const [user, setUser] = useState<User>(seedUser);
 
   const value = useMemo<ProfileContextValue>(
     () => ({
       user,
       content,
-      useEmptyProfile: () => setContent(emptyProfileContent),
+      useEmptyProfile: () => setContent(seedEmpty()),
       useFilledProfile: () => {
-        setContent(filledOwnProfile);
-        setUser(ownProfileUser);
+        setContent(seedFilled());
+        setUser(seedUser());
       },
       applySignupProfile: ({ name, location }) => {
-        setContent(emptyProfileContent);
+        setContent(seedEmpty());
         setUser({
-          ...ownProfileUser,
+          ...seedUser(),
           name,
           location,
           title: '',
@@ -110,13 +113,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       addService: (service) =>
         setContent((prev) => ({ ...prev, services: [service, ...prev.services] })),
       setServices: (services) => setContent((prev) => ({ ...prev, services })),
-      /** Full replacement by id — wizard republishes the whole ProfileService object. */
       updateService: (serviceId, service) =>
         setContent((prev) => ({
           ...prev,
           services: prev.services.map((s) => (s.id === serviceId ? service : s)),
         })),
-      /** Used by ServiceDetail delete confirm; removes from the owner's list only. */
       removeService: (serviceId) =>
         setContent((prev) => ({
           ...prev,
@@ -127,6 +128,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           ...prev,
           postIds: prev.postIds.filter((id) => id !== postId),
         })),
+      addPostId: (postId) =>
+        setContent((prev) => ({
+          ...prev,
+          postIds: [postId, ...prev.postIds],
+        })),
+      resetToSeed: () => {
+        setContent(seedFilled());
+        setUser(seedUser());
+      },
     }),
     [content, user]
   );

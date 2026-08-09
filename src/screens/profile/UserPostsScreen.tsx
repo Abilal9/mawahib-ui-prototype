@@ -13,9 +13,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { posts } from '../../data/mock/posts';
-import { getUserById } from '../../data/mock/users';
+import { usePosts } from '../../context/PostsContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { userService } from '../../services';
 import { Post } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
@@ -35,9 +35,10 @@ export default function UserPostsScreen({
 }: ScreenProps<'UserPosts'>) {
   const insets = useSafeAreaInsets();
   const { user: me, content } = useMyProfile();
+  const { posts } = usePosts();
   const userId = route.params?.userId;
   const isOwn = !userId || userId === me.id;
-  const profileUser = isOwn ? me : getUserById(userId!);
+  const profileUser = isOwn ? me : userService.getByIdSync(userId!);
 
   const userPosts = useMemo(() => {
     if (isOwn) {
@@ -46,7 +47,7 @@ export default function UserPostsScreen({
         .filter((p): p is Post => Boolean(p));
     }
     return posts.filter((p) => p.author.id === userId);
-  }, [isOwn, content.postIds, userId]);
+  }, [isOwn, content.postIds, userId, posts]);
 
   const title = profileUser
     ? isOwn

@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getStoryById } from '../../data/mock/stories';
+import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
@@ -14,7 +14,7 @@ import { ScreenProps } from '../../navigation/types';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function StoryViewerScreen({ route, navigation }: ScreenProps<'StoryViewer'>) {
-  const story = getStoryById(route.params.storyId);
+  const story = catalogService.getStoryById(route.params.storyId);
   const { user: me } = useMyProfile();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);

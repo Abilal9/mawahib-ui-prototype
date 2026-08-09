@@ -1,5 +1,12 @@
 import { User } from './index';
 
+/**
+ * In-app work engagement statuses.
+ *
+ * Terminal success: prefer `completed` for both sent & received.
+ * `done` is treated as an alias of `completed` (seed data / filters accept both).
+ * `sent` is a legacy label; prefer statusLabel + type for display.
+ */
 export type UserJobStatus =
   | 'pending'
   | 'sent-for-review'
@@ -10,6 +17,13 @@ export type UserJobStatus =
   | 'completed'
   | 'declined'
   | 'sent';
+
+/** Statuses that mean the engagement finished successfully */
+export const COMPLETED_USER_JOB_STATUSES: UserJobStatus[] = ['done', 'completed'];
+
+export function isCompletedStatus(status: UserJobStatus): boolean {
+  return status === 'done' || status === 'completed';
+}
 
 export interface UserJobAddon {
   name: string;
@@ -58,6 +72,12 @@ export interface UserJob {
   reviewText?: string;
   reviewImages?: string[];
 }
+
+/**
+ * Application to a JobListing — UserJob with type:'sent' and status:'pending'
+ * (or later statuses as the lifecycle advances).
+ */
+export type JobApplication = UserJob;
 
 /** Fill in missing detail fields for the request detail screen */
 export function resolveJobDetails(job: UserJob): UserJobDetails {

@@ -4,10 +4,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
+import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
 export default function ApplePayScreen({ route, navigation }: ScreenProps<'ApplePay'>) {
   const amount = route.params?.amount ?? 0;
+  const jobId = route.params?.jobId;
+  const { markJobPaid } = useUserJobs();
+
+  const completePay = () => {
+    if (jobId) {
+      markJobPaid(jobId);
+      navigation.replace('JobInProgress', { jobId });
+      return;
+    }
+    navigation.goBack();
+  };
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.overlay}>
@@ -34,7 +46,7 @@ export default function ApplePayScreen({ route, navigation }: ScreenProps<'Apple
           <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
         </View>
 
-        <TouchableOpacity style={styles.applePayButton} activeOpacity={0.8} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.applePayButton} activeOpacity={0.8} onPress={completePay}>
           <Ionicons name="logo-apple" size={22} color={colors.white} />
           <Text style={styles.applePayText}>Pay</Text>
         </TouchableOpacity>

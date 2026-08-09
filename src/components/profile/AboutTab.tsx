@@ -10,7 +10,7 @@ import {
   ProfileContent,
   TALENT_CHIP_STYLES,
   isAboutSectionFilled,
-} from '../../data/mock/myProfile';
+} from '../../data/types';
 
 /** Display-only preview length (~2–3 lines on typical phone widths). */
 const BIO_PREVIEW_CHARS = 150;

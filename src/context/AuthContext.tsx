@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = () => {
     setIsSignedIn(false);
     setSignUpBasics(null);
+    setAccountType(null);
   };
 
   return (

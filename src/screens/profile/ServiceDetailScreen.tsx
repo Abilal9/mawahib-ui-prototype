@@ -17,9 +17,7 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getServiceById } from '../../data/mock/services';
-import { getVisitorProfileContent } from '../../data/mock/myProfile';
-import { resolveProfileUser } from '../../data/mock/resolveUser';
+import { catalogService, profileService, userService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
@@ -33,15 +31,15 @@ import { ScreenProps } from '../../navigation/types';
  * Currency icons use the service owner's location (visitor/catalog) or the signed-in user (own).
  */
 export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'ServiceDetail'>) {
-  const catalogService = getServiceById(route.params.serviceId);
+  const catalogListing = catalogService.getServiceById(route.params.serviceId);
   const ownerUserId = route.params.userId;
   const isVisitorView = Boolean(ownerUserId);
   const { user: me, content, removeService } = useMyProfile();
-  const owner = ownerUserId ? resolveProfileUser(ownerUserId) : undefined;
+  const owner = ownerUserId ? userService.resolveProfileUser(ownerUserId) : undefined;
 
   // Prefer profile-shaped services (packages/addons); fall back to catalog below if missing.
-  const profileService = isVisitorView
-    ? getVisitorProfileContent(ownerUserId!).services.find(
+  const profileOffering = isVisitorView
+    ? profileService.getVisitorContent(ownerUserId!).services.find(
         (s) => s.id === route.params.serviceId
       )
     : content.services.find((s) => s.id === route.params.serviceId);
@@ -51,7 +49,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   const [activePackage, setActivePackage] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  if (!catalogService && !profileService) {
+  if (!catalogListing && !profileOffering) {
     return (
       <ScreenContainer>
         <View style={styles.missingWrap}>
@@ -64,9 +62,9 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
     );
   }
 
-  const pkg = profileService?.packages[activePackage];
+  const pkg = profileOffering?.packages[activePackage];
 
-  if (profileService) {
+  if (profileOffering) {
     return (
       <ScreenContainer padded={false}>
         <StatusBar style="dark" />
@@ -79,7 +77,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
         >
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: profileService.images[0] }}
+              source={{ uri: profileOffering.images[0] }}
               style={styles.heroImage}
               contentFit="cover"
             />
@@ -90,14 +88,14 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
           <View style={styles.content}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{profileService.title}</Text>
+              <Text style={styles.title}>{profileOffering.title}</Text>
               {!isVisitorView ? (
                 <View style={styles.ownerActions}>
                   <TouchableOpacity
                     hitSlop={8}
                     onPress={() =>
                       navigation.navigate('AddProfileService', {
-                        serviceId: profileService.id,
+                        serviceId: profileOffering.id,
                       })
                     }
                   >
@@ -109,12 +107,12 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                 </View>
               ) : null}
             </View>
-            <Text style={styles.description}>{profileService.description}</Text>
+            <Text style={styles.description}>{profileOffering.description}</Text>
           </View>
 
           <View style={styles.stickyTabsShell}>
             <View style={styles.packageTabs}>
-              {profileService.packages.map((item, index) => (
+              {profileOffering.packages.map((item, index) => (
                 <TouchableOpacity
                   key={item.name}
                   style={[styles.packageTab, activePackage === index && styles.packageTabActive]}
@@ -162,10 +160,10 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
               </View>
             ) : null}
 
-            {profileService.addons?.length ? (
+            {profileOffering.addons?.length ? (
               <>
                 <Text style={styles.sectionTitle}>Add-ons:</Text>
-                {profileService.addons.map((addon) => (
+                {profileOffering.addons.map((addon) => (
                   <View key={addon.id} style={styles.addonRow}>
                     <Text style={styles.addonTitle}>{addon.title}</Text>
                     <View style={styles.addonPriceRow}>
@@ -193,7 +191,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
               onPress={() =>
                 navigation.navigate('RequestService', {
                   userId: ownerUserId!,
-                  serviceId: profileService.id,
+                  serviceId: profileOffering.id,
                   packageName: pkg?.name,
                 })
               }
@@ -211,12 +209,12 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
             <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
               <Text style={styles.modalTitle}>Delete service?</Text>
               <Text style={styles.modalBody}>
-                Are you sure you want to delete “{profileService.title}”? This can’t be undone.
+                Are you sure you want to delete “{profileOffering.title}”? This can’t be undone.
               </Text>
               <TouchableOpacity
                 style={styles.modalDangerBtn}
                 onPress={() => {
-                  removeService(profileService.id);
+                  removeService(profileOffering.id);
                   setDeleteOpen(false);
                   navigation.goBack();
                 }}
@@ -238,7 +236,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
     );
   }
 
-  const service = catalogService!;
+  const service = catalogListing!;
   const providerLocation = service.provider.location;
 
   return (

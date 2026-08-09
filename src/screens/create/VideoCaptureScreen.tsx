@@ -4,9 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, typography } from '../../theme';
-import { ScreenProps } from '../../navigation/types';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 
-export default function VideoCaptureScreen({ navigation }: ScreenProps<'VideoCapture'>) {
+/** Unregistered orphan — kept for later story/video capture wiring. */
+export default function VideoCaptureScreen({
+  navigation,
+}: {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+}) {
   const [recording, setRecording] = useState(false);
 
   return (

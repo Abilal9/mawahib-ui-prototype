@@ -14,6 +14,8 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
+import { usePosts } from '../../context/PostsContext';
+import { useMyProfile } from '../../context/ProfileContext';
 
 const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop',
@@ -21,8 +23,17 @@ const PLACEHOLDER_IMAGES = [
 ];
 
 export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate'>) {
+  const { createPost } = usePosts();
+  const { user, addPostId } = useMyProfile();
   const [caption, setCaption] = useState('');
   const [media, setMedia] = useState(PLACEHOLDER_IMAGES);
+
+  const handlePost = () => {
+    if (!caption.trim()) return;
+    const post = createPost(user, caption.trim(), media);
+    addPostId(post.id);
+    navigation.goBack();
+  };
 
   return (
     <ScreenContainer padded={false}>
@@ -32,7 +43,7 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
           <Text style={styles.cancelBtn}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Post</Text>
-        <Button title="Post" size="sm" onPress={() => navigation.goBack()} disabled={!caption.trim()} />
+        <Button title="Post" size="sm" onPress={handlePost} disabled={!caption.trim()} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>

@@ -1,88 +1,34 @@
-import { User } from '../types';
-import { currentUser, users } from './users';
+/**
+ * Mock seed data for the signed-in user's profile content.
+ * Domain types live in src/data/types/profile.ts — re-exported here for compatibility.
+ */
+import { User, ProfileContent } from '../types';
+import { currentUser, ownProfileUser, users } from './users';
 
-export type ProfileTab = 'About' | 'Portfolio' | 'Services' | 'Posts';
+export type {
+  ProfileTab,
+  ProfileLanguage,
+  ProfileEducation,
+  ProfileExperience,
+  ProfileCertification,
+  PortfolioProject,
+  ServicePackage,
+  ServiceAddon,
+  ServiceOffering,
+  ProfileService,
+  ProfileContent,
+  AboutSectionKey,
+} from '../types/profile';
 
-export interface ProfileLanguage {
-  id: string;
-  name: string;
-  level: string;
-  flag: string;
-}
+export {
+  ABOUT_SECTION_KEYS,
+  ABOUT_SECTION_LABELS,
+  ABOUT_SECTION_ADD_LABELS,
+  isAboutSectionFilled,
+  TALENT_CHIP_STYLES,
+} from '../types/profile';
 
-export interface ProfileEducation {
-  id: string;
-  school: string;
-  degree: string;
-  field: string;
-  years: string;
-  gpa?: string;
-  description?: string;
-  logoColor?: string;
-}
-
-export interface ProfileExperience {
-  id: string;
-  title: string;
-  company: string;
-  type: string;
-  years: string;
-  description: string;
-  logoColor?: string;
-  logoInitials?: string;
-}
-
-export interface ProfileCertification {
-  id: string;
-  name: string;
-  org: string;
-  year: string;
-}
-
-export interface PortfolioProject {
-  id: string;
-  title: string;
-  description: string;
-  images: string[];
-  hasVideo?: boolean;
-  videoIndex?: number;
-}
-
-export interface ServicePackage {
-  name: 'Basic' | 'Standard' | 'Premium';
-  priceLabel: string;
-  delivery: string;
-  includes: string[];
-}
-
-export interface ServiceAddon {
-  id: string;
-  title: string;
-  priceLabel: string;
-}
-
-export interface ProfileService {
-  id: string;
-  title: string;
-  description: string;
-  rating: number;
-  reviewCount: number;
-  images: string[];
-  packages: ServicePackage[];
-  addons?: ServiceAddon[];
-}
-
-export interface ProfileContent {
-  bio: string;
-  languages: ProfileLanguage[];
-  talents: string[];
-  education: ProfileEducation[];
-  experience: ProfileExperience[];
-  certifications: ProfileCertification[];
-  portfolio: PortfolioProject[];
-  services: ProfileService[];
-  postIds: string[];
-}
+export { ownProfileUser };
 
 export const emptyProfileContent: ProfileContent = {
   bio: '',
@@ -382,55 +328,6 @@ export const filledOwnProfile: ProfileContent = {
   postIds: ['p-own-1', 'p-own-2', 'p-own-3'],
 };
 
-export const ownProfileUser: User = {
-  ...currentUser,
-  name: 'Ahmad Bilal',
-  username: 'ahmad.bilal',
-  title: 'Event Photographer',
-  location: 'Riyadh, Saudi Arabia',
-  rating: 4,
-  reviewCount: 72,
-  followers: 200,
-  isVerified: true,
-  avatar:
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
-};
-
-export const ABOUT_SECTION_KEYS = [
-  'bio',
-  'languages',
-  'talents',
-  'education',
-  'experience',
-  'certifications',
-] as const;
-
-export type AboutSectionKey = (typeof ABOUT_SECTION_KEYS)[number];
-
-export const ABOUT_SECTION_LABELS: Record<AboutSectionKey, string> = {
-  bio: 'Bio',
-  languages: 'Languages',
-  talents: 'Talents',
-  education: 'Education',
-  experience: 'Experience',
-  certifications: 'Certifications',
-};
-
-/** Empty-state CTA copy for own profile About sections */
-export const ABOUT_SECTION_ADD_LABELS: Record<AboutSectionKey, string> = {
-  bio: 'Add a bio',
-  languages: 'Add languages',
-  talents: 'Add talents',
-  education: 'Add education',
-  experience: 'Add experience',
-  certifications: 'Add certifications',
-};
-
-export function isAboutSectionFilled(content: ProfileContent, key: AboutSectionKey) {
-  if (key === 'bio') return content.bio.trim().length > 0;
-  return (content[key] as unknown[]).length > 0;
-}
-
 export function getVisitorProfileContent(userId: string): ProfileContent {
   const user = users.find((u) => u.id === userId);
   return {
@@ -443,12 +340,7 @@ export function getVisitorProfileContent(userId: string): ProfileContent {
   };
 }
 
-export const TALENT_CHIP_STYLES = [
-  { bg: '#FCE7F3', text: '#BE185D' },
-  { bg: '#DCFCE7', text: '#15803D' },
-  { bg: '#FEF3C7', text: '#A16207' },
-  { bg: '#DBEAFE', text: '#1D4ED8' },
-  { bg: '#FCE7F3', text: '#BE185D' },
-  { bg: '#DCFCE7', text: '#15803D' },
-  { bg: '#FEF3C7', text: '#A16207' },
-];
+/** @deprecated Use currentUser / ownProfileUser from users — kept for seed identity checks */
+export function getSeedProfileUser(): User {
+  return currentUser;
+}

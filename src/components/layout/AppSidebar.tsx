@@ -19,6 +19,7 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useAuth } from '../../context/AuthContext';
 import { RootStackParamList } from '../../navigation/types';
 
 const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.82;
@@ -53,7 +54,8 @@ const FOOTER_LINKS: {
 
 export default function AppSidebar() {
   const { isOpen, close } = useSidebar();
-  const { user } = useMyProfile();
+  const { user, resetToSeed } = useMyProfile();
+  const { signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
@@ -100,6 +102,8 @@ export default function AppSidebar() {
 
   const handleLogout = () => {
     close();
+    signOut();
+    resetToSeed();
     setTimeout(() => {
       navigation.reset({
         index: 0,

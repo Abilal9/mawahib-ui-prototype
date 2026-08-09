@@ -2,11 +2,14 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+/** Explore tabs — aligns with SearchScreen / explore utils (no legacy all/posts). */
+export type SearchContentType = 'talents' | 'jobs' | 'services';
+
 export type MainTabParamList = {
   HomeTab: undefined;
   SearchTab:
     | {
-        contentType?: 'talents' | 'jobs' | 'services' | 'all' | 'posts';
+        contentType?: SearchContentType;
         category?: string;
       }
     | undefined;
@@ -37,26 +40,16 @@ export type RootStackParamList = {
   JobListingDetail: { jobId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
-  ProfileSetupStep1: undefined;
-  ProfileSetupStep2: undefined;
-  ProfileSetupStep3: undefined;
-  ProfileSetupStep4: undefined;
-  ProfileSetupStep5: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  ExploreEmpty: undefined;
   Notifications: undefined;
   PostDetail: { postId: string; focusComments?: boolean };
   UserPosts: { userId?: string } | undefined;
-  CreateMenu: undefined;
   PostCreate: undefined;
   PhotoCapture: undefined;
-  VideoCapture: undefined;
   PhotoEdit: { uri?: string };
   VideoEdit: { uri?: string };
   VideoTrim: { uri?: string };
   Chat: { conversationId: string };
-  Portfolio: { userId?: string };
-  Services: { userId?: string };
   ServiceDetail: { serviceId: string; userId?: string };
   RequestService: {
     userId: string;
@@ -74,7 +67,7 @@ export type RootStackParamList = {
   JobInProgress: { jobId: string };
   WriteReview: { jobId: string; initialRating?: number };
   ConfirmPayment: { serviceId?: string; amount?: number; jobId?: string };
-  ApplePay: { amount?: number };
+  ApplePay: { amount?: number; jobId?: string };
   ScanCard: undefined;
   StoryViewer: { storyId: string };
   FullPhotoPreview: { images: string[]; initialIndex?: number };

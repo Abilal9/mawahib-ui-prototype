@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { User } from '../data/types';
-import { users, currentUser } from '../data/mock/users';
-import { conversations } from '../data/mock/messages';
+import { User, ConnectionRelation } from '../data/types';
+import { connectionService, userService } from '../services';
 
-export type ConnectionRelation = 'none' | 'outgoing' | 'incoming' | 'connected';
+export type { ConnectionRelation };
 
 interface ConnectionsContextValue {
   connectedIds: string[];
@@ -24,18 +23,16 @@ interface ConnectionsContextValue {
 
 const ConnectionsContext = createContext<ConnectionsContextValue | undefined>(undefined);
 
-function userById(id: string) {
-  return users.find((u) => u.id === id);
+function selfId() {
+  return userService.getCurrentSync().id;
 }
 
-/** Seed: a couple of chat partners are already connected */
-const SEED_CONNECTED = conversations.slice(0, 2).map((c) => c.participant.id);
+function userById(id: string) {
+  return userService.getByIdSync(id);
+}
 
-/** Seed: pending incoming connection requests */
-const SEED_INCOMING = users
-  .filter((u) => u.id !== currentUser.id && !SEED_CONNECTED.includes(u.id))
-  .slice(0, 3)
-  .map((u) => u.id);
+const SEED_CONNECTED = connectionService.getSeedConnectedIds();
+const SEED_INCOMING = connectionService.getSeedIncomingIds(selfId(), SEED_CONNECTED);
 
 export function ConnectionsProvider({ children }: { children: React.ReactNode }) {
   const [connectedIds, setConnectedIds] = useState<string[]>(SEED_CONNECTED);
@@ -43,8 +40,10 @@ export function ConnectionsProvider({ children }: { children: React.ReactNode })
   const [incomingIds, setIncomingIds] = useState<string[]>(SEED_INCOMING);
 
   const value = useMemo<ConnectionsContextValue>(() => {
+    const me = selfId();
+
     const getRelation = (userId: string): ConnectionRelation => {
-      if (userId === currentUser.id) return 'connected';
+      if (userId === me) return 'connected';
       if (connectedIds.includes(userId)) return 'connected';
       if (outgoingIds.includes(userId)) return 'outgoing';
       if (incomingIds.includes(userId)) return 'incoming';
@@ -64,7 +63,7 @@ export function ConnectionsProvider({ children }: { children: React.ReactNode })
       getRelation,
       isConnected: (userId) => getRelation(userId) === 'connected',
       requestConnect: (userId) => {
-        if (userId === currentUser.id) return;
+        if (userId === me) return;
         setConnectedIds((prev) => prev.filter((id) => id !== userId));
         setIncomingIds((prev) => prev.filter((id) => id !== userId));
         setOutgoingIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
@@ -85,8 +84,7 @@ export function ConnectionsProvider({ children }: { children: React.ReactNode })
         setOutgoingIds((prev) => prev.filter((id) => id !== userId));
         setIncomingIds((prev) => prev.filter((id) => id !== userId));
       },
-      getConversationId: (userId) =>
-        conversations.find((c) => c.participant.id === userId)?.id,
+      getConversationId: (userId) => connectionService.getConversationId(userId),
     };
   }, [connectedIds, outgoingIds, incomingIds]);
 

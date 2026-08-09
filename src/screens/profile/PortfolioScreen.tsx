@@ -3,17 +3,25 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from '
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { posts } from '../../data/mock/posts';
-import { getUserById } from '../../data/mock/users';
-import { ScreenProps } from '../../navigation/types';
+import { usePosts } from '../../context/PostsContext';
+import { userService } from '../../services';
+import { RootStackParamList } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_SIZE = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm) / 2;
 
-export default function PortfolioScreen({ route, navigation }: ScreenProps<'Portfolio'>) {
-  const user = route.params?.userId ? getUserById(route.params.userId) : undefined;
+type Props = {
+  route: { params?: { userId?: string } };
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+};
+
+/** Unregistered in RootNavigator — kept for optional reuse. */
+export default function PortfolioScreen({ route, navigation }: Props) {
+  const { posts } = usePosts();
+  const user = route.params?.userId ? userService.getByIdSync(route.params.userId) : undefined;
   const portfolioItems = posts
     .filter((post) => (user ? post.author.id === user.id : true))
     .flatMap((p) => p.images.map((img, i) => ({ id: `${p.id}-${i}`, uri: img, postId: p.id })));

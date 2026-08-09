@@ -27,17 +27,16 @@ import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getUserById } from '../../data/mock/users';
-import { resolveProfileUser } from '../../data/mock/resolveUser';
-import { posts } from '../../data/mock/posts';
-import { talents } from '../../data/mock/talents';
-import {
-  getVisitorProfileContent,
-  ProfileTab,
-} from '../../data/mock/myProfile';
+import { ProfileTab } from '../../data/types';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { getConnectionsForUser } from '../../data/mock/connections';
+import { usePosts } from '../../context/PostsContext';
+import {
+  userService,
+  profileService,
+  catalogService,
+  connectionService,
+} from '../../services';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -60,8 +59,13 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     getConversationId,
   } = useConnections();
   const { user: me } = useMyProfile();
-  const user = resolveProfileUser(route.params.userId) ?? getUserById(route.params.userId);
-  const talent = talents.find((t) => t.user.id === route.params.userId);
+  const { posts } = usePosts();
+  const user =
+    userService.resolveProfileUser(route.params.userId) ??
+    userService.getByIdSync(route.params.userId);
+  const talent = catalogService
+    .listTalents()
+    .find((t) => t.user.id === route.params.userId);
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
@@ -95,7 +99,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   }
 
   const relation = getRelation(user.id);
-  const content = getVisitorProfileContent(user.id);
+  const content = profileService.getVisitorContent(user.id);
   const profileUser = {
     ...user,
     title: user.title ?? talent?.category ?? 'Creative Professional',
@@ -103,7 +107,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     reviewCount: talent?.reviewCount ?? user.reviewCount ?? 24,
   };
   const userPosts = posts.filter((p) => p.author.id === user.id);
-  const visitorConnectionCount = getConnectionsForUser(user.id).length;
+  const visitorConnectionCount = connectionService.getConnectionsForUser(user.id).length;
 
   const onConnectPress = () => {
     if (relation === 'none') {

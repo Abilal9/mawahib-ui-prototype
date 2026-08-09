@@ -89,7 +89,14 @@ function parseSlashDate(value: string): Date | null {
 }
 
 export default function JobInProgressScreen({ route, navigation }: ScreenProps<'JobInProgress'>) {
-  const { getJobById, acceptJob, declineJob, requestEdits } = useUserJobs();
+  const {
+    getJobById,
+    acceptJob,
+    declineJob,
+    requestEdits,
+    markJobCompleted,
+    acceptAfterReview,
+  } = useUserJobs();
   const { user: me } = useMyProfile();
   const userJob = getJobById(route.params.jobId);
   const details = userJob ? resolveJobDetails(userJob) : null;
@@ -98,6 +105,9 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
     userJob?.type === 'received' && userJob.status === 'pending';
   /** Client pays after provider accepts (or seed pending-payment jobs). */
   const canPay = userJob?.status === 'pending-payment';
+  const canComplete = userJob?.status === 'in-progress';
+  const canAcceptAfterReview =
+    userJob?.type === 'received' && userJob.status === 'sent-for-review';
 
   const [declineOpen, setDeclineOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
@@ -382,6 +392,46 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
                 amount: totalPrice > 0 ? totalPrice : undefined,
               })
             }
+            fullWidth
+          />
+        </View>
+      ) : null}
+
+      {canAcceptAfterReview && userJob ? (
+        <View style={styles.footer}>
+          <Button
+            title="Accept changes"
+            onPress={() => {
+              acceptAfterReview(userJob.id);
+              navigation.goBack();
+            }}
+            fullWidth
+          />
+          <View style={styles.secondaryActions}>
+            <Button
+              title="Request Edits"
+              variant="secondary"
+              onPress={openEdits}
+              style={styles.halfBtn}
+            />
+            <Button
+              title="Decline"
+              variant="secondary"
+              onPress={() => setDeclineOpen(true)}
+              style={styles.halfBtn}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {canComplete && userJob ? (
+        <View style={styles.footer}>
+          <Button
+            title="Mark as completed"
+            onPress={() => {
+              markJobCompleted(userJob.id);
+              navigation.goBack();
+            }}
             fullWidth
           />
         </View>

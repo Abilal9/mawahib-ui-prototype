@@ -19,7 +19,7 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import ReorderableMediaGrid from '../../components/ui/ReorderableMediaGrid';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
-import { ServicePackage } from '../../data/mock/myProfile';
+import { ServicePackage } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
 /**

@@ -19,6 +19,7 @@ import { UserJob } from '../../data/types/userJobs';
 import { TabScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useAuth } from '../../context/AuthContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 
 type JobsTab = 'received' | 'sent';
@@ -84,6 +85,7 @@ function getStatusTone(status: UserJob['status']) {
     case 'in-progress':
       return { bg: '#DBEAFE', text: '#1D4ED8' };
     case 'done':
+    case 'completed':
       return { bg: '#DCFCE7', text: '#15803D' };
     default:
       return { bg: '#EEF2F6', text: colors.textSecondary };
@@ -208,7 +210,11 @@ function JobFlowCard({
 export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
   const { jobs: userJobs } = useUserJobs();
   const { user: me } = useMyProfile();
-  const [activeTab, setActiveTab] = useState<JobsTab>('received');
+  const { accountType } = useAuth();
+  /** Business defaults to sent (post/request); talent to received (apply/incoming). */
+  const [activeTab, setActiveTab] = useState<JobsTab>(
+    accountType === 'business' ? 'sent' : 'received'
+  );
   const [activeReceivedSection, setActiveReceivedSection] = useState(0);
   const [activeSentSection, setActiveSentSection] = useState(0);
   const [sortOpen, setSortOpen] = useState(false);

@@ -7,11 +7,13 @@ import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
+import { useUserJobs } from '../../context/UserJobsContext';
 
 const JOB_TYPES = ['full-time', 'part-time', 'contract', 'freelance'] as const;
 const TOTAL_STEPS = 3;
 
 export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJob'>) {
+  const { createPostedJob } = useUserJobs();
   const step = route.params?.step ?? 1;
   const [title, setTitle] = useState('');
   const [type, setType] = useState<typeof JOB_TYPES[number]>('full-time');
@@ -20,8 +22,18 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   const [description, setDescription] = useState('');
 
   const goNext = () => {
-    if (step < TOTAL_STEPS) navigation.navigate('PostJob', { step: step + 1 });
-    else navigation.goBack();
+    if (step < TOTAL_STEPS) {
+      navigation.navigate('PostJob', { step: step + 1 });
+      return;
+    }
+    createPostedJob({
+      title,
+      description,
+      location,
+      budget: salary,
+      jobType: type,
+    });
+    navigation.navigate('MainTabs', { screen: 'JobsTab' });
   };
 
   return (

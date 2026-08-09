@@ -1,13 +1,12 @@
 import { Post } from '../types';
-import { users } from './users';
-import { ownProfileUser } from './myProfile';
+import { currentUser, users } from './users';
 
 const karen = users.find((u) => u.id === 'u-karen')!;
 
 export const posts: Post[] = [
   {
     id: 'p-own-1',
-    author: ownProfileUser,
+    author: currentUser,
     caption:
       'Behind the scenes from last weekend’s event — natural light and candid moments.',
     images: [
@@ -24,7 +23,7 @@ export const posts: Post[] = [
   },
   {
     id: 'p-own-2',
-    author: ownProfileUser,
+    author: currentUser,
     caption: 'Studio portraits with soft gels. Love how the tones came out.',
     images: [
       'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&h=600&fit=crop',
@@ -41,7 +40,7 @@ export const posts: Post[] = [
   },
   {
     id: 'p-own-3',
-    author: ownProfileUser,
+    author: currentUser,
     caption: 'Quick edit pass on a corporate headshot series.',
     images: [
       'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&h=600&fit=crop',

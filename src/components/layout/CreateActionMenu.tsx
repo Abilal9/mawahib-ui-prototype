@@ -16,15 +16,18 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useCreateMenu } from '../../context/CreateMenuContext';
+import { useAuth } from '../../context/AuthContext';
 import { RootStackParamList } from '../../navigation/types';
 
-const MENU_ITEMS: {
+type MenuItem = {
   id: 'post' | 'story' | 'job';
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   color: string;
   offset: { x: number; y: number };
-}[] = [
+};
+
+const BASE_ITEMS: MenuItem[] = [
   {
     id: 'post',
     icon: 'images-outline',
@@ -48,14 +51,35 @@ const MENU_ITEMS: {
   },
 ];
 
+/** Soft account-type emphasis: business leads with Post Job; talent with Post. */
+function menuItemsForAccount(accountType: 'talent' | 'business' | null): MenuItem[] {
+  const jobLabel = accountType === 'business' ? 'Post Job' : 'Job';
+  const items = BASE_ITEMS.map((item) =>
+    item.id === 'job' ? { ...item, label: jobLabel } : item
+  );
+  if (accountType === 'business') {
+    const job = items.find((i) => i.id === 'job')!;
+    const rest = items.filter((i) => i.id !== 'job');
+    // Reassign fan-out positions: job leftmost for business emphasis
+    return [
+      { ...job, offset: { x: -118, y: -86 } },
+      { ...rest[1], offset: { x: 0, y: -112 } },
+      { ...rest[0], offset: { x: 118, y: -86 } },
+    ];
+  }
+  return items;
+}
+
 const TAB_BAR_HEIGHT = 60;
 
 export default function CreateActionMenu() {
   const { isOpen, close } = useCreateMenu();
+  const { accountType } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const expandAnim = useRef(new Animated.Value(0)).current;
+  const MENU_ITEMS = menuItemsForAccount(accountType);
 
   useEffect(() => {
     if (isOpen) {
@@ -71,7 +95,7 @@ export default function CreateActionMenu() {
     }
   }, [isOpen, fadeAnim, expandAnim]);
 
-  const handleSelect = (item: (typeof MENU_ITEMS)[number]) => {
+  const handleSelect = (item: MenuItem) => {
     close();
     setTimeout(() => {
       if (item.id === 'post') navigation.navigate('PostCreate');

@@ -19,21 +19,22 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getPostById } from '../../data/mock/posts';
 import { Comment } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
+import { usePosts } from '../../context/PostsContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const MOCK_COMMENTS: Comment[] = [
+const SEED_COMMENTS: Comment[] = [
   { id: 'c1', userId: 'u2', user: 'Omar Hassan', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop', text: 'This is absolutely stunning! 🔥', time: '2h ago' },
   { id: 'c2', userId: 'u3', user: 'Fatima Al-Zahra', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop', text: 'Love the color palette you used here', time: '4h ago' },
   { id: 'c3', userId: 'u-khalid', user: 'Khalid Mansour', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: 'Would love to collaborate on something similar', time: '6h ago' },
 ];
 
 export default function PostDetailScreen({ route, navigation }: ScreenProps<'PostDetail'>) {
+  const { getPostById, getComments, addComment } = usePosts();
   const post = getPostById(route.params.postId);
   const focusComments = route.params.focusComments === true;
   const { user, removePostId } = useMyProfile();
@@ -41,6 +42,10 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
   const commentsY = useRef(0);
   const [activeImage, setActiveImage] = useState(0);
   const [comment, setComment] = useState('');
+  const [comments, setComments] = useState<Comment[]>(() => {
+    const stored = getComments(route.params.postId);
+    return stored.length > 0 ? stored : SEED_COMMENTS;
+  });
   const [liked, setLiked] = useState(post?.isLiked ?? false);
   const [likeCount, setLikeCount] = useState(post?.likes ?? 0);
   const [saved, setSaved] = useState(post?.isSaved ?? false);
@@ -204,7 +209,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           }}
         >
           <Text style={styles.commentsTitle}>Comments</Text>
-          {MOCK_COMMENTS.map((c) => (
+          {comments.map((c) => (
             <View key={c.id} style={styles.comment}>
               <TouchableOpacity
                 onPress={() => openUserProfile(navigation, c.userId, user.id)}
@@ -230,7 +235,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
 
       <View style={styles.inputBar}>
         <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop' }}
+          source={toImageSource(user.avatar)}
           style={styles.inputAvatar}
           contentFit="cover"
         />
@@ -241,7 +246,26 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           value={comment}
           onChangeText={setComment}
         />
-        <TouchableOpacity disabled={!comment.trim()}>
+        <TouchableOpacity
+          disabled={!comment.trim()}
+          onPress={() => {
+            const text = comment.trim();
+            if (!text || !post) return;
+            const avatar =
+              typeof user.avatar === 'string'
+                ? user.avatar
+                : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop';
+            const created = addComment(post.id, {
+              userId: user.id,
+              user: user.name,
+              avatar,
+              text,
+              time: 'Just now',
+            });
+            setComments((prev) => [...prev, created]);
+            setComment('');
+          }}
+        >
           <Text style={[styles.postComment, !comment.trim() && styles.postCommentDisabled]}>Post</Text>
         </TouchableOpacity>
       </View>

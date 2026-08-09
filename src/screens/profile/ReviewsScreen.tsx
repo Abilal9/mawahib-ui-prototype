@@ -13,7 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { getReviewsForUser, ReviewItem } from '../../data/mock/reviews';
+import { ReviewItem } from '../../data/types';
+import { reviewService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
@@ -22,7 +23,7 @@ type SortKey = 'newest' | 'highest' | 'lowest';
 
 export default function ReviewsScreen({ navigation, route }: ScreenProps<'Reviews'>) {
   const { user: me } = useMyProfile();
-  const bundle = getReviewsForUser(route.params?.userId);
+  const bundle = reviewService.getForUser(route.params?.userId);
   const [sort, setSort] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);

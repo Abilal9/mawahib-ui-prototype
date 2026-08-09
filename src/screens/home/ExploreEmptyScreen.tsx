@@ -5,9 +5,15 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, typography } from '../../theme';
-import { ScreenProps } from '../../navigation/types';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 
-export default function ExploreEmptyScreen({ navigation }: ScreenProps<'ExploreEmpty'>) {
+/** Unregistered orphan — kept for later empty-explore UX. */
+export default function ExploreEmptyScreen({
+  navigation,
+}: {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+}) {
   return (
     <ScreenContainer>
       <StatusBar style="dark" />

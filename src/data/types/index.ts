@@ -56,6 +56,10 @@ export interface StoryItem {
   duration: number;
 }
 
+/**
+ * Explore / home job listing (catalog).
+ * Prefer JobListing in new code; Job kept as the primary export name.
+ */
 export interface Job {
   id: string;
   title: string;
@@ -72,6 +76,16 @@ export interface Job {
   /** Explore filter chip e.g. Tech / Design / Food */
   exploreTag?: string;
 }
+
+/** Alias for catalog Job — distinguishes from UserJob (in-app engagement) */
+export type JobListing = Job;
+
+/**
+ * Application to a listing is modeled as UserJob with type:'sent', status:'pending'.
+ * See UserJobsContext.applyToListing / applicationFromListing.
+ */
+export type { UserJob, UserJobStatus, UserJobDetails, UserJobAddon } from './userJobs';
+export type { JobApplication } from './userJobs';
 
 export interface Message {
   id: string;
@@ -108,6 +122,10 @@ export interface Notification {
   showRating?: boolean;
 }
 
+/**
+ * Explore / home catalog service listing.
+ * Distinct from profile ServiceOffering (packages/addons on a user profile).
+ */
 export interface Service {
   id: string;
   title: string;
@@ -124,6 +142,41 @@ export interface Service {
   /** Explore filter chip */
   exploreTag?: string;
 }
+
+/** Prefer CatalogService when clarifying vs ServiceOffering */
+export type CatalogService = Service;
+
+export type {
+  ProfileTab,
+  ProfileLanguage,
+  ProfileEducation,
+  ProfileExperience,
+  ProfileCertification,
+  PortfolioProject,
+  ServicePackage,
+  ServiceAddon,
+  ServiceOffering,
+  ProfileService,
+  ProfileContent,
+  AboutSectionKey,
+} from './profile';
+
+export {
+  ABOUT_SECTION_KEYS,
+  ABOUT_SECTION_LABELS,
+  ABOUT_SECTION_ADD_LABELS,
+  isAboutSectionFilled,
+  TALENT_CHIP_STYLES,
+} from './profile';
+
+export type {
+  ReviewItem,
+  Review,
+  ReviewDistribution,
+  ReviewsBundle,
+} from './reviews';
+
+export type { ConnectionRelation } from './connections';
 
 export type TalentConnectStatus = 'connect' | 'added' | 'request-sent';
 

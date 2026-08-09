@@ -15,12 +15,14 @@ export { default as SignupSuccessScreen } from './auth/SignupSuccessScreen';
 export { default as ProfileSetupScreen } from './profile-setup/ProfileSetupScreen';
 export { default as ProfileSetupStep1 } from './profile-setup/ProfileSetupStep1';
 export { default as ProfileSetupStep2 } from './profile-setup/ProfileSetupStep2';
+// Unregistered in RootNavigator (setup uses ProfileSetupScreen) — kept for optional reuse
 export { default as ProfileSetupStep3 } from './profile-setup/ProfileSetupStep3';
 export { default as ProfileSetupStep4 } from './profile-setup/ProfileSetupStep4';
 export { default as ProfileSetupStep5 } from './profile-setup/ProfileSetupStep5';
 
 // Home
 export { default as HomeScreen } from './home/HomeScreen';
+// Unregistered in RootNavigator — kept for optional reuse
 export { default as ExploreEmptyScreen } from './home/ExploreEmptyScreen';
 export { default as NotificationsScreen } from './home/NotificationsScreen';
 export { default as PostDetailScreen } from './home/PostDetailScreen';
@@ -29,15 +31,18 @@ export { default as PostDetailScreen } from './home/PostDetailScreen';
 export { default as SearchScreen } from './search/SearchScreen';
 
 // Create
+// Unregistered in RootNavigator — kept for optional reuse
 export { default as CreateMenuScreen } from './create/CreateMenuScreen';
 export { default as PostCreateScreen } from './create/PostCreateScreen';
 export { default as PhotoCaptureScreen } from './create/PhotoCaptureScreen';
+// Unregistered in RootNavigator — kept for optional reuse
 export { default as VideoCaptureScreen } from './create/VideoCaptureScreen';
 export { default as PhotoEditScreen } from './create/PhotoEditScreen';
 export { default as VideoEditScreen } from './create/VideoEditScreen';
 export { default as VideoTrimScreen } from './create/VideoTrimScreen';
 
 // Messages
+// Unregistered in RootNavigator — kept for optional reuse
 export { default as MessagesEmptyScreen } from './messages/MessagesEmptyScreen';
 export { default as MessagesInboxScreen } from './messages/MessagesInboxScreen';
 export { default as ChatScreen } from './messages/ChatScreen';
@@ -52,6 +57,7 @@ export { default as AddProfileServiceScreen } from './profile/AddProfileServiceS
 export { default as ManageProfileListScreen } from './profile/ManageProfileListScreen';
 export { default as PortfolioProjectDetailScreen } from './profile/PortfolioProjectDetailScreen';
 export { default as UserPostsScreen } from './profile/UserPostsScreen';
+// Unregistered in RootNavigator — kept for optional reuse
 export { default as PortfolioScreen } from './profile/PortfolioScreen';
 export { default as ServicesScreen } from './profile/ServicesScreen';
 export { default as ServiceDetailScreen } from './profile/ServiceDetailScreen';

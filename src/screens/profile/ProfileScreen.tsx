@@ -27,13 +27,14 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useConnections } from '../../context/ConnectionsContext';
-import { posts } from '../../data/mock/posts';
+import { usePosts } from '../../context/PostsContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   ProfileTab,
   AboutSectionKey,
   ABOUT_SECTION_KEYS,
   isAboutSectionFilled,
-} from '../../data/mock/myProfile';
+} from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -47,7 +48,13 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, useEmptyProfile } = useMyProfile();
   const { connectedUsers } = useConnections();
+  const { posts } = usePosts();
+  const { accountType } = useAuth();
   const userPosts = posts.filter((p) => content.postIds.includes(p.id));
+  const completeBannerSub =
+    accountType === 'business'
+      ? 'Add services and details so you can post jobs and request talent confidently.'
+      : 'Complete your portfolio and services so clients can find you and send requests.';
 
   const aboutIncomplete = ABOUT_SECTION_KEYS.some(
     (key) => !isAboutSectionFilled(content, key)
@@ -125,9 +132,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                   </View>
                   <View style={styles.completeBannerText}>
                     <Text style={styles.completeBannerTitle}>Complete your profile</Text>
-                    <Text style={styles.completeBannerSub}>
-                      Add services, portfolio, and more so clients can find you.
-                    </Text>
+                    <Text style={styles.completeBannerSub}>{completeBannerSub}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
