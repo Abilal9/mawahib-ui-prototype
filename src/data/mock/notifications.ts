@@ -49,7 +49,7 @@ export const notifications: Notification[] = [
     message: "Nawaf Alsaeed requested your service 'Logo Design.'",
     createdAt: '2026-07-14T09:42:00Z',
     read: false,
-    jobId: 'j1',
+    userJobId: 'uj1',
     actions: ['accept', 'decline'],
   },
   {
@@ -59,7 +59,7 @@ export const notifications: Notification[] = [
     message: 'Nawaf Alsaeed marked the job as completed.',
     createdAt: '2026-07-14T09:42:00Z',
     read: true,
-    jobId: 'j1',
+    userJobId: 'uj17',
     showRating: true,
   },
   {
@@ -69,7 +69,7 @@ export const notifications: Notification[] = [
     message: 'Nawaf Alsaeed Accepted your Job request!',
     createdAt: '2026-07-14T09:42:00Z',
     read: true,
-    jobId: 'j2',
+    userJobId: 'uj15',
   },
   {
     id: 'n4',
@@ -78,7 +78,7 @@ export const notifications: Notification[] = [
     message: 'Nawaf Alsaeed Declined your Job request!',
     createdAt: '2026-07-14T09:42:00Z',
     read: true,
-    jobId: 'j3',
+    userJobId: 'uj14',
   },
   {
     id: 'n5',
@@ -96,6 +96,7 @@ export const notifications: Notification[] = [
     message: 'Karen Pagac sent you a message',
     createdAt: '2026-07-13T18:00:00Z',
     read: false,
+    conversationId: 'c1',
   },
   {
     id: 'n7',

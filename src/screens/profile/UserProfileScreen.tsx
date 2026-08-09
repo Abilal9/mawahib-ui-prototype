@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import ProfileHeaderChrome, {
 import AboutTab from '../../components/profile/AboutTab';
 import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getUserById } from '../../data/mock/users';
 import { resolveProfileUser } from '../../data/mock/resolveUser';
@@ -35,6 +36,8 @@ import {
   ProfileTab,
 } from '../../data/mock/myProfile';
 import { useConnections } from '../../context/ConnectionsContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { getConnectionsForUser } from '../../data/mock/connections';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -56,6 +59,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     disconnect,
     getConversationId,
   } = useConnections();
+  const { user: me } = useMyProfile();
   const user = resolveProfileUser(route.params.userId) ?? getUserById(route.params.userId);
   const talent = talents.find((t) => t.user.id === route.params.userId);
 
@@ -63,10 +67,29 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
   const tabContentMinHeight = Math.max(scrollViewport - tabsHeight, 240);
 
+  useEffect(() => {
+    if (user?.id && user.id === me.id) {
+      navigation.replace('Profile');
+    }
+  }, [user?.id, me.id, navigation]);
+
   if (!user) {
     return (
       <ScreenContainer>
-        <Text>User not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>User not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (user.id === me.id) {
+    return (
+      <ScreenContainer>
+        <Text>Opening your profile…</Text>
       </ScreenContainer>
     );
   }
@@ -80,6 +103,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     reviewCount: talent?.reviewCount ?? user.reviewCount ?? 24,
   };
   const userPosts = posts.filter((p) => p.author.id === user.id);
+  const visitorConnectionCount = getConnectionsForUser(user.id).length;
 
   const onConnectPress = () => {
     if (relation === 'none') {
@@ -103,7 +127,14 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
       );
       return;
     }
-    const conversationId = getConversationId(user.id) ?? 'c1';
+    const conversationId = getConversationId(user.id);
+    if (!conversationId) {
+      Alert.alert(
+        'No conversation yet',
+        'A chat thread isn’t available for this connection in the demo. Try messaging someone from your inbox.'
+      );
+      return;
+    }
     navigation.navigate('Chat', { conversationId });
   };
 
@@ -158,7 +189,9 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           onConnectionsPress={() =>
             navigation.navigate('Connections', { userId: user.id })
           }
-          connectionsLabel={`${user.followers} connections`}
+          connectionsLabel={`${visitorConnectionCount} connection${
+            visitorConnectionCount === 1 ? '' : 's'
+          }`}
         >
           {relation === 'incoming' ? (
             <View style={styles.ctaRow}>
@@ -283,51 +316,90 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
             </View>
           )}
 
-          {activeTab === 'Services' && (
-            <View style={styles.tabPad}>
-              {content.services.map((service) => (
-                <TouchableOpacity
-                  key={service.id}
-                  style={styles.serviceCard}
-                  onPress={() =>
-                    navigation.navigate('ServiceDetail', {
-                      serviceId: service.id,
-                      userId: user.id,
-                    })
-                  }
-                >
-                  <Image
-                    source={{ uri: service.images[0] }}
-                    style={styles.serviceImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.serviceBody}>
-                    <Text style={styles.serviceTitle}>{service.title}</Text>
-                    <Text style={styles.serviceDesc} numberOfLines={2}>
-                      {service.description}
-                    </Text>
-                    <View style={styles.packageRow}>
+          {activeTab === 'Services' &&
+            (content.services.length === 0 ? (
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Services</Text>
+                </View>
+                <Text style={styles.emptyCopy}>No services listed yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Services</Text>
+                </View>
+                {content.services.map((service) => (
+                  <TouchableOpacity
+                    key={service.id}
+                    style={styles.serviceCard}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      navigation.navigate('ServiceDetail', {
+                        serviceId: service.id,
+                        userId: user.id,
+                      })
+                    }
+                  >
+                    <View style={styles.serviceImageWrap}>
+                      <Image
+                        source={{ uri: service.images[0] }}
+                        style={styles.serviceImage}
+                        contentFit="cover"
+                      />
+                      {service.images.length > 1 ? (
+                        <View style={styles.dots}>
+                          {service.images.slice(0, 3).map((_, i) => (
+                            <View
+                              key={i}
+                              style={[styles.dot, i === 0 && styles.dotActive]}
+                            />
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.serviceBody}>
+                      <View style={styles.serviceTitleRow}>
+                        <Text style={styles.serviceTitle}>{service.title}</Text>
+                        <TouchableOpacity
+                          style={styles.ratingInline}
+                          onPress={() =>
+                            navigation.navigate('Reviews', { userId: user.id })
+                          }
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="star" size={14} color="#F5A623" />
+                          <Text style={styles.ratingInlineText}>
+                            {service.rating.toFixed(1)}
+                          </Text>
+                          <Text style={styles.reviewCount}>
+                            ({service.reviewCount})
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.serviceDesc} numberOfLines={2}>
+                        {service.description}
+                      </Text>
                       {service.packages.map((pkg) => (
-                        <View key={pkg.name} style={styles.packageChip}>
-                          <Text style={styles.packageName}>{pkg.name}</Text>
-                          <View style={styles.packagePriceRow}>
+                        <View key={pkg.name} style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>{pkg.name}</Text>
+                          <View style={styles.priceValueRow}>
                             <CurrencyIcon
-                              size={11}
-                              color={colors.text}
+                              size={12}
+                              color={colors.primary}
                               location={user.location}
                             />
-                            <Text style={styles.packagePrice}>
+                            <Text style={styles.priceValue}>
                               {stripCurrencyGlyphs(pkg.priceLabel)}
                             </Text>
                           </View>
                         </View>
                       ))}
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
 
           {activeTab === 'Posts' && (
             <View style={styles.tabPad}>
@@ -346,7 +418,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                         navigation.navigate('PostDetail', { postId: post.id })
                       }
                       onAuthorPress={() =>
-                        navigation.navigate('UserProfile', { userId: post.author.id })
+                        openUserProfile(navigation, post.author.id, me.id)
                       }
                     />
                   ))}
@@ -525,7 +597,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   playOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -537,31 +609,75 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },
-  serviceImage: { width: '100%', height: 180 },
-  serviceBody: { padding: spacing.md, gap: spacing.sm },
-  serviceTitle: { ...typography.bodyMedium, fontWeight: '500', color: colors.text },
-  serviceDesc: { ...typography.caption, color: colors.textTertiary },
-  packageRow: { flexDirection: 'row', gap: spacing.sm },
-  packageChip: {
-    flex: 1,
-    backgroundColor: '#FFF0F7',
-    borderRadius: radius.button,
-    padding: spacing.sm,
-  },
-  packageName: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  packagePriceRow: {
+  serviceImageWrap: { height: 180, backgroundColor: colors.borderLight },
+  serviceImage: { width: '100%', height: '100%' },
+  dots: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 2,
+    justifyContent: 'center',
+    gap: 6,
   },
-  packagePrice: { fontSize: 11, color: colors.text },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  dotActive: {
+    width: 16,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  serviceBody: { padding: spacing.md, gap: spacing.sm },
+  serviceTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  serviceTitle: {
+    flex: 1,
+    ...typography.bodyMedium,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  ratingInline: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingInlineText: { ...typography.caption, color: colors.text },
+  reviewCount: { ...typography.caption, color: '#829AB1' },
+  serviceDesc: { ...typography.caption, color: colors.textTertiary, lineHeight: 18 },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  priceLabel: { ...typography.caption, color: colors.textSecondary },
+  priceValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  priceValue: { ...typography.caption, color: colors.primary, fontWeight: '600' },
   emptyCopy: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xxl,
   },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
   viewMoreBtn: {
     flexDirection: 'row',
     alignItems: 'center',

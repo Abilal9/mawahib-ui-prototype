@@ -11,7 +11,14 @@ export const stories: Story[] = [
     user: currentUser,
     seen: false,
     isOwn: true,
-    items: [],
+    items: [
+      {
+        id: 'si-yours-1',
+        type: 'image',
+        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&h=700&fit=crop',
+        duration: 5000,
+      },
+    ],
   },
   {
     id: 's-karen',

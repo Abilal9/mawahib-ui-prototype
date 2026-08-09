@@ -6,6 +6,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getServiceById } from '../../data/mock/services';
+import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
 const CARDS = [
@@ -14,9 +15,20 @@ const CARDS = [
 ];
 
 export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<'ConfirmPayment'>) {
+  const { markJobPaid } = useUserJobs();
   const service = route.params?.serviceId ? getServiceById(route.params.serviceId) : null;
+  const jobId = route.params?.jobId;
   const amount = route.params?.amount ?? service?.price ?? 0;
   const [selectedCard, setSelectedCard] = useState('c1');
+
+  const completePayment = () => {
+    if (jobId) {
+      markJobPaid(jobId);
+      navigation.replace('JobInProgress', { jobId });
+      return;
+    }
+    navigation.goBack();
+  };
 
   return (
     <ScreenContainer padded={false}>
@@ -69,8 +81,20 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button title={`Pay AED ${amount.toLocaleString()}`} onPress={() => navigation.goBack()} fullWidth />
-        <TouchableOpacity style={styles.applePayLink} onPress={() => navigation.navigate('ApplePay', { amount })}>
+        <Button
+          title={`Pay AED ${amount.toLocaleString()}`}
+          onPress={completePayment}
+          fullWidth
+        />
+        <TouchableOpacity
+          style={styles.applePayLink}
+          onPress={() => {
+            if (jobId) {
+              markJobPaid(jobId);
+            }
+            navigation.navigate('ApplePay', { amount });
+          }}
+        >
           <Text style={styles.applePayText}>Pay with Apple Pay</Text>
         </TouchableOpacity>
       </View>

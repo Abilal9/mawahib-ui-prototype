@@ -18,6 +18,8 @@ import { toImageSource } from '../../utils/image';
 import { UserJob } from '../../data/types/userJobs';
 import { TabScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 
 type JobsTab = 'received' | 'sent';
 type ReceivedSection = 'requests' | 'in-progress' | 'upcoming' | 'completed';
@@ -91,12 +93,14 @@ function getStatusTone(status: UserJob['status']) {
 function JobFlowCard({
   job,
   onPress,
+  onCounterpartPress,
   onStarPress,
   hideStatus,
   showReviewPrompt,
 }: {
   job: UserJob;
   onPress: () => void;
+  onCounterpartPress: () => void;
   onStarPress?: (rating: number) => void;
   hideStatus?: boolean;
   showReviewPrompt?: boolean;
@@ -140,10 +144,17 @@ function JobFlowCard({
 
       <View style={styles.metaLine}>
         <Text style={styles.metaLabel}>User</Text>
-        <View style={styles.userInline}>
+        <TouchableOpacity
+          style={styles.userInline}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onCounterpartPress();
+          }}
+          activeOpacity={0.8}
+        >
           <Image source={toImageSource(job.counterpart.avatar)} style={styles.userAvatar} contentFit="cover" />
           <Text style={styles.metaValue}>{job.counterpart.name}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
       <View style={styles.metaSeparator} />
       <View style={styles.metaLine}>
@@ -196,6 +207,7 @@ function JobFlowCard({
 
 export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
   const { jobs: userJobs } = useUserJobs();
+  const { user: me } = useMyProfile();
   const [activeTab, setActiveTab] = useState<JobsTab>('received');
   const [activeReceivedSection, setActiveReceivedSection] = useState(0);
   const [activeSentSection, setActiveSentSection] = useState(0);
@@ -315,6 +327,9 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
                         job={job}
                         showReviewPrompt={section.key === 'completed'}
                         onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                        onCounterpartPress={() =>
+                          openUserProfile(navigation, job.counterpart.id, me.id)
+                        }
                         onStarPress={(rating) =>
                           navigation.navigate('WriteReview', {
                             jobId: job.id,
@@ -383,6 +398,9 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
                         hideStatus={section.key === 'posted'}
                         showReviewPrompt={section.key === 'completed'}
                         onPress={() => navigation.navigate('JobInProgress', { jobId: job.id })}
+                        onCounterpartPress={() =>
+                          openUserProfile(navigation, job.counterpart.id, me.id)
+                        }
                         onStarPress={(rating) =>
                           navigation.navigate('WriteReview', {
                             jobId: job.id,

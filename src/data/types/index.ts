@@ -32,6 +32,15 @@ export interface Post {
   timeAgo?: string;
 }
 
+export interface Comment {
+  id: string;
+  userId: string;
+  user: string;
+  avatar: string;
+  text: string;
+  time: string;
+}
+
 export interface Story {
   id: string;
   user: User;
@@ -90,7 +99,11 @@ export interface Notification {
   createdAt: string;
   read: boolean;
   postId?: string;
+  /** Explore / catalog listing id (optional deep link) */
   jobId?: string;
+  /** In-app UserJob id for Accept / Rate / JobInProgress */
+  userJobId?: string;
+  conversationId?: string;
   actions?: Array<'accept' | 'decline'>;
   showRating?: boolean;
 }

@@ -40,13 +40,20 @@ export interface CreateServiceRequestPayload {
 interface UserJobsContextValue {
   jobs: UserJob[];
   getJobById: (id: string) => UserJob | undefined;
-  /** Create or reuse a received pending request from an explore listing; returns user-job id */
+  /**
+   * Apply to an explore/home job listing as the provider (sent / pending application).
+   * Reuses an existing application for the same listing when present.
+   */
+  applyToListing: (listingId: string) => string | undefined;
+  /** @deprecated Use applyToListing — kept briefly for any stale call sites */
   openFromListing: (listingId: string) => string | undefined;
   /** Client applies to a provider service — pending until provider accepts (then pending-payment) */
   createServiceRequest: (payload: CreateServiceRequestPayload) => string;
   acceptJob: (id: string) => void;
   declineJob: (id: string, reason?: string) => void;
   requestEdits: (id: string, payload: RequestEditsPayload) => void;
+  /** After client pays a pending-payment job → moves to in-progress */
+  markJobPaid: (id: string) => void;
   submitReview: (id: string, payload: SubmitReviewPayload) => void;
 }
 
@@ -78,12 +85,13 @@ function detailsFromListing(listing: Job): UserJobDetails {
   };
 }
 
-function userJobFromListing(listing: Job): UserJob {
+/** Provider applying to a posted job → sent pending application (not a received request). */
+function applicationFromListing(listing: Job): UserJob {
   return {
-    id: `uj-from-${listing.id}`,
+    id: `uj-apply-${listing.id}`,
     listingId: listing.id,
     title: listing.title,
-    type: 'received',
+    type: 'sent',
     status: 'pending',
     statusLabel: 'Pending',
     counterpart: {
@@ -96,10 +104,28 @@ function userJobFromListing(listing: Job): UserJob {
     date: listing.salary,
     createdAt: nowIso(),
     section: 'requests',
-    activityLabel: 'Requested',
+    activityLabel: 'Applied',
     activityValue: 'Just Now',
     details: detailsFromListing(listing),
   };
+}
+
+function applyToListingId(
+  jobs: UserJob[],
+  listingId: string,
+  setJobs: React.Dispatch<React.SetStateAction<UserJob[]>>
+): string | undefined {
+  const existing = jobs.find(
+    (j) => (j.listingId === listingId || j.id === listingId) && j.type === 'sent'
+  );
+  if (existing) return existing.id;
+
+  const listing = getListingById(listingId);
+  if (!listing) return undefined;
+
+  const created = applicationFromListing(listing);
+  setJobs((prev) => [created, ...prev]);
+  return created.id;
 }
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
@@ -110,17 +136,8 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       jobs,
       getJobById: (id) =>
         jobs.find((j) => j.id === id || j.listingId === id),
-      openFromListing: (listingId) => {
-        const existing = jobs.find((j) => j.listingId === listingId || j.id === listingId);
-        if (existing) return existing.id;
-
-        const listing = getListingById(listingId);
-        if (!listing) return undefined;
-
-        const created = userJobFromListing(listing);
-        setJobs((prev) => [created, ...prev]);
-        return created.id;
-      },
+      applyToListing: (listingId) => applyToListingId(jobs, listingId, setJobs),
+      openFromListing: (listingId) => applyToListingId(jobs, listingId, setJobs),
       /**
        * Client → provider Apply path: insert a `sent` / `pending` request (not pending-payment).
        * Currency glyph left empty so UI can render location-aware CurrencyIcon instead.
@@ -180,6 +197,23 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
                   createdAt: nowIso(),
                   activityLabel: 'Requested',
                   activityValue: 'Just Now',
+                }
+              : job
+          )
+        );
+      },
+      markJobPaid: (id) => {
+        setJobs((prev) =>
+          prev.map((job) =>
+            job.id === id
+              ? {
+                  ...job,
+                  status: 'in-progress',
+                  statusLabel: 'In Progress',
+                  section: 'in-progress',
+                  createdAt: nowIso(),
+                  activityLabel: 'Due Date',
+                  activityValue: job.dueDate || job.date || 'TBD',
                 }
               : job
           )

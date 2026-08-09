@@ -6,6 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  Share,
+  Platform,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { toImageSource } from '../../utils/image';
@@ -21,6 +25,8 @@ import { services } from '../../data/mock/services';
 import { talents } from '../../data/mock/talents';
 import { notifications } from '../../data/mock/notifications';
 import { useSidebar } from '../../context/SidebarContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
 
@@ -62,11 +68,17 @@ function FeedPostCard({
   post,
   onPress,
   onLike,
+  onComment,
+  onShare,
+  onBookmark,
   onAuthorPress,
 }: {
   post: Post;
   onPress: () => void;
   onLike: () => void;
+  onComment: () => void;
+  onShare: () => void;
+  onBookmark: () => void;
   onAuthorPress: () => void;
 }) {
   const truncated =
@@ -112,7 +124,11 @@ function FeedPostCard({
       ) : null}
 
       <View style={styles.feedActions}>
-        <TouchableOpacity style={styles.feedAction} onPress={onLike}>
+        <TouchableOpacity
+          style={styles.feedAction}
+          onPress={onLike}
+          hitSlop={8}
+        >
           <Ionicons
             name={post.isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
             size={20}
@@ -120,16 +136,24 @@ function FeedPostCard({
           />
           <Text style={styles.feedActionCount}>{post.likes}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.feedAction}>
+        <TouchableOpacity
+          style={styles.feedAction}
+          onPress={onComment}
+          hitSlop={8}
+        >
           <Ionicons name="chatbubble-outline" size={20} color={colors.textTertiary} />
           <Text style={styles.feedActionCount}>{post.comments}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.feedAction}>
+        <TouchableOpacity style={styles.feedAction} onPress={onShare} hitSlop={8}>
           <Ionicons name="share-outline" size={20} color={colors.textTertiary} />
         </TouchableOpacity>
         <View style={styles.feedActionSpacer} />
-        <TouchableOpacity>
-          <Ionicons name="bookmark-outline" size={20} color={colors.textTertiary} />
+        <TouchableOpacity onPress={onBookmark} hitSlop={8}>
+          <Ionicons
+            name={post.isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={20}
+            color={post.isSaved ? colors.primary : colors.textTertiary}
+          />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -329,6 +353,7 @@ function TalentMatchCard({
 
 export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const { open: openSidebar } = useSidebar();
+  const { user: me } = useMyProfile();
   const [feedPosts, setFeedPosts] = useState(posts);
   const [jobList, setJobList] = useState(jobs);
   const [serviceList, setServiceList] = useState(services);
@@ -345,9 +370,46 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     );
   };
 
+  const toggleBookmark = (postId: string) => {
+    setFeedPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, isSaved: !p.isSaved } : p))
+    );
+  };
+
+  const sharePost = async (post: Post) => {
+    const url = `https://mawahib.app/p/${post.id}`;
+    const message = `Check out this post on Mawahib`;
+    try {
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { message, url }
+          : { message: `${message}\n${url}`, title: 'Mawahib' }
+      );
+    } catch {
+      Alert.alert('Share unavailable', `${message}\n${url}`);
+    }
+  };
+
+  const openPostDetail = (postId: string, focusComments = false) => {
+    navigation.navigate('PostDetail', { postId, focusComments });
+  };
+
   const openExplore = (contentType: 'jobs' | 'services' | 'talents') => {
     navigation.navigate('SearchTab', { contentType });
   };
+
+  const renderFeedPost = (post: Post) => (
+    <FeedPostCard
+      key={post.id}
+      post={post}
+      onPress={() => openPostDetail(post.id)}
+      onLike={() => toggleLike(post.id)}
+      onComment={() => openPostDetail(post.id, true)}
+      onShare={() => sharePost(post)}
+      onBookmark={() => toggleBookmark(post.id)}
+      onAuthorPress={() => openUserProfile(navigation, post.author.id, me.id)}
+    />
+  );
 
   return (
     <ScreenContainer padded={false} safeBottom={false} safeTop={false}>
@@ -369,28 +431,14 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
           renderItem={({ item }) => (
             <StoryItem
               story={item}
-              onPress={() => {
-                if (!item.isOwn) {
-                  navigation.navigate('StoryViewer', { storyId: item.id });
-                }
-              }}
+              onPress={() =>
+                navigation.navigate('StoryViewer', { storyId: item.id })
+              }
             />
           )}
         />
 
-        {feedPosts[0] ? (
-          <FeedPostCard
-            key={feedPosts[0].id}
-            post={feedPosts[0]}
-            onPress={() =>
-              navigation.navigate('PostDetail', { postId: feedPosts[0].id })
-            }
-            onLike={() => toggleLike(feedPosts[0].id)}
-            onAuthorPress={() =>
-              navigation.navigate('UserProfile', { userId: feedPosts[0].author.id })
-            }
-          />
-        ) : null}
+        {feedPosts[0] ? renderFeedPost(feedPosts[0]) : null}
 
         {jobList.length > 0 ? (
           <>
@@ -420,19 +468,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
           </>
         ) : null}
 
-        {feedPosts[1] ? (
-          <FeedPostCard
-            key={feedPosts[1].id}
-            post={feedPosts[1]}
-            onPress={() =>
-              navigation.navigate('PostDetail', { postId: feedPosts[1].id })
-            }
-            onLike={() => toggleLike(feedPosts[1].id)}
-            onAuthorPress={() =>
-              navigation.navigate('UserProfile', { userId: feedPosts[1].author.id })
-            }
-          />
-        ) : null}
+        {feedPosts[1] ? renderFeedPost(feedPosts[1]) : null}
 
         {serviceList.length > 0 ? (
           <>
@@ -462,19 +498,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
           </>
         ) : null}
 
-        {feedPosts[2] ? (
-          <FeedPostCard
-            key={feedPosts[2].id}
-            post={feedPosts[2]}
-            onPress={() =>
-              navigation.navigate('PostDetail', { postId: feedPosts[2].id })
-            }
-            onLike={() => toggleLike(feedPosts[2].id)}
-            onAuthorPress={() =>
-              navigation.navigate('UserProfile', { userId: feedPosts[2].author.id })
-            }
-          />
-        ) : null}
+        {feedPosts[2] ? renderFeedPost(feedPosts[2]) : null}
 
         {talentList.length > 0 ? (
           <>
@@ -492,9 +516,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
               renderItem={({ item }) => (
                 <TalentMatchCard
                   talent={item}
-                  onPress={() =>
-                    navigation.navigate('UserProfile', { userId: item.user.id })
-                  }
+                  onPress={() => openUserProfile(navigation, item.user.id, me.id)}
                   onDismiss={() =>
                     setTalentList((prev) => prev.filter((t) => t.id !== item.id))
                   }
@@ -505,17 +527,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
         ) : null}
 
         {/* Any remaining posts after the suggested carousels */}
-        {feedPosts.slice(3).map((post) => (
-          <FeedPostCard
-            key={post.id}
-            post={post}
-            onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
-            onLike={() => toggleLike(post.id)}
-            onAuthorPress={() =>
-              navigation.navigate('UserProfile', { userId: post.author.id })
-            }
-          />
-        ))}
+        {feedPosts.slice(3).map((post) => renderFeedPost(post))}
       </ScrollView>
     </ScreenContainer>
   );

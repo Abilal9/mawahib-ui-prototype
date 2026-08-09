@@ -32,8 +32,11 @@ import {
 } from '../../utils/explore';
 import { TabScreenProps } from '../../navigation/types';
 import { Job, Service, Talent, TalentConnectStatus } from '../../data/types';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 
 export default function SearchScreen({ navigation, route }: TabScreenProps<'SearchTab'>) {
+  const { user: me } = useMyProfile();
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searches, setSearches] = useState(recentSearches);
@@ -218,7 +221,7 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                   key={talent.id}
                   talent={talent}
                   connectStatus={connectState[talent.id] ?? talent.connectStatus ?? 'connect'}
-                  onPress={() => navigation.navigate('UserProfile', { userId: talent.user.id })}
+                  onPress={() => openUserProfile(navigation, talent.user.id, me.id)}
                   onConnect={() => cycleConnect(talent.id, talent.connectStatus)}
                 />
               ))}
@@ -232,9 +235,7 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                     navigation.navigate('ServiceDetail', { serviceId: service.id })
                   }
                   onProviderPress={() =>
-                    navigation.navigate('UserProfile', {
-                      userId: service.provider.id,
-                    })
+                    openUserProfile(navigation, service.provider.id, me.id)
                   }
                 />
               ))}

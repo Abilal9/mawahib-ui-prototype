@@ -17,6 +17,8 @@ import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 const MAX_IMAGES = 6;
@@ -32,6 +34,7 @@ const SAMPLE_IMAGES = [
 
 export default function WriteReviewScreen({ route, navigation }: ScreenProps<'WriteReview'>) {
   const { getJobById, submitReview } = useUserJobs();
+  const { user: me } = useMyProfile();
   const job = getJobById(route.params.jobId);
   const initial =
     route.params.initialRating ??
@@ -50,7 +53,12 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
   if (!job) {
     return (
       <ScreenContainer>
-        <Text>Job not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Job not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -88,7 +96,11 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.personCard}>
+          <TouchableOpacity
+            style={styles.personCard}
+            onPress={() => openUserProfile(navigation, job.counterpart.id, me.id)}
+            activeOpacity={0.85}
+          >
             <Image
               source={toImageSource(job.counterpart.avatar)}
               style={styles.avatar}
@@ -100,7 +112,7 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
                 {job.title}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <Text style={styles.sectionLabel}>Your rating</Text>
           <View style={styles.starsRow}>
@@ -330,4 +342,19 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
   },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });

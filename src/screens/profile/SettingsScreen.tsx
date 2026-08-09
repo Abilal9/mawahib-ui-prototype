@@ -1,9 +1,18 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Switch,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 import { ScreenProps } from '../../navigation/types';
 
 const SETTINGS_SECTIONS = [
@@ -34,6 +43,8 @@ const SETTINGS_SECTIONS = [
 ];
 
 export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
+  const { signOut } = useAuth();
+
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
@@ -55,10 +66,24 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
                   key={item.id}
                   style={[styles.row, index < section.items.length - 1 && styles.rowBorder]}
                   onPress={() => {
-                    if (item.id === 'premium') navigation.navigate('Premium');
-                    if (item.id === 'calendar') navigation.navigate('Calendar');
-                    if (item.id === 'language') navigation.navigate('ChangeLanguage');
-                    if (item.id === 'profile') navigation.navigate('EditProfile');
+                    if ('toggle' in item && item.toggle) return;
+                    if (item.id === 'premium') {
+                      navigation.navigate('Premium');
+                      return;
+                    }
+                    if (item.id === 'calendar') {
+                      navigation.navigate('Calendar');
+                      return;
+                    }
+                    if (item.id === 'language') {
+                      navigation.navigate('ChangeLanguage');
+                      return;
+                    }
+                    if (item.id === 'profile') {
+                      navigation.navigate('EditProfile');
+                      return;
+                    }
+                    Alert.alert('Coming soon', `${item.label} will be available in a future update.`);
                   }}
                   activeOpacity={'toggle' in item && item.toggle ? 1 : 0.7}
                 >
@@ -87,12 +112,13 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
         <TouchableOpacity
           style={styles.logoutButton}
           activeOpacity={0.8}
-          onPress={() =>
+          onPress={() => {
+            signOut();
             navigation.reset({
               index: 0,
               routes: [{ name: 'SignIn' }],
-            })
-          }
+            });
+          }}
         >
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>

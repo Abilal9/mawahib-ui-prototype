@@ -23,8 +23,10 @@ import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
 import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import AboutTab from '../../components/profile/AboutTab';
 import { shareProfile } from '../../utils/shareProfile';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useConnections } from '../../context/ConnectionsContext';
 import { posts } from '../../data/mock/posts';
 import {
   ProfileTab,
@@ -44,6 +46,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, useEmptyProfile } = useMyProfile();
+  const { connectedUsers } = useConnections();
   const userPosts = posts.filter((p) => content.postIds.includes(p.id));
 
   const aboutIncomplete = ABOUT_SECTION_KEYS.some(
@@ -98,7 +101,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
           scrollY={scrollY}
           onReviewsPress={() => navigation.navigate('Reviews', { userId: user.id })}
           onConnectionsPress={() => navigation.navigate('Connections')}
-          connectionsLabel={`${user.followers} connections`}
+          connectionsLabel={`${connectedUsers.length} connection${
+            connectedUsers.length === 1 ? '' : 's'
+          }`}
         />
 
         <View onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}>
@@ -365,7 +370,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                     post={post}
                     onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
                     onAuthorPress={() =>
-                      navigation.navigate('UserProfile', { userId: post.author.id })
+                      openUserProfile(navigation, post.author.id, user.id)
                     }
                   />
                 ))}

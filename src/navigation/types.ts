@@ -45,7 +45,7 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   ExploreEmpty: undefined;
   Notifications: undefined;
-  PostDetail: { postId: string };
+  PostDetail: { postId: string; focusComments?: boolean };
   UserPosts: { userId?: string } | undefined;
   CreateMenu: undefined;
   PostCreate: undefined;
@@ -73,7 +73,7 @@ export type RootStackParamList = {
   PostJob: { step?: number };
   JobInProgress: { jobId: string };
   WriteReview: { jobId: string; initialRating?: number };
-  ConfirmPayment: { serviceId?: string; amount?: number };
+  ConfirmPayment: { serviceId?: string; amount?: number; jobId?: string };
   ApplePay: { amount?: number };
   ScanCard: undefined;
   StoryViewer: { storyId: string };

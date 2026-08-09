@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Pressable,
   Share,
   Platform,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,31 +20,50 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getPostById } from '../../data/mock/posts';
+import { Comment } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const MOCK_COMMENTS = [
-  { id: 'c1', user: 'Omar Hassan', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop', text: 'This is absolutely stunning! 🔥', time: '2h ago' },
-  { id: 'c2', user: 'Fatima Al-Zahra', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop', text: 'Love the color palette you used here', time: '4h ago' },
-  { id: 'c3', user: 'Khalid Mansour', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: 'Would love to collaborate on something similar', time: '6h ago' },
+const MOCK_COMMENTS: Comment[] = [
+  { id: 'c1', userId: 'u2', user: 'Omar Hassan', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop', text: 'This is absolutely stunning! 🔥', time: '2h ago' },
+  { id: 'c2', userId: 'u3', user: 'Fatima Al-Zahra', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop', text: 'Love the color palette you used here', time: '4h ago' },
+  { id: 'c3', userId: 'u-khalid', user: 'Khalid Mansour', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: 'Would love to collaborate on something similar', time: '6h ago' },
 ];
 
 export default function PostDetailScreen({ route, navigation }: ScreenProps<'PostDetail'>) {
   const post = getPostById(route.params.postId);
+  const focusComments = route.params.focusComments === true;
   const { user, removePostId } = useMyProfile();
+  const scrollRef = useRef<ScrollView>(null);
+  const commentsY = useRef(0);
   const [activeImage, setActiveImage] = useState(0);
   const [comment, setComment] = useState('');
   const [liked, setLiked] = useState(post?.isLiked ?? false);
   const [likeCount, setLikeCount] = useState(post?.likes ?? 0);
+  const [saved, setSaved] = useState(post?.isSaved ?? false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    if (!focusComments || !post) return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(commentsY.current - 12, 0), animated: true });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [focusComments, post]);
 
   if (!post) {
     return (
       <ScreenContainer>
-        <Text>Post not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Post not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -67,7 +87,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           : { message: `${message}\n${url}`, title: 'Mawahib' }
       );
     } catch {
-      // dismissed
+      Alert.alert('Share unavailable', `${message}\n${url}`);
     }
   };
 
@@ -102,15 +122,11 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           style={styles.authorRow}
-          onPress={() => {
-            if (isOwnPost) return;
-            navigation.navigate('UserProfile', { userId: post.author.id });
-          }}
-          activeOpacity={isOwnPost ? 1 : 0.8}
-          disabled={isOwnPost}
+          onPress={() => openUserProfile(navigation, post.author.id, user.id)}
+          activeOpacity={0.8}
         >
           <Image source={toImageSource(post.author.avatar)} style={styles.avatar} contentFit="cover" />
           <View style={styles.authorInfo}>
@@ -121,11 +137,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
               </Text>
             ) : null}
           </View>
-          {!isOwnPost ? (
-            <TouchableOpacity style={styles.followButton}>
-              <Text style={styles.followText}>Follow</Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* Follow/Connect lives on the profile — avoid a dead control here */}
         </TouchableOpacity>
 
         <ScrollView
@@ -155,15 +167,27 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
               <Ionicons name={liked ? 'heart' : 'heart-outline'} size={26} color={liked ? colors.primary : colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() =>
+                scrollRef.current?.scrollTo({
+                  y: Math.max(commentsY.current - 12, 0),
+                  animated: true,
+                })
+              }
+            >
               <Ionicons name="chatbubble-outline" size={24} color={colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity style={styles.actionBtn} onPress={sharePost}>
               <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity>
-            <Ionicons name="bookmark-outline" size={24} color={colors.text} />
+          <TouchableOpacity onPress={() => setSaved((s) => !s)}>
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={24}
+              color={saved ? colors.primary : colors.text}
+            />
           </TouchableOpacity>
         </View>
 
@@ -173,13 +197,29 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           {post.caption}
         </Text>
 
-        <View style={styles.commentsSection}>
+        <View
+          style={styles.commentsSection}
+          onLayout={(e) => {
+            commentsY.current = e.nativeEvent.layout.y;
+          }}
+        >
           <Text style={styles.commentsTitle}>Comments</Text>
           {MOCK_COMMENTS.map((c) => (
             <View key={c.id} style={styles.comment}>
-              <Image source={{ uri: c.avatar }} style={styles.commentAvatar} contentFit="cover" />
+              <TouchableOpacity
+                onPress={() => openUserProfile(navigation, c.userId, user.id)}
+                activeOpacity={0.8}
+                hitSlop={4}
+              >
+                <Image source={{ uri: c.avatar }} style={styles.commentAvatar} contentFit="cover" />
+              </TouchableOpacity>
               <View style={styles.commentBody}>
-                <Text style={styles.commentUser}>{c.user}</Text>
+                <TouchableOpacity
+                  onPress={() => openUserProfile(navigation, c.userId, user.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.commentUser}>{c.user}</Text>
+                </TouchableOpacity>
                 <Text style={styles.commentText}>{c.text}</Text>
                 <Text style={styles.commentTime}>{c.time}</Text>
               </View>
@@ -407,4 +447,19 @@ const styles = StyleSheet.create({
   commentInput: { flex: 1, ...typography.bodySmall, color: colors.text },
   postComment: { ...typography.label, color: colors.primary },
   postCommentDisabled: { opacity: 0.4 },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });

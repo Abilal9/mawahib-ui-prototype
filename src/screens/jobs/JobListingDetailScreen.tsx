@@ -15,13 +15,18 @@ export default function JobListingDetailScreen({
   route,
   navigation,
 }: ScreenProps<'JobListingDetail'>) {
-  const { openFromListing } = useUserJobs();
+  const { applyToListing } = useUserJobs();
   const job = getJobById(route.params.jobId);
 
   if (!job) {
     return (
       <ScreenContainer>
-        <Text>Job not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Job not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -103,7 +108,7 @@ export default function JobListingDetailScreen({
           title="Apply Now"
           fullWidth
           onPress={() => {
-            const userJobId = openFromListing(job.id);
+            const userJobId = applyToListing(job.id);
             if (userJobId) {
               navigation.navigate('JobInProgress', { jobId: userJobId });
             }
@@ -188,4 +193,19 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.white,
   },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });

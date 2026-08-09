@@ -17,18 +17,26 @@ import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getConversationById, getMessagesByConversation } from '../../data/mock/messages';
 import { currentUser } from '../../data/mock/users';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const conversation = getConversationById(route.params.conversationId);
   const initialMessages = getMessagesByConversation(route.params.conversationId);
+  const { user: me } = useMyProfile();
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState('');
 
   if (!conversation) {
     return (
       <ScreenContainer>
-        <Text>Conversation not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Conversation not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -56,11 +64,17 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Image source={toImageSource(conversation.participant.avatar)} style={styles.headerAvatar} contentFit="cover" />
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{conversation.participant.name}</Text>
-          <Text style={styles.headerStatus}>Active now</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.headerPerson}
+          onPress={() => openUserProfile(navigation, conversation.participant.id, me.id)}
+          activeOpacity={0.8}
+        >
+          <Image source={toImageSource(conversation.participant.avatar)} style={styles.headerAvatar} contentFit="cover" />
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerName}>{conversation.participant.name}</Text>
+            <Text style={styles.headerStatus}>Active now</Text>
+          </View>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.backButton}>
           <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -125,6 +139,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   backButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  headerPerson: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   headerAvatar: { width: 40, height: 40, borderRadius: 20 },
   headerInfo: { flex: 1 },
   headerName: { ...typography.label, color: colors.text },
@@ -172,4 +192,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonDisabled: { opacity: 0.4 },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });

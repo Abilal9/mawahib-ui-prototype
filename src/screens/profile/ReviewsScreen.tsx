@@ -14,11 +14,14 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { getReviewsForUser, ReviewItem } from '../../data/mock/reviews';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 type SortKey = 'newest' | 'highest' | 'lowest';
 
 export default function ReviewsScreen({ navigation, route }: ScreenProps<'Reviews'>) {
+  const { user: me } = useMyProfile();
   const bundle = getReviewsForUser(route.params?.userId);
   const [sort, setSort] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
@@ -101,7 +104,12 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
             </View>
           </View>
         }
-        renderItem={({ item }) => <ReviewRow review={item} />}
+        renderItem={({ item }) => (
+          <ReviewRow
+            review={item}
+            onAuthorPress={() => openUserProfile(navigation, item.authorId, me.id)}
+          />
+        )}
         ListEmptyComponent={
           <Text style={styles.empty}>No reviews match this filter.</Text>
         }
@@ -143,14 +151,24 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
   );
 }
 
-function ReviewRow({ review }: { review: ReviewItem }) {
+function ReviewRow({
+  review,
+  onAuthorPress,
+}: {
+  review: ReviewItem;
+  onAuthorPress: () => void;
+}) {
   return (
     <View style={styles.reviewRow}>
-      <Image source={{ uri: review.authorAvatar }} style={styles.avatar} contentFit="cover" />
+      <TouchableOpacity onPress={onAuthorPress} activeOpacity={0.8} hitSlop={4}>
+        <Image source={{ uri: review.authorAvatar }} style={styles.avatar} contentFit="cover" />
+      </TouchableOpacity>
       <View style={styles.reviewBody}>
         <View style={styles.reviewTop}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.author}>{review.authorName}</Text>
+            <TouchableOpacity onPress={onAuthorPress} activeOpacity={0.8}>
+              <Text style={styles.author}>{review.authorName}</Text>
+            </TouchableOpacity>
             <Text style={styles.time}>{review.timeAgo}</Text>
           </View>
           <View style={styles.ratingPill}>

@@ -20,6 +20,8 @@ import {
 import { ScreenProps } from '../../navigation/types';
 import { Notification } from '../../data/types';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -118,7 +120,8 @@ function NotificationItem({
 }
 
 export default function NotificationsScreen({ navigation }: ScreenProps<'Notifications'>) {
-  const { openFromListing } = useUserJobs();
+  const { getJobById, acceptJob, declineJob } = useUserJobs();
+  const { user: me } = useMyProfile();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
   const [items, setItems] = useState(initialNotifications);
 
@@ -131,24 +134,48 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  const resolveUserJobId = (item: Notification) => {
+    if (item.userJobId) {
+      const byUserJob = getJobById(item.userJobId);
+      if (byUserJob) return byUserJob.id;
+    }
+    if (item.jobId) {
+      const byListing = getJobById(item.jobId);
+      if (byListing) return byListing.id;
+    }
+    return undefined;
+  };
+
   const openNotification = (item: Notification) => {
     setItems((prev) =>
       prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
     );
 
     switch (item.type) {
-      case 'job':
-        if (item.jobId) {
+      case 'job': {
+        const userJobId = resolveUserJobId(item);
+        if (userJobId) {
+          navigation.navigate('JobInProgress', { jobId: userJobId });
+        } else if (item.jobId) {
           navigation.navigate('JobListingDetail', { jobId: item.jobId });
         } else {
           navigation.navigate('MainTabs', { screen: 'JobsTab' });
         }
         break;
+      }
       case 'message':
-        navigation.navigate('MainTabs', { screen: 'MessagesTab' });
+        if (item.conversationId) {
+          navigation.navigate('Chat', { conversationId: item.conversationId });
+        } else {
+          navigation.navigate('MainTabs', { screen: 'MessagesTab' });
+        }
         break;
       case 'follow':
-        navigation.navigate('Connections');
+        if (item.user?.id) {
+          openUserProfile(navigation, item.user.id, me.id);
+        } else {
+          navigation.navigate('Connections');
+        }
         break;
       case 'system':
         navigation.navigate('MainTabs', { screen: 'HomeTab' });
@@ -215,19 +242,26 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             item={item}
             onPress={() => openNotification(item)}
             onAccept={() => {
+              const userJobId = resolveUserJobId(item);
+              if (userJobId) {
+                acceptJob(userJobId);
+              }
               setItems((prev) =>
                 prev.map((n) =>
                   n.id === item.id ? { ...n, read: true, actions: undefined } : n
                 )
               );
-              if (item.jobId) {
-                const userJobId = openFromListing(item.jobId);
-                if (userJobId) {
-                  navigation.navigate('JobInProgress', { jobId: userJobId });
-                }
+              if (userJobId) {
+                navigation.navigate('JobInProgress', { jobId: userJobId });
+              } else {
+                navigation.navigate('MainTabs', { screen: 'JobsTab' });
               }
             }}
             onDecline={() => {
+              const userJobId = resolveUserJobId(item);
+              if (userJobId) {
+                declineJob(userJobId);
+              }
               setItems((prev) => prev.filter((n) => n.id !== item.id));
             }}
             onRate={(rating) => {
@@ -236,14 +270,12 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
                   n.id === item.id ? { ...n, read: true, showRating: false } : n
                 )
               );
-              if (item.jobId) {
-                const userJobId = openFromListing(item.jobId);
-                if (userJobId) {
-                  navigation.navigate('WriteReview', {
-                    jobId: userJobId,
-                    initialRating: rating,
-                  });
-                }
+              const userJobId = resolveUserJobId(item);
+              if (userJobId) {
+                navigation.navigate('WriteReview', {
+                  jobId: userJobId,
+                  initialRating: rating,
+                });
               }
             }}
           />

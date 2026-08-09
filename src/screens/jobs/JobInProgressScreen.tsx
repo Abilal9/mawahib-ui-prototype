@@ -17,6 +17,8 @@ import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import {
   formatMoney,
   jobTotalPrice,
@@ -88,11 +90,14 @@ function parseSlashDate(value: string): Date | null {
 
 export default function JobInProgressScreen({ route, navigation }: ScreenProps<'JobInProgress'>) {
   const { getJobById, acceptJob, declineJob, requestEdits } = useUserJobs();
+  const { user: me } = useMyProfile();
   const userJob = getJobById(route.params.jobId);
   const details = userJob ? resolveJobDetails(userJob) : null;
   const totalPrice = details ? jobTotalPrice(details) : 0;
   const canAct =
     userJob?.type === 'received' && userJob.status === 'pending';
+  /** Client pays after provider accepts (or seed pending-payment jobs). */
+  const canPay = userJob?.status === 'pending-payment';
 
   const [declineOpen, setDeclineOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
@@ -190,7 +195,12 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
   if (!userJob) {
     return (
       <ScreenContainer>
-        <Text>Request not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Request not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -216,10 +226,14 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
         contentContainerStyle={styles.content}
       >
         <View style={styles.personRow}>
-          <View style={styles.userInline}>
+          <TouchableOpacity
+            style={styles.userInline}
+            onPress={() => openUserProfile(navigation, userJob.counterpart.id, me.id)}
+            activeOpacity={0.8}
+          >
             <Ionicons name="person-circle-outline" size={30} color={colors.textSecondary} />
             <Text style={styles.personName}>{userJob.counterpart.name}</Text>
-          </View>
+          </TouchableOpacity>
           <View>
             <Text style={styles.metaLabel}>Requested on</Text>
             <Text style={styles.metaValueStrong}>{details!.requestedAt}</Text>
@@ -355,6 +369,21 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
               style={styles.halfBtn}
             />
           </View>
+        </View>
+      ) : null}
+
+      {canPay && userJob ? (
+        <View style={styles.footer}>
+          <Button
+            title={`Pay ${totalPrice > 0 ? formatMoney(totalPrice) : 'now'}`}
+            onPress={() =>
+              navigation.navigate('ConfirmPayment', {
+                jobId: userJob.id,
+                amount: totalPrice > 0 ? totalPrice : undefined,
+              })
+            }
+            fullWidth
+          />
         </View>
       ) : null}
 
@@ -845,4 +874,19 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.text,
   },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });

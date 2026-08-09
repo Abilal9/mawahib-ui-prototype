@@ -13,10 +13,12 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useConnections } from '../../context/ConnectionsContext';
+import { useMyProfile } from '../../context/ProfileContext';
 import { getConnectionsForUser } from '../../data/mock/connections';
 import { getUserById } from '../../data/mock/users';
 import { resolveProfileUser } from '../../data/mock/resolveUser';
 import { User } from '../../data/types';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 type ConnectionsTab = 'requests' | 'connections';
@@ -26,7 +28,8 @@ export default function ConnectionsScreen({
   route,
 }: ScreenProps<'Connections'>) {
   const viewedUserId = route.params?.userId;
-  const isOwn = !viewedUserId;
+  const { user: me } = useMyProfile();
+  const isOwn = !viewedUserId || viewedUserId === me.id;
   const { connectedUsers, incomingUsers, acceptRequest, denyRequest } = useConnections();
   const [tab, setTab] = useState<ConnectionsTab>(
     isOwn && incomingUsers.length > 0 ? 'requests' : 'connections'
@@ -102,7 +105,7 @@ export default function ConnectionsScreen({
   const renderConnection = ({ item }: { item: User }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
+      onPress={() => openUserProfile(navigation, item.id, me.id)}
       activeOpacity={0.85}
     >
       <Image source={toImageSource(item.avatar)} style={styles.avatar} contentFit="cover" />
@@ -124,7 +127,7 @@ export default function ConnectionsScreen({
     <View style={styles.card}>
       <TouchableOpacity
         style={styles.requestPerson}
-        onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
+        onPress={() => openUserProfile(navigation, item.id, me.id)}
         activeOpacity={0.85}
       >
         <Image source={toImageSource(item.avatar)} style={styles.avatar} contentFit="cover" />

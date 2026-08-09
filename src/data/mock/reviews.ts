@@ -1,5 +1,6 @@
 export interface ReviewItem {
   id: string;
+  authorId: string;
   authorName: string;
   authorAvatar: string;
   timeAgo: string;
@@ -39,6 +40,7 @@ const ATTACHMENT =
 const defaultReviews: ReviewItem[] = [
   {
     id: 'rv1',
+    authorId: 'u-courtney',
     authorName: 'Courtney Henry',
     authorAvatar: AVATARS.courtney,
     timeAgo: '2 mins ago',
@@ -49,6 +51,7 @@ const defaultReviews: ReviewItem[] = [
   },
   {
     id: 'rv2',
+    authorId: 'u-jacob',
     authorName: 'Jacob Jones',
     authorAvatar: AVATARS.jacob,
     timeAgo: '2 mins ago',
@@ -58,6 +61,7 @@ const defaultReviews: ReviewItem[] = [
   },
   {
     id: 'rv3',
+    authorId: 'u-floyd',
     authorName: 'Floyd Miles',
     authorAvatar: AVATARS.floyd,
     timeAgo: '3 days ago',
@@ -67,6 +71,7 @@ const defaultReviews: ReviewItem[] = [
   },
   {
     id: 'rv4',
+    authorId: 'u-jane',
     authorName: 'Jane Cooper',
     authorAvatar: AVATARS.jane,
     timeAgo: '3 days ago',
@@ -76,6 +81,7 @@ const defaultReviews: ReviewItem[] = [
   },
   {
     id: 'rv5',
+    authorId: 'u-ronald',
     authorName: 'Ronald Richards',
     authorAvatar: AVATARS.ronald,
     timeAgo: '1 week ago',

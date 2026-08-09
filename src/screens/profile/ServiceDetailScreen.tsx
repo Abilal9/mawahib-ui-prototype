@@ -21,6 +21,7 @@ import { getServiceById } from '../../data/mock/services';
 import { getVisitorProfileContent } from '../../data/mock/myProfile';
 import { resolveProfileUser } from '../../data/mock/resolveUser';
 import { useMyProfile } from '../../context/ProfileContext';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 /**
@@ -53,7 +54,12 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   if (!catalogService && !profileService) {
     return (
       <ScreenContainer>
-        <Text>Service not found</Text>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Service not found</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
@@ -252,7 +258,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
           <TouchableOpacity
             style={styles.providerRow}
-            onPress={() => navigation.navigate('UserProfile', { userId: service.provider.id })}
+            onPress={() => openUserProfile(navigation, service.provider.id, me.id)}
             activeOpacity={0.8}
           >
             <Image source={toImageSource(service.provider.avatar)} style={styles.providerAvatar} contentFit="cover" />
@@ -455,4 +461,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   modalCancelText: { ...typography.button, color: colors.text },
+  missingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  missingBack: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  missingBackText: { ...typography.button, color: colors.white },
 });
