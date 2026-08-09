@@ -30,6 +30,8 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
 
+const REFRESH_DELAY_MS = 450;
+
 function imageSource(src: string | number) {
   return toImageSource(src);
 }
@@ -358,7 +360,18 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const [jobList, setJobList] = useState(jobs);
   const [serviceList, setServiceList] = useState(services);
   const [talentList, setTalentList] = useState(talents);
+  const [refreshing, setRefreshing] = useState(false);
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS));
+    setFeedPosts(posts.map((p) => ({ ...p })));
+    setJobList([...jobs]);
+    setServiceList([...services]);
+    setTalentList([...talents]);
+    setRefreshing(false);
+  };
 
   const toggleLike = (postId: string) => {
     setFeedPosts((prev) =>
@@ -420,7 +433,18 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
         notificationCount={unreadCount}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         <FlatList
           data={stories}
           horizontal
