@@ -4,10 +4,12 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { ApiError } from '../lib/apiClient';
 import { supabase } from '../lib/supabase';
 import { authApi, mapApiUserToUser, type ApiUser } from '../services/authApi';
 import type { User } from '../data/types';
@@ -58,6 +60,44 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function bootstrapPayloadFromSession(
+  session: Session,
+  overrides?: {
+    accountType?: AccountType;
+    displayName?: string;
+    locationCity?: string;
+  },
+  fallbacks?: {
+    accountType?: AccountType | null;
+    name?: string;
+    city?: string;
+  },
+) {
+  const meta = session.user?.user_metadata ?? {};
+  const accountType =
+    overrides?.accountType ||
+    fallbacks?.accountType ||
+    (meta.account_type as AccountType | undefined) ||
+    'talent';
+  const displayName =
+    overrides?.displayName ||
+    fallbacks?.name ||
+    (meta.display_name as string | undefined) ||
+    session.user?.email?.split('@')[0] ||
+    'Mawahib User';
+  const locationCity =
+    overrides?.locationCity ||
+    fallbacks?.city ||
+    (meta.city as string | undefined);
+
+  return {
+    accountType,
+    displayName,
+    locationCity,
+    email: session.user?.email,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
@@ -66,26 +106,134 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const hydrateInFlight = useRef<Promise<ApiUser | null> | null>(null);
+  const accountTypeRef = useRef(accountType);
+  const signUpBasicsRef = useRef(signUpBasics);
+  accountTypeRef.current = accountType;
+  signUpBasicsRef.current = signUpBasics;
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
+  const clearAuthenticatedState = useCallback(() => {
+    setSession(null);
+    setApiUser(null);
+    setIsSignedIn(false);
+    setAccountType(null);
+    setSignUpBasics(null);
+  }, []);
+
+  const applyApiUser = useCallback((user: ApiUser) => {
+    setApiUser(user);
+    setAccountType(user.accountType);
+    setIsSignedIn(true);
+  }, []);
+
+  /**
+   * Restore Nest user for an active Supabase session.
+   * Prefer GET /users/me; bootstrap once on 404. Never treat mock data as identity.
+   */
+  const hydrateBackendUser = useCallback(
+    async (
+      active: Session | null,
+      overrides?: {
+        accountType?: AccountType;
+        displayName?: string;
+        locationCity?: string;
+      },
+    ): Promise<ApiUser | null> => {
+      if (!active) {
+        clearAuthenticatedState();
+        return null;
+      }
+
+      setSession(active);
+
+      const run = async (): Promise<ApiUser | null> => {
+        try {
+          let user: ApiUser;
+          try {
+            user = await authApi.getMe();
+          } catch (err) {
+            if (!(err instanceof ApiError) || err.status !== 404) {
+              throw err;
+            }
+            user = await authApi.bootstrap(
+              bootstrapPayloadFromSession(active, overrides, {
+                accountType: accountTypeRef.current,
+                name: signUpBasicsRef.current?.name,
+                city: signUpBasicsRef.current?.city,
+              }),
+            );
+          }
+          applyApiUser(user);
+          return user;
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 401) {
+            await supabase.auth.signOut();
+            clearAuthenticatedState();
+            return null;
+          }
+          const message =
+            err instanceof Error ? err.message : 'Failed to restore session';
+          setAuthError(message);
+          // Keep Supabase session for retry, but do not enter the app without Nest user.
+          setApiUser(null);
+          setIsSignedIn(false);
+          return null;
+        }
+      };
+
+      if (hydrateInFlight.current) {
+        return hydrateInFlight.current;
+      }
+      const promise = run().finally(() => {
+        if (hydrateInFlight.current === promise) {
+          hydrateInFlight.current = null;
+        }
+      });
+      hydrateInFlight.current = promise;
+      return promise;
+    },
+    [applyApiUser, clearAuthenticatedState],
+  );
+
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        await hydrateBackendUser(data.session);
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       if (!mounted) return;
-      setSession(data.session);
-      setIsSignedIn(Boolean(data.session));
-      setAuthLoading(false);
+
+      if (event === 'SIGNED_OUT') {
+        clearAuthenticatedState();
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(next);
+        return;
+      }
+
+      if (event === 'SIGNED_IN' && next) {
+        // Explicit sign-in / OTP paths also call hydrate; coalesced via hydrateInFlight.
+        void hydrateBackendUser(next);
+      }
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setIsSignedIn(Boolean(next));
-    });
+
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [clearAuthenticatedState, hydrateBackendUser]);
 
   const registerWithEmail = useCallback(
     async (input: {
@@ -117,23 +265,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: input.email.trim(),
         city: input.city.trim(),
       });
+      if (data.session) {
+        await hydrateBackendUser(data.session, {
+          accountType: input.accountType,
+          displayName: input.name.trim(),
+          locationCity: input.city.trim(),
+        });
+      }
       return { needsEmailConfirmation: !data.session };
     },
-    [],
+    [hydrateBackendUser],
   );
 
-  const verifySignupOtp = useCallback(async (email: string, token: string) => {
-    setAuthError(null);
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: token.trim(),
-      type: 'signup',
-    });
-    if (error) {
-      setAuthError(error.message);
-      throw error;
-    }
-  }, []);
+  const verifySignupOtp = useCallback(
+    async (email: string, token: string) => {
+      setAuthError(null);
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: token.trim(),
+        type: 'signup',
+      });
+      if (error) {
+        setAuthError(error.message);
+        throw error;
+      }
+      if (data.session) {
+        await hydrateBackendUser(data.session);
+      }
+    },
+    [hydrateBackendUser],
+  );
 
   const resendSignupOtp = useCallback(async (email: string) => {
     setAuthError(null);
@@ -159,45 +320,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) {
         throw new Error('No active session — sign in again');
       }
-      setSession(active);
-      const meta = active.user?.user_metadata ?? {};
-      const type =
-        input?.accountType ||
-        accountType ||
-        (meta.account_type as AccountType | undefined) ||
-        'talent';
-      const displayName =
-        input?.displayName ||
-        signUpBasics?.name ||
-        (meta.display_name as string | undefined) ||
-        active.user?.email?.split('@')[0] ||
-        'Mawahib User';
-      const locationCity =
-        input?.locationCity ||
-        signUpBasics?.city ||
-        (meta.city as string | undefined);
-
-      const user = await authApi.bootstrap({
-        accountType: type,
-        displayName,
-        locationCity,
-        email: active.user?.email,
-      });
-      setApiUser(user);
-      setAccountType(user.accountType);
-      setIsSignedIn(true);
+      const user = await hydrateBackendUser(active, input);
+      if (!user) {
+        throw new Error('Failed to bootstrap session');
+      }
       return user;
     },
-    [accountType, signUpBasics],
+    [hydrateBackendUser],
   );
 
   const refreshMe = useCallback(async () => {
     const user = await authApi.getMe();
-    setApiUser(user);
-    setAccountType(user.accountType);
-    setIsSignedIn(true);
+    applyApiUser(user);
     return user;
-  }, []);
+  }, [applyApiUser]);
 
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
@@ -210,48 +346,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(error.message);
         throw error;
       }
-      setSession(data.session);
-      const meta = data.user?.user_metadata ?? {};
-      const user = await authApi.bootstrap({
-        accountType: (meta.account_type as AccountType) || 'talent',
-        displayName:
-          (meta.display_name as string) ||
-          email.trim().split('@')[0] ||
-          'Mawahib User',
-        locationCity: (meta.city as string) || undefined,
-        email: data.user?.email,
-      });
-      setApiUser(user);
-      setAccountType(user.accountType);
-      setIsSignedIn(true);
+      const user = await hydrateBackendUser(data.session);
+      if (!user) {
+        throw new Error('Signed in but failed to load profile');
+      }
       return user;
     },
-    [],
+    [hydrateBackendUser],
   );
 
   const completeSignUp = useCallback(() => {
-    setIsSignedIn(true);
-  }, []);
+    setIsSignedIn(Boolean(apiUser));
+  }, [apiUser]);
 
   const signIn = useCallback(() => {
-    setIsSignedIn(true);
-  }, []);
+    setIsSignedIn(Boolean(apiUser));
+  }, [apiUser]);
 
   const signOut = useCallback(async () => {
     setAuthError(null);
     await supabase.auth.signOut();
-    setIsSignedIn(false);
-    setSignUpBasics(null);
-    setAccountType(null);
-    setApiUser(null);
-    setSession(null);
-  }, []);
+    clearAuthenticatedState();
+  }, [clearAuthenticatedState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       accountType,
       setAccountType,
-      isSignedIn,
+      isSignedIn: isSignedIn && Boolean(apiUser),
       session,
       accessToken: session?.access_token ?? null,
       apiUser,

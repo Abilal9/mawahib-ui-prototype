@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { User, ConnectionRelation } from '../data/types';
 import { connectionService, userService } from '../services';
+import { useAuth } from './AuthContext';
 
 export type { ConnectionRelation };
 
@@ -23,27 +24,35 @@ interface ConnectionsContextValue {
 
 const ConnectionsContext = createContext<ConnectionsContextValue | undefined>(undefined);
 
-function selfId() {
-  return userService.getCurrentSync().id;
-}
-
 function userById(id: string) {
   return userService.getByIdSync(id);
 }
 
 const SEED_CONNECTED = connectionService.getSeedConnectedIds();
-const SEED_INCOMING = connectionService.getSeedIncomingIds(selfId(), SEED_CONNECTED);
 
 export function ConnectionsProvider({ children }: { children: React.ReactNode }) {
+  const { mappedUser, apiUser, isSignedIn } = useAuth();
+  const me = mappedUser?.id || apiUser?.id || '';
+
   const [connectedIds, setConnectedIds] = useState<string[]>(SEED_CONNECTED);
   const [outgoingIds, setOutgoingIds] = useState<string[]>([]);
-  const [incomingIds, setIncomingIds] = useState<string[]>(SEED_INCOMING);
+  const [incomingIds, setIncomingIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isSignedIn || !me) {
+      setConnectedIds([]);
+      setOutgoingIds([]);
+      setIncomingIds([]);
+      return;
+    }
+    setConnectedIds(SEED_CONNECTED);
+    setOutgoingIds([]);
+    setIncomingIds(connectionService.getSeedIncomingIds(me, SEED_CONNECTED));
+  }, [isSignedIn, me]);
 
   const value = useMemo<ConnectionsContextValue>(() => {
-    const me = selfId();
-
     const getRelation = (userId: string): ConnectionRelation => {
-      if (userId === me) return 'connected';
+      if (me && userId === me) return 'connected';
       if (connectedIds.includes(userId)) return 'connected';
       if (outgoingIds.includes(userId)) return 'outgoing';
       if (incomingIds.includes(userId)) return 'incoming';
@@ -63,7 +72,7 @@ export function ConnectionsProvider({ children }: { children: React.ReactNode })
       getRelation,
       isConnected: (userId) => getRelation(userId) === 'connected',
       requestConnect: (userId) => {
-        if (userId === me) return;
+        if (!me || userId === me) return;
         setConnectedIds((prev) => prev.filter((id) => id !== userId));
         setIncomingIds((prev) => prev.filter((id) => id !== userId));
         setOutgoingIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
@@ -86,7 +95,7 @@ export function ConnectionsProvider({ children }: { children: React.ReactNode })
       },
       getConversationId: (userId) => connectionService.getConversationId(userId),
     };
-  }, [connectedIds, outgoingIds, incomingIds]);
+  }, [me, connectedIds, outgoingIds, incomingIds]);
 
   return (
     <ConnectionsContext.Provider value={value}>{children}</ConnectionsContext.Provider>

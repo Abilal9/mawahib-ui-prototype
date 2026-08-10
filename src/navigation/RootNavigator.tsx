@@ -56,28 +56,30 @@ import { useAuth } from '../context/AuthContext';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /**
- * Gates MainTabs behind mock isSignedIn. Auth/onboarding screens stay registered
- * so SignIn/SignupSuccess can still reset navigation without remount races.
+ * Gates MainTabs behind authenticated Nest user (session + /users/me).
+ * Auth/onboarding screens stay registered so SignIn/SignupSuccess can reset
+ * navigation without remount races.
  *
  * Orphaned screens intentionally unregistered (files kept for later reuse):
  * ExploreEmpty, Portfolio, Services, VideoCapture, CreateMenu,
  * ProfileSetupStep1–5 as routes, MessagesEmpty.
  */
 function MainTabsGate() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, authLoading, apiUser } = useAuth();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
-    if (!isSignedIn) {
+    if (authLoading) return;
+    if (!isSignedIn || !apiUser) {
       navigation.reset({
         index: 0,
         routes: [{ name: 'SignIn' }],
       });
     }
-  }, [isSignedIn, navigation]);
+  }, [authLoading, isSignedIn, apiUser, navigation]);
 
-  if (!isSignedIn) return null;
+  if (authLoading || !isSignedIn || !apiUser) return null;
   return <MainTabs />;
 }
 

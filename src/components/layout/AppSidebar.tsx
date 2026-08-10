@@ -54,7 +54,7 @@ const FOOTER_LINKS: {
 
 export default function AppSidebar() {
   const { isOpen, close } = useSidebar();
-  const { user, resetToSeed } = useMyProfile();
+  const { user } = useMyProfile();
   const { signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -102,14 +102,13 @@ export default function AppSidebar() {
 
   const handleLogout = () => {
     close();
-    signOut();
-    resetToSeed();
-    setTimeout(() => {
+    void (async () => {
+      await signOut();
       navigation.reset({
         index: 0,
         routes: [{ name: 'SignIn' }],
       });
-    }, 200);
+    })();
   };
 
   const rating = user.rating ?? 5;

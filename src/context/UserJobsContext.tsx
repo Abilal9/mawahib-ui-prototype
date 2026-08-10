@@ -3,6 +3,7 @@ import { User, JobListing } from '../data/types';
 import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
 import { jobService, userService } from '../services';
 import { repositories } from '../repositories';
+import { useAuth } from './AuthContext';
 
 /**
  * In-memory jobs store for the prototype.
@@ -134,6 +135,7 @@ function findExistingApplication(jobs: UserJob[], listingId: string) {
 }
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
+  const { mappedUser } = useAuth();
   const [jobs, setJobs] = useState<UserJob[]>(() => repositories.userJobs.list());
 
   const syncJobs = (updater: (prev: UserJob[]) => UserJob[]) => {
@@ -221,7 +223,10 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         return id;
       },
       createPostedJob: (payload) => {
-        const me = userService.getCurrentSync();
+        const me = mappedUser;
+        if (!me) {
+          throw new Error('Not authenticated');
+        }
         const listing = jobService.createListing({
           title: payload.title.trim() || 'Untitled job',
           company: me.name,
@@ -396,7 +401,7 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         );
       },
     }),
-    [jobs]
+    [jobs, mappedUser],
   );
 
   return <UserJobsContext.Provider value={value}>{children}</UserJobsContext.Provider>;

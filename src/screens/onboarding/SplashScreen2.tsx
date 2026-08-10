@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -6,9 +6,17 @@ import SplashBranding from '../../components/onboarding/SplashBranding';
 import SplashLoadingDots from '../../components/onboarding/SplashLoadingDots';
 import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
+/**
+ * Splash + auth gate:
+ * Wait for session restore + Nest /users/me (or bootstrap) before navigating,
+ * so the user never briefly lands on Welcome/Main with the wrong identity.
+ */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { authLoading, isSignedIn, apiUser } = useAuth();
+  const [minSplashDone, setMinSplashDone] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -17,9 +25,23 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
       useNativeDriver: true,
     }).start();
 
-    const timer = setTimeout(() => navigation.replace('Welcome', { step: 1 }), 2200);
+    const timer = setTimeout(() => setMinSplashDone(true), 1200);
     return () => clearTimeout(timer);
-  }, [navigation, fadeAnim]);
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    if (authLoading || !minSplashDone) return;
+
+    if (isSignedIn && apiUser) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+      return;
+    }
+
+    navigation.replace('Welcome', { step: 1 });
+  }, [authLoading, minSplashDone, isSignedIn, apiUser, navigation]);
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.background} safeBottom={false}>

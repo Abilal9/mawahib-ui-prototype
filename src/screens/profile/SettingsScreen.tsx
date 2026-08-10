@@ -13,7 +13,6 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 
 const SETTINGS_SECTIONS = [
@@ -45,7 +44,6 @@ const SETTINGS_SECTIONS = [
 
 export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
   const { signOut } = useAuth();
-  const { resetToSeed } = useMyProfile();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   return (
@@ -122,7 +120,6 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
           onPress={() => {
             void (async () => {
               await signOut();
-              resetToSeed();
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'SignIn' }],

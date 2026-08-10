@@ -32,6 +32,26 @@ import {
  * Portfolio/services/about sections remain local mock until later phases.
  */
 
+const FALLBACK_AVATAR =
+  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
+
+/** Neutral placeholder — never the mock seed identity. */
+const emptyUser = (): User => ({
+  id: '',
+  name: '',
+  username: '',
+  avatar: FALLBACK_AVATAR,
+  bio: '',
+  skills: [],
+  followers: 0,
+  following: 0,
+  posts: 0,
+  isVerified: false,
+  title: '',
+  rating: 0,
+  reviewCount: 0,
+});
+
 interface ProfileContextValue {
   user: User;
   content: ProfileContent;
@@ -39,6 +59,7 @@ interface ProfileContextValue {
   useFilledProfile: () => void;
   applySignupProfile: (basics: { name: string; location: string }) => void;
   hydrateFromApiUser: (apiUser: ApiUser) => void;
+  clearLocalProfile: () => void;
   updateProfileBasics: (patch: {
     name?: string;
     title?: string;
@@ -61,12 +82,10 @@ interface ProfileContextValue {
   removeService: (serviceId: string) => void;
   removePostId: (postId: string) => void;
   addPostId: (postId: string) => void;
-  resetToSeed: () => void;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
-const seedUser = () => profileService.getSeedUser();
 const seedFilled = () => profileService.getFilledContent();
 const seedEmpty = () => profileService.getEmptyContent();
 
@@ -85,7 +104,7 @@ function locationParts(location?: string): {
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { apiUser, mappedUser, isSignedIn, accessToken } = useAuth();
   const [content, setContent] = useState<ProfileContent>(seedEmpty);
-  const [user, setUser] = useState<User>(seedUser);
+  const [user, setUser] = useState<User>(emptyUser);
 
   const hydrateFromApiUser = useCallback((next: ApiUser) => {
     const mapped = mapApiUserToUser(next);
@@ -97,11 +116,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const clearLocalProfile = useCallback(() => {
+    setContent(seedEmpty());
+    setUser(emptyUser());
+  }, []);
+
   useEffect(() => {
-    if (apiUser) {
-      hydrateFromApiUser(apiUser);
+    if (!isSignedIn || !apiUser) {
+      clearLocalProfile();
+      return;
     }
-  }, [apiUser, hydrateFromApiUser]);
+    hydrateFromApiUser(apiUser);
+  }, [apiUser, isSignedIn, hydrateFromApiUser, clearLocalProfile]);
 
   const persistMe = useCallback(
     async (payload: UpdateMePayload) => {
@@ -118,25 +144,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       content,
       useEmptyProfile: () => setContent(seedEmpty()),
       useFilledProfile: () => {
+        // Demo content only — identity stays the authenticated API user.
         setContent(seedFilled());
-        setUser(seedUser());
       },
       applySignupProfile: ({ name, location }) => {
         setContent(seedEmpty());
         setUser({
-          ...seedUser(),
+          ...emptyUser(),
           name,
           location,
-          title: '',
-          bio: '',
-          rating: 0,
-          reviewCount: 0,
-          followers: 0,
-          following: 0,
-          posts: 0,
         });
       },
       hydrateFromApiUser,
+      clearLocalProfile,
       updateProfileBasics: (patch) => {
         setUser((prev) => ({ ...prev, ...patch }));
         void persistMe({
@@ -197,12 +217,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           ...prev,
           postIds: [postId, ...prev.postIds],
         })),
-      resetToSeed: () => {
-        setContent(seedFilled());
-        setUser(seedUser());
-      },
     }),
-    [content, user, mappedUser, hydrateFromApiUser, persistMe],
+    [content, user, mappedUser, hydrateFromApiUser, clearLocalProfile, persistMe],
   );
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

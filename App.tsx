@@ -19,7 +19,7 @@ import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function App() {
+function AppProviders() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -42,27 +42,33 @@ export default function App() {
   }
 
   return (
+    <SidebarProvider>
+      <CreateMenuProvider>
+        <ProfileProvider>
+          <PostsProvider>
+            <NotificationsProvider>
+              <UserJobsProvider>
+                <ConnectionsProvider>
+                  <NavigationContainer>
+                    <StatusBar style="dark" />
+                    <RootNavigator />
+                  </NavigationContainer>
+                </ConnectionsProvider>
+              </UserJobsProvider>
+            </NotificationsProvider>
+          </PostsProvider>
+        </ProfileProvider>
+      </CreateMenuProvider>
+    </SidebarProvider>
+  );
+}
+
+export default function App() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <SidebarProvider>
-            <CreateMenuProvider>
-              <ProfileProvider>
-                <PostsProvider>
-                  <NotificationsProvider>
-                    <UserJobsProvider>
-                      <ConnectionsProvider>
-                        <NavigationContainer>
-                          <StatusBar style="dark" />
-                          <RootNavigator />
-                        </NavigationContainer>
-                      </ConnectionsProvider>
-                    </UserJobsProvider>
-                  </NotificationsProvider>
-                </PostsProvider>
-              </ProfileProvider>
-            </CreateMenuProvider>
-          </SidebarProvider>
+          <AppProviders />
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
