@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,27 +12,38 @@ import { useMyProfile } from '../../context/ProfileContext';
 
 export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupSuccess'>) {
   const insets = useSafeAreaInsets();
-  const { signUpBasics, completeSignUp } = useAuth();
-  const { applySignupProfile } = useMyProfile();
+  const { signUpBasics, accountType, bootstrapSession, completeSignUp } = useAuth();
+  const { hydrateFromApiUser } = useMyProfile();
+  const [loading, setLoading] = useState(false);
 
-  const finish = (goToProfile: boolean) => {
-    const name = signUpBasics?.name?.trim() || 'New Member';
-    const location = signUpBasics?.city?.trim() || '';
-    applySignupProfile({ name, location });
-    completeSignUp();
-
-    if (goToProfile) {
-      navigation.reset({
-        index: 1,
-        routes: [{ name: 'MainTabs' }, { name: 'Profile' }],
+  const finish = async (goToProfile: boolean) => {
+    setLoading(true);
+    try {
+      const apiUser = await bootstrapSession({
+        accountType: accountType || 'talent',
+        displayName: signUpBasics?.name?.trim() || undefined,
+        locationCity: signUpBasics?.city?.trim() || undefined,
       });
-      return;
-    }
+      hydrateFromApiUser(apiUser);
+      completeSignUp();
 
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],
-    });
+      if (goToProfile) {
+        navigation.reset({
+          index: 1,
+          routes: [{ name: 'MainTabs' }, { name: 'Profile' }],
+        });
+        return;
+      }
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    } catch (e) {
+      Alert.alert('Could not finish signup', (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,13 +65,19 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
         </Text>
       </View>
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-        <Button title="Get Started" fullWidth onPress={() => finish(false)} />
+        <Button
+          title="Get Started"
+          fullWidth
+          onPress={() => finish(false)}
+          disabled={loading}
+        />
         <Button
           title="Go to Profile"
           variant="ghost"
           fullWidth
           onPress={() => finish(true)}
           style={styles.secondary}
+          disabled={loading}
         />
       </View>
     </ScreenContainer>
@@ -82,20 +99,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   circle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: colors.primary + '15',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   badge: {
     position: 'absolute',
+    right: 8,
     bottom: 8,
-    right: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -114,9 +131,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
+    gap: spacing.sm,
   },
   secondary: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

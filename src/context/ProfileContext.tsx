@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  ReactNode,
+} from 'react';
 import {
   ProfileContent,
   ProfileEducation,
@@ -10,20 +18,27 @@ import {
   User,
 } from '../data/types';
 import { profileService } from '../services';
+import { useAuth } from './AuthContext';
+import {
+  authApi,
+  mapApiUserToUser,
+  type ApiUser,
+  type UpdateMePayload,
+} from '../services/authApi';
 
 /**
- * Signed-in user's editable profile (bio, portfolio, services, etc.).
- * Seeded via profileService → mock profile repository.
+ * Signed-in user's editable profile.
+ * Identity/basics hydrate from Nest `/users/me` when authenticated.
+ * Portfolio/services/about sections remain local mock until later phases.
  */
 
 interface ProfileContextValue {
   user: User;
   content: ProfileContent;
-  /** demo helper: start empty or switch to filled seed */
   useEmptyProfile: () => void;
   useFilledProfile: () => void;
-  /** After basic signup — empty content with name/city, ready for MainTabs */
   applySignupProfile: (basics: { name: string; location: string }) => void;
+  hydrateFromApiUser: (apiUser: ApiUser) => void;
   updateProfileBasics: (patch: {
     name?: string;
     title?: string;
@@ -44,9 +59,7 @@ interface ProfileContextValue {
   setServices: (services: ProfileService[]) => void;
   updateService: (serviceId: string, service: ProfileService) => void;
   removeService: (serviceId: string) => void;
-  /** Remove a post from the owner's profile list (by id). */
   removePostId: (postId: string) => void;
-  /** Append a newly created post id to the owner's profile list. */
   addPostId: (postId: string) => void;
   resetToSeed: () => void;
 }
@@ -57,13 +70,51 @@ const seedUser = () => profileService.getSeedUser();
 const seedFilled = () => profileService.getFilledContent();
 const seedEmpty = () => profileService.getEmptyContent();
 
+function locationParts(location?: string): {
+  locationCity?: string | null;
+  locationCountry?: string | null;
+} {
+  if (!location?.trim()) return { locationCity: null, locationCountry: null };
+  const [city, ...rest] = location.split(',').map((p) => p.trim());
+  return {
+    locationCity: city || null,
+    locationCountry: rest.length ? rest.join(', ') : null,
+  };
+}
+
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [content, setContent] = useState<ProfileContent>(seedFilled);
+  const { apiUser, mappedUser, isSignedIn, accessToken } = useAuth();
+  const [content, setContent] = useState<ProfileContent>(seedEmpty);
   const [user, setUser] = useState<User>(seedUser);
+
+  const hydrateFromApiUser = useCallback((next: ApiUser) => {
+    const mapped = mapApiUserToUser(next);
+    setUser(mapped);
+    setContent((prev) => ({
+      ...prev,
+      bio: next.bio ?? '',
+      talents: next.skills ?? prev.talents,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (apiUser) {
+      hydrateFromApiUser(apiUser);
+    }
+  }, [apiUser, hydrateFromApiUser]);
+
+  const persistMe = useCallback(
+    async (payload: UpdateMePayload) => {
+      if (!accessToken || !isSignedIn) return;
+      const updated = await authApi.updateMe(payload);
+      hydrateFromApiUser(updated);
+    },
+    [accessToken, hydrateFromApiUser, isSignedIn],
+  );
 
   const value = useMemo<ProfileContextValue>(
     () => ({
-      user,
+      user: mappedUser ?? user,
       content,
       useEmptyProfile: () => setContent(seedEmpty()),
       useFilledProfile: () => {
@@ -85,14 +136,27 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           posts: 0,
         });
       },
-      updateProfileBasics: (patch) =>
-        setUser((prev) => ({
-          ...prev,
-          ...patch,
-        })),
-      setBio: (bio) => setContent((prev) => ({ ...prev, bio })),
+      hydrateFromApiUser,
+      updateProfileBasics: (patch) => {
+        setUser((prev) => ({ ...prev, ...patch }));
+        void persistMe({
+          displayName: patch.name,
+          title: typeof patch.title === 'string' ? patch.title : undefined,
+          ...locationParts(
+            typeof patch.location === 'string' ? patch.location : undefined,
+          ),
+          avatarUrl: typeof patch.avatar === 'string' ? patch.avatar : undefined,
+        });
+      },
+      setBio: (bio) => {
+        setContent((prev) => ({ ...prev, bio }));
+        void persistMe({ bio });
+      },
       setLanguages: (languages) => setContent((prev) => ({ ...prev, languages })),
-      setTalents: (talents) => setContent((prev) => ({ ...prev, talents })),
+      setTalents: (talents) => {
+        setContent((prev) => ({ ...prev, talents }));
+        void persistMe({ skills: talents });
+      },
       setEducation: (education) => setContent((prev) => ({ ...prev, education })),
       setExperience: (experience) => setContent((prev) => ({ ...prev, experience })),
       setCertifications: (certifications) =>
@@ -138,7 +202,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setUser(seedUser());
       },
     }),
-    [content, user]
+    [content, user, mappedUser, hydrateFromApiUser, persistMe],
   );
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

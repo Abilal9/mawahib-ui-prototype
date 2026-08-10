@@ -120,12 +120,14 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
           style={styles.logoutButton}
           activeOpacity={0.8}
           onPress={() => {
-            signOut();
-            resetToSeed();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'SignIn' }],
-            });
+            void (async () => {
+              await signOut();
+              resetToSeed();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'SignIn' }],
+              });
+            })();
           }}
         >
           <Text style={styles.logoutText}>Log Out</Text>

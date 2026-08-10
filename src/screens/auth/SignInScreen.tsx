@@ -7,6 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,17 +22,26 @@ import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
 
 export default function SignInScreen({ navigation }: RootStackScreenProps<'SignIn'>) {
-  const { signIn } = useAuth();
-  const { useFilledProfile } = useMyProfile();
+  const { signInWithEmail, authError, clearAuthError } = useAuth();
+  const { hydrateFromApiUser } = useMyProfile();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
+  const [loading, setLoading] = useState(false);
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !loading;
 
-  const handleLogIn = () => {
+  const handleLogIn = async () => {
     if (!canSubmit) return;
-    useFilledProfile();
-    signIn();
-    navigation.replace('MainTabs');
+    clearAuthError();
+    setLoading(true);
+    try {
+      const apiUser = await signInWithEmail(email, password);
+      hydrateFromApiUser(apiUser);
+      navigation.replace('MainTabs');
+    } catch (e) {
+      Alert.alert('Sign in failed', authError || (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -75,6 +86,9 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
           </TouchableOpacity>
 
           <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit} />
+          {loading ? (
+            <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.primary} />
+          ) : null}
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
@@ -123,7 +137,7 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h1,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   subtitle: {
     ...typography.body,
@@ -133,56 +147,38 @@ const styles = StyleSheet.create({
   forgotRow: {
     alignSelf: 'flex-end',
     marginBottom: spacing.lg,
-    marginTop: -spacing.sm,
   },
   forgotText: {
     ...typography.bodySmall,
     color: colors.primary,
-    fontWeight: '600',
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.lg,
-    gap: spacing.sm,
+    marginVertical: spacing.xl,
+    gap: spacing.md,
   },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
+  divider: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { ...typography.caption, color: colors.textSecondary },
   socialRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
+    gap: spacing.lg,
   },
   socialButton: {
     width: 52,
     height: 52,
-    borderRadius: 12,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.xxl,
   },
-  footerText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  footerLink: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  footerText: { ...typography.body, color: colors.textSecondary },
+  footerLink: { ...typography.bodyMedium, color: colors.primary },
 });

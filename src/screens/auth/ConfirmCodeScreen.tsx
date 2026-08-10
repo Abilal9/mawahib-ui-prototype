@@ -5,20 +5,25 @@ import {
   TextInput as RNTextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
 const CODE_LENGTH = 6;
 
 export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'ConfirmCode'>) {
+  const { verifySignupOtp, resendSignupOtp, clearAuthError } = useAuth();
   const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const [timer, setTimer] = useState(60);
+  const [loading, setLoading] = useState(false);
   const inputRefs = useRef<(RNTextInput | null)[]>([]);
   const destination = route.params?.email || route.params?.phone || 'your device';
+  const email = route.params?.email || '';
 
   useEffect(() => {
     if (timer <= 0) return;
@@ -44,6 +49,30 @@ export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'Co
   };
 
   const isComplete = code.every((d) => d !== '');
+
+  const handleVerify = async () => {
+    if (!isComplete || !email) return;
+    clearAuthError();
+    setLoading(true);
+    try {
+      await verifySignupOtp(email, code.join(''));
+      navigation.navigate('TurnOnNotifications');
+    } catch (e) {
+      Alert.alert('Verification failed', (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    try {
+      await resendSignupOtp(email);
+      setTimer(60);
+    } catch (e) {
+      Alert.alert('Could not resend code', (e as Error).message);
+    }
+  };
 
   return (
     <ScreenContainer>
@@ -75,7 +104,7 @@ export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'Co
           {timer > 0 ? (
             <Text style={styles.timerText}>Resend code in {timer}s</Text>
           ) : (
-            <TouchableOpacity onPress={() => setTimer(60)} activeOpacity={0.8}>
+            <TouchableOpacity onPress={handleResend} activeOpacity={0.8}>
               <Text style={styles.resendLink}>Resend Code</Text>
             </TouchableOpacity>
           )}
@@ -85,9 +114,9 @@ export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'Co
       <View style={styles.footer}>
         <Button
           title="Verify"
-          onPress={() => navigation.navigate('TurnOnNotifications')}
+          onPress={handleVerify}
           fullWidth
-          disabled={!isComplete}
+          disabled={!isComplete || loading}
         />
       </View>
     </ScreenContainer>

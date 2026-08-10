@@ -7,6 +7,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,30 +21,48 @@ import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
-  const { accountType, setSignUpBasics } = useAuth();
+  const { accountType, registerWithEmail, clearAuthError } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [city, setCity] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const accountLabel = accountType === 'business' ? 'Business' : 'Talent';
   const canSubmit =
+    !loading &&
     agreed &&
+    !!accountType &&
     name.trim().length > 0 &&
     email.trim().length > 0 &&
     city.trim().length > 0 &&
-    password.length > 0 &&
+    password.length >= 6 &&
     password === confirmPassword;
 
-  const handleSignUp = () => {
-    setSignUpBasics({
-      name: name.trim(),
-      email: email.trim(),
-      city: city.trim(),
-    });
-    navigation.navigate('ConfirmCode', { email: email.trim() });
+  const handleSignUp = async () => {
+    if (!canSubmit || !accountType) return;
+    clearAuthError();
+    setLoading(true);
+    try {
+      const { needsEmailConfirmation } = await registerWithEmail({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+        city: city.trim(),
+        accountType,
+      });
+      if (needsEmailConfirmation) {
+        navigation.navigate('ConfirmCode', { email: email.trim() });
+      } else {
+        navigation.navigate('TurnOnNotifications');
+      }
+    } catch (e) {
+      Alert.alert('Sign up failed', (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
