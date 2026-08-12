@@ -14,6 +14,7 @@ import { mapAuthError } from '../lib/authErrors';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { isPasswordValid } from '../lib/passwordRules';
 import { supabase } from '../lib/supabase';
+import { appEnv } from '../config/env';
 import { authApi, mapApiUserToUser, type ApiUser } from '../services/authApi';
 import type { User } from '../data/types';
 
@@ -23,6 +24,9 @@ export interface SignUpBasics {
   name: string;
   email: string;
   city: string;
+  phoneE164: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 interface AuthContextValue {
@@ -43,14 +47,17 @@ interface AuthContextValue {
     email: string;
     password: string;
     name: string;
+    firstName?: string;
+    lastName?: string;
     city: string;
+    phoneE164: string;
     accountType: AccountType;
   }) => Promise<{ needsEmailConfirmation: boolean }>;
   verifySignupOtp: (email: string, token: string) => Promise<void>;
   resendSignupOtp: (email: string) => Promise<void>;
   /**
-   * Phone OTP readiness (requires Supabase SMS provider).
-   * Does not create a separate Mawahib user — same Nest bootstrap on session.
+   * Phone OTP on the same Supabase user (updateUser + phone_change).
+   * Requires EXPO_PUBLIC_PHONE_AUTH_ENABLED and an SMS provider.
    */
   sendPhoneOtp: (phone: string) => Promise<void>;
   verifyPhoneOtp: (phone: string, token: string) => Promise<ApiUser>;
@@ -59,6 +66,7 @@ interface AuthContextValue {
     accountType?: AccountType;
     displayName?: string;
     locationCity?: string;
+    phoneE164?: string;
   }) => Promise<ApiUser>;
   refreshMe: () => Promise<ApiUser>;
   signInWithEmail: (email: string, password: string) => Promise<ApiUser>;
@@ -69,17 +77,24 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function isEmailConfirmed(session: Session): boolean {
+  const user = session.user;
+  return Boolean(user.email_confirmed_at || user.confirmed_at);
+}
+
 function bootstrapPayloadFromSession(
   session: Session,
   overrides?: {
     accountType?: AccountType;
     displayName?: string;
     locationCity?: string;
+    phoneE164?: string;
   },
   fallbacks?: {
     accountType?: AccountType | null;
     name?: string;
     city?: string;
+    phoneE164?: string;
   },
 ) {
   const meta = session.user?.user_metadata ?? {};
@@ -98,12 +113,21 @@ function bootstrapPayloadFromSession(
     overrides?.locationCity ||
     fallbacks?.city ||
     (meta.city as string | undefined);
+  const phoneE164 =
+    overrides?.phoneE164 ||
+    fallbacks?.phoneE164 ||
+    (meta.phone_e164 as string | undefined) ||
+    session.user?.phone ||
+    undefined;
 
   return {
     accountType,
     displayName,
     locationCity,
     email: session.user?.email,
+    phoneE164,
+    emailVerified: isEmailConfirmed(session),
+    phoneVerified: Boolean(session.user?.phone_confirmed_at),
   };
 }
 
@@ -148,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accountType?: AccountType;
         displayName?: string;
         locationCity?: string;
+        phoneE164?: string;
       },
     ): Promise<ApiUser | null> => {
       if (!active) {
@@ -162,6 +187,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           let user: ApiUser;
           try {
             user = await authApi.getMe();
+            // Keep Nest verification flags aligned with Supabase when session confirms email/phone.
+            const emailVerified = isEmailConfirmed(active);
+            const phoneVerified = Boolean(active.user.phone_confirmed_at);
+            if (
+              (emailVerified && !user.emailVerified) ||
+              (phoneVerified && !user.phoneVerified)
+            ) {
+              user = await authApi.updateMe({
+                ...(emailVerified && !user.emailVerified
+                  ? { emailVerified: true }
+                  : {}),
+                ...(phoneVerified && !user.phoneVerified
+                  ? { phoneVerified: true }
+                  : {}),
+              });
+            }
           } catch (err) {
             if (!(err instanceof ApiError) || err.status !== 404) {
               throw err;
@@ -171,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 accountType: accountTypeRef.current,
                 name: signUpBasicsRef.current?.name,
                 city: signUpBasicsRef.current?.city,
+                phoneE164: signUpBasicsRef.current?.phoneE164,
               }),
             );
           }
@@ -233,7 +275,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_IN' && next) {
-        // Explicit sign-in / OTP paths also call hydrate; coalesced via hydrateInFlight.
         void hydrateBackendUser(next);
       }
     });
@@ -249,7 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string;
       password: string;
       name: string;
+      firstName?: string;
+      lastName?: string;
       city: string;
+      phoneE164: string;
       accountType: AccountType;
     }) => {
       setAuthError(null);
@@ -267,8 +311,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           emailRedirectTo: redirectTo,
           data: {
             display_name: input.name.trim(),
+            first_name: input.firstName?.trim() || undefined,
+            last_name: input.lastName?.trim() || undefined,
             city: input.city.trim(),
             account_type: input.accountType,
+            phone_e164: input.phoneE164,
           },
         },
       });
@@ -282,16 +329,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: input.name.trim(),
         email: input.email.trim(),
         city: input.city.trim(),
+        phoneE164: input.phoneE164,
+        firstName: input.firstName?.trim(),
+        lastName: input.lastName?.trim(),
       });
       if (data.session) {
         await hydrateBackendUser(data.session, {
           accountType: input.accountType,
           displayName: input.name.trim(),
           locationCity: input.city.trim(),
+          phoneE164: input.phoneE164,
         });
       }
-      // When email confirmations are enabled, Supabase returns no session until verified.
-      // ConfirmCodeScreen expects a 6-digit OTP from the Confirm signup email template.
       return { needsEmailConfirmation: !data.session };
     },
     [hydrateBackendUser],
@@ -335,10 +384,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendPhoneOtp = useCallback(async (phone: string) => {
     setAuthError(null);
+    if (!appEnv.phoneAuthEnabled) {
+      const message =
+        'SMS verification is not yet enabled. Configure a Supabase phone provider, then set EXPO_PUBLIC_PHONE_AUTH_ENABLED=true.';
+      setAuthError(message);
+      throw new Error(message);
+    }
     const normalized = phone.trim();
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: normalized,
-    });
+    const {
+      data: { session: active },
+    } = await supabase.auth.getSession();
+    if (!active) {
+      const message =
+        'Sign in and verify email first, then verify phone on the same account.';
+      setAuthError(message);
+      throw new Error(message);
+    }
+    // Attach phone to the existing Supabase user (no second auth.users row).
+    const { error } = await supabase.auth.updateUser({ phone: normalized });
     if (error) {
       const message = mapAuthError(error);
       setAuthError(message);
@@ -349,10 +412,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyPhoneOtp = useCallback(
     async (phone: string, token: string) => {
       setAuthError(null);
+      if (!appEnv.phoneAuthEnabled) {
+        const message =
+          'SMS verification is not yet enabled. Configure a Supabase phone provider first.';
+        setAuthError(message);
+        throw new Error(message);
+      }
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phone.trim(),
         token: token.trim(),
-        type: 'sms',
+        type: 'phone_change',
       });
       if (error) {
         const message = mapAuthError(error);
@@ -363,9 +432,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user) {
         throw new Error('Phone verified but failed to load profile');
       }
+      if (!user.phoneVerified) {
+        return authApi.updateMe({ phoneVerified: true }).then((updated) => {
+          applyApiUser(updated);
+          return updated;
+        });
+      }
       return user;
     },
-    [hydrateBackendUser],
+    [applyApiUser, hydrateBackendUser],
   );
 
   const bootstrapSession = useCallback(
@@ -373,6 +448,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountType?: AccountType;
       displayName?: string;
       locationCity?: string;
+      phoneE164?: string;
     }) => {
       setAuthError(null);
       const { data: sessionData } = await supabase.auth.getSession();
@@ -380,7 +456,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) {
         throw new Error('No active session — sign in again');
       }
-      const user = await hydrateBackendUser(active, input);
+      const user = await hydrateBackendUser(active, {
+        ...input,
+        phoneE164: input?.phoneE164 ?? signUpBasicsRef.current?.phoneE164,
+      });
       if (!user) {
         throw new Error('Failed to bootstrap session');
       }

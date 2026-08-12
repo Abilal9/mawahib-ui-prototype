@@ -1,16 +1,49 @@
-# Authentication configuration (Phase 1 + auth cleanup)
+# Authentication configuration (Phase 1 + email/phone signup)
 
 ## Architecture
 
-React Native → Supabase Auth → JWT → NestJS (`/auth/bootstrap`, `/users/me`)
+React Native → Supabase Auth → JWT → NestJS (`/auth/bootstrap`, `/users/me`) → Prisma `users` + `profiles`
 
-## Verification UX (chosen)
+Every new Mawahib account stores **email + phone (E.164)** on the same Supabase user and the same Nest profile. Do not create a second auth user for phone.
 
-**Email OTP (6-digit code)** — matches `ConfirmCodeScreen`.
+## Signup fields
 
-Confirm signup emails must contain `{{ .Token }}`, not only a confirmation link.
+- First name, last name (optional) → `displayName`
+- Email → Supabase Auth + `users.email`
+- Phone → country picker + validation → `profiles.phone_e164` (E.164, unique)
+- Password / confirm → live rules (8+, upper, lower, number, special)
 
-Deep-link handling still exists for recovery / legacy confirmation links so errors surface in the app instead of Nest `Cannot GET /`.
+Flow: **SignUp → VerifyAccount → ConfirmCode (email) → onboarding**
+
+## Verification
+
+Independent flags on `profiles`:
+
+| Flag | Meaning | Required to enter app |
+|------|---------|------------------------|
+| `email_verified` | Synced from Supabase `email_confirmed_at` | **Yes** |
+| `phone_verified` | Synced from Supabase `phone_confirmed_at` / phone_change OTP | No (until product requires it) |
+
+`VerifyAccount` screen:
+
+- **Email** — always active (Supabase email OTP)
+- **Phone** — inactive until `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` *and* SMS provider configured; copy: “Available once SMS verification is enabled”
+
+Phone OTP uses `updateUser({ phone })` + `verifyOtp({ type: 'phone_change' })` so the phone attaches to the **existing** email user (no duplicate).
+
+## Phone storage
+
+- UI: country dial code + national number (`libphonenumber-js`)
+- API / DB: **E.164** (`+9665xxxxxxx`)
+- Unique index on `profiles.phone_e164` (duplicates rejected on bootstrap / update)
+
+## Env
+
+```text
+EXPO_PUBLIC_PHONE_AUTH_ENABLED=false
+```
+
+Set to `true` only after Supabase Phone Auth + SMS provider work in the dashboard.
 
 ## Supabase Dashboard — required manual steps
 
@@ -18,13 +51,9 @@ Deep-link handling still exists for recovery / legacy confirmation links so erro
 
 Path: **Authentication → URL Configuration**
 
-**Site URL**
+**Site URL** — web Site URL (not Nest `http://localhost:3000`).
 
-- Keep a **web** Site URL (do **not** set this to the Nest API root as the product homepage).
-- For local mobile development you may leave a placeholder such as `http://localhost:8081` (Expo web) or your future marketing site.
-- Do **not** rely on `http://localhost:3000` (Nest) as Site URL — that caused confirmation links to open the API and show `Cannot GET /`.
-
-**Redirect URLs** — add all of:
+**Redirect URLs:**
 
 ```text
 mawahib://auth/callback
@@ -32,65 +61,48 @@ mawahib://**
 exp://**
 ```
 
-If you use Expo Go on a LAN IP, also add the concrete exp URL Expo prints, e.g.:
-
-```text
-exp://192.168.x.x:8081/--/auth/callback
-```
-
-(`**` wildcards are allowed in Supabase redirect allow-lists.)
-
 ### 2) Confirm signup email template → OTP
 
 Path: **Authentication → Email Templates → Confirm signup**
 
-Replace link-only body with a code-first template, for example:
+Include `{{ .Token }}` (6-digit). App primary path is OTP on `ConfirmCode`.
 
-```html
-<h2>Confirm your Mawahib account</h2>
-<p>Enter this 6-digit code in the app:</p>
-<p style="font-size:24px;letter-spacing:4px;"><strong>{{ .Token }}</strong></p>
-<p>If you prefer a link, you can also use: <a href="{{ .ConfirmationURL }}">Confirm email</a></p>
-```
+### 3) Password policy (≥ frontend)
 
-Prefer **Token-first**. The app’s primary path is OTP entry.
+- Min length 8
+- Lower, upper, digits, symbols
+- Leaked password protection if plan allows
 
-### 3) Password policy (must be ≥ frontend)
-
-Path: **Authentication → Providers → Email** (or **Authentication → Password** / security section)
-
-Set:
-
-- Minimum password length: **8**
-- Required characters: **lowercase, uppercase, digits, symbols**
-- Enable **Leaked password protection** if your plan allows (Pro+)
-
-Frontend rules are UX only; Supabase must enforce the same or stricter.
-
-### 4) Phone / SMS (optional later)
+### 4) Phone / SMS (when ready)
 
 Path: **Authentication → Providers → Phone**
 
-Recommended provider for MENA + reliability: **Twilio** (or Twilio Verify).
+**Recommended provider for Saudi Arabia, GCC, and international growth: Twilio** (or Twilio Verify).
 
-You will need:
+Why Twilio:
 
-- Twilio Account SID
-- Twilio Auth Token
-- Twilio phone number (or Messaging Service SID)
-- Enable Phone provider in Supabase
-- Test with E.164 numbers (`+9665…`)
+- Strong coverage and delivery in KSA / GCC
+- Native Supabase Phone Auth integration
+- Scales to EU/US without swapping architecture
+- Messaging Service SID supports multi-region sender IDs later
 
-Do not enable production SMS until credentials are configured. App methods `sendPhoneOtp` / `verifyPhoneOtp` are ready and will return a friendly error until then.
+Steps:
 
-## Account linking (email + phone)
+1. Create Twilio account + Messaging Service (or number)
+2. Enter Account SID, Auth Token, and Messaging Service SID / phone in Supabase Phone provider
+3. Enable Phone provider
+4. Test with E.164 (`+9665…`)
+5. Set `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true` in the app
+6. No Nest/Prisma redesign required — phone row + `phone_verified` already exist
 
-Same Supabase `auth.users.id` → Nest `users.id`.
+Do **not** ship fake SMS. Until the provider is live, the Phone option stays gracefully disabled.
 
-If a user signs up with email and later adds phone (or vice versa), use Supabase **identity linking** (documented later). Do **not** create a second Nest row. Linking is a dedicated follow-up flow; Phase auth cleanup only prepares phone OTP APIs.
+## Account linking
+
+Same `auth.users.id` → Nest `users.id`. Email and phone always belong to one profile. Further identity-linking UX (add phone after signup when SMS is on) is already prepared via `sendPhoneOtp` / `verifyPhoneOtp`.
 
 ## App deep link
 
 - Scheme: `mawahib`
-- Callback path: `auth/callback`
-- Handler: `AuthDeepLinkListener` inside `NavigationContainer`
+- Callback: `auth/callback`
+- Handler: `AuthDeepLinkListener`

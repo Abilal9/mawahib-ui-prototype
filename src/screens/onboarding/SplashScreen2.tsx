@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
  */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { authLoading, isSignedIn, apiUser } = useAuth();
+  const { authLoading, isSignedIn, apiUser, signUpBasics } = useAuth();
   const [minSplashDone, setMinSplashDone] = useState(false);
 
   useEffect(() => {
@@ -33,6 +33,24 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     if (authLoading || !minSplashDone) return;
 
     if (isSignedIn && apiUser) {
+      if (!apiUser.emailVerified) {
+        const email = apiUser.email || signUpBasics?.email;
+        const phoneE164 = apiUser.phoneE164 || signUpBasics?.phoneE164;
+        if (email && phoneE164) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'VerifyAccount', params: { email, phoneE164 } }],
+          });
+          return;
+        }
+        if (email) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'ConfirmCode', params: { email } }],
+          });
+          return;
+        }
+      }
       navigation.reset({
         index: 0,
         routes: [{ name: 'MainTabs' }],
@@ -41,7 +59,14 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     }
 
     navigation.replace('Welcome', { step: 1 });
-  }, [authLoading, minSplashDone, isSignedIn, apiUser, navigation]);
+  }, [
+    authLoading,
+    minSplashDone,
+    isSignedIn,
+    apiUser,
+    signUpBasics,
+    navigation,
+  ]);
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.background} safeBottom={false}>

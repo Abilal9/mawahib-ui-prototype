@@ -23,7 +23,19 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
         accountType: accountType || 'talent',
         displayName: signUpBasics?.name?.trim() || undefined,
         locationCity: signUpBasics?.city?.trim() || undefined,
+        phoneE164: signUpBasics?.phoneE164,
       });
+      if (!apiUser.emailVerified) {
+        Alert.alert(
+          'Verify your email',
+          'Confirm your email before entering Mawahib.',
+        );
+        navigation.navigate('VerifyAccount', {
+          email: apiUser.email || signUpBasics?.email || '',
+          phoneE164: apiUser.phoneE164 || signUpBasics?.phoneE164 || '',
+        });
+        return;
+      }
       hydrateFromApiUser(apiUser);
       completeSignUp();
 

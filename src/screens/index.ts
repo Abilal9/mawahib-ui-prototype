@@ -8,6 +8,7 @@ export { default as TurnOnNotificationsScreen } from './onboarding/TurnOnNotific
 export { default as AccountTypeScreen } from './auth/AccountTypeScreen';
 export { default as SignInScreen } from './auth/SignInScreen';
 export { default as SignUpScreen } from './auth/SignUpScreen';
+export { default as VerifyAccountScreen } from './auth/VerifyAccountScreen';
 export { default as ConfirmCodeScreen } from './auth/ConfirmCodeScreen';
 export { default as SignupSuccessScreen } from './auth/SignupSuccessScreen';
 

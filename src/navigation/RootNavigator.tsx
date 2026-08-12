@@ -11,6 +11,7 @@ import {
   AccountTypeScreen,
   SignInScreen,
   SignUpScreen,
+  VerifyAccountScreen,
   ConfirmCodeScreen,
   SignupSuccessScreen,
   ProfileSetupScreen,
@@ -65,9 +66,13 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  * ProfileSetupStep1–5 as routes, MessagesEmpty.
  */
 function MainTabsGate() {
-  const { isSignedIn, authLoading, apiUser } = useAuth();
+  const { isSignedIn, authLoading, apiUser, session, signUpBasics } = useAuth();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const emailOk = Boolean(apiUser?.emailVerified);
+  const needsVerify =
+    isSignedIn && apiUser && !emailOk;
 
   useEffect(() => {
     if (authLoading) return;
@@ -76,10 +81,39 @@ function MainTabsGate() {
         index: 0,
         routes: [{ name: 'SignIn' }],
       });
+      return;
     }
-  }, [authLoading, isSignedIn, apiUser, navigation]);
+    if (!emailOk) {
+      const email = apiUser.email || session?.user?.email || signUpBasics?.email;
+      const phoneE164 = apiUser.phoneE164 || signUpBasics?.phoneE164;
+      if (email && phoneE164) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'VerifyAccount', params: { email, phoneE164 } }],
+        });
+      } else if (email) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'ConfirmCode', params: { email } }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        });
+      }
+    }
+  }, [
+    authLoading,
+    isSignedIn,
+    apiUser,
+    emailOk,
+    navigation,
+    session,
+    signUpBasics,
+  ]);
 
-  if (authLoading || !isSignedIn || !apiUser) return null;
+  if (authLoading || !isSignedIn || !apiUser || needsVerify) return null;
   return <MainTabs />;
 }
 
@@ -100,6 +134,7 @@ export default function RootNavigator() {
       <Stack.Screen name="AccountType" component={AccountTypeScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
+      <Stack.Screen name="VerifyAccount" component={VerifyAccountScreen} />
       <Stack.Screen name="ConfirmCode" component={ConfirmCodeScreen} />
       <Stack.Screen name="SignupSuccess" component={SignupSuccessScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />

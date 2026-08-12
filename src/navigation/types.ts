@@ -26,6 +26,7 @@ export type RootStackParamList = {
   AccountType: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  VerifyAccount: { email: string; phoneE164: string };
   SignupSuccess: undefined;
   Profile: undefined;
   UserProfile: { userId: string };

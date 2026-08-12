@@ -20,6 +20,9 @@ export interface ApiUser {
   locationCountry: string | null;
   avatarUrl: string | null;
   coverUrl: string | null;
+  phoneE164: string | null;
+  phoneVerified: boolean;
+  emailVerified: boolean;
   skills: string[];
   createdAt: string;
   updatedAt: string;
@@ -31,6 +34,9 @@ export interface BootstrapPayload {
   username?: string;
   locationCity?: string;
   email?: string;
+  phoneE164?: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
 }
 
 export interface UpdateMePayload {
@@ -43,6 +49,9 @@ export interface UpdateMePayload {
   avatarUrl?: string | null;
   coverUrl?: string | null;
   skills?: string[];
+  phoneE164?: string | null;
+  phoneVerified?: boolean;
+  emailVerified?: boolean;
 }
 
 const FALLBACK_AVATAR =

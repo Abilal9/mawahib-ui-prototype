@@ -12,21 +12,27 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import type { CountryCode } from 'libphonenumber-js';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import Checkbox from '../../components/ui/Checkbox';
 import PasswordRequirements from '../../components/auth/PasswordRequirements';
+import PhoneInputField from '../../components/auth/PhoneInputField';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { isPasswordValid } from '../../lib/passwordRules';
+import { getPhoneValidationMessage, toE164 } from '../../lib/phone';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
   const { accountType, registerWithEmail, clearAuthError } = useAuth();
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [country, setCountry] = useState<CountryCode>('SA');
+  const [nationalNumber, setNationalNumber] = useState('');
   const [city, setCity] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -42,13 +48,29 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
     password.length > 0 &&
     !passwordsMatch;
 
+  const phoneE164 = useMemo(
+    () => toE164(nationalNumber, country),
+    [nationalNumber, country],
+  );
+  const phoneError = useMemo(() => {
+    if (!nationalNumber.trim()) {
+      return submitted ? 'Phone number is required' : null;
+    }
+    return getPhoneValidationMessage(nationalNumber, country);
+  }, [nationalNumber, country, submitted]);
+
+  const displayName = [firstName.trim(), lastName.trim()]
+    .filter(Boolean)
+    .join(' ');
+
   const canSubmit = useMemo(
     () =>
       !loading &&
       agreed &&
       !!accountType &&
-      name.trim().length > 0 &&
+      firstName.trim().length > 0 &&
       email.trim().length > 0 &&
+      !!phoneE164 &&
       city.trim().length > 0 &&
       passwordOk &&
       passwordsMatch,
@@ -57,10 +79,11 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
       accountType,
       city,
       email,
+      firstName,
       loading,
-      name,
       passwordOk,
       passwordsMatch,
+      phoneE164,
     ],
   );
 
@@ -77,22 +100,32 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
       Alert.alert('Passwords do not match', 'Confirm password must match.');
       return;
     }
+    if (!phoneE164) {
+      Alert.alert(
+        'Invalid phone',
+        getPhoneValidationMessage(nationalNumber, country) ||
+          'Enter a valid international phone number.',
+      );
+      return;
+    }
     if (!canSubmit || !accountType) return;
     clearAuthError();
     setLoading(true);
     try {
-      const { needsEmailConfirmation } = await registerWithEmail({
+      await registerWithEmail({
         email: email.trim(),
         password,
-        name: name.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        name: displayName,
         city: city.trim(),
+        phoneE164,
         accountType,
       });
-      if (needsEmailConfirmation) {
-        navigation.navigate('ConfirmCode', { email: email.trim() });
-      } else {
-        navigation.navigate('TurnOnNotifications');
-      }
+      navigation.navigate('VerifyAccount', {
+        email: email.trim(),
+        phoneE164,
+      });
     } catch (e) {
       Alert.alert('Sign up failed', mapAuthError(e));
     } finally {
@@ -124,10 +157,18 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
           </Text>
 
           <TextInput
-            label="Full Name"
-            placeholder="Your name"
-            value={name}
-            onChangeText={setName}
+            label="First Name"
+            placeholder="First name"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+          />
+
+          <TextInput
+            label="Last Name"
+            placeholder="Last name (optional)"
+            value={lastName}
+            onChangeText={setLastName}
             autoCapitalize="words"
           />
 
@@ -138,6 +179,14 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+          />
+
+          <PhoneInputField
+            country={country}
+            nationalNumber={nationalNumber}
+            onCountryChange={setCountry}
+            onNationalNumberChange={setNationalNumber}
+            error={phoneError}
           />
 
           <TextInput
