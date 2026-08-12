@@ -1,5 +1,23 @@
 # Authentication configuration (Phase 1 + email/phone signup)
 
+## OTP / email / SMS delivery — deferred
+
+Full **email OTP delivery**, **SMTP**, **phone OTP/SMS provider (Twilio)**, and production verification hardening are **intentionally deferred**.
+
+Development can use:
+
+- Normal signup UI (phone + email collection + validation)
+- `npm run seed:dev` for pre-confirmed test users (see `docs/DEV_SEED.md`)
+
+Return later to:
+
+1. Confirm signup email template + SMTP
+2. Supabase Phone Auth + Twilio
+3. `EXPO_PUBLIC_PHONE_AUTH_ENABLED=true`
+4. Production auth hardening
+
+Do not treat seed users as a substitute for production verification.
+
 ## Architecture
 
 React Native → Supabase Auth → JWT → NestJS (`/auth/bootstrap`, `/users/me`) → Prisma `users` + `profiles`

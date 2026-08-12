@@ -32,8 +32,8 @@ import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
+import { useVisitorUser } from '../../hooks/useVisitorUser';
 import {
-  userService,
   catalogService,
   connectionService,
   profileService,
@@ -68,12 +68,11 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const { user: me } = useMyProfile();
   const { posts } = usePosts();
   const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
-  const user =
-    userService.resolveProfileUser(route.params.userId) ??
-    userService.getByIdSync(route.params.userId);
-  const talent = catalogService
-    .listTalents()
-    .find((t) => t.user.id === route.params.userId);
+  const visitorUser = useVisitorUser(route.params.userId);
+  const user = visitorUser.user;
+  const talent = user
+    ? catalogService.listTalents().find((t) => t.user.id === user.id)
+    : undefined;
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
@@ -85,11 +84,23 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     }
   }, [user?.id, me.id, navigation]);
 
+  if (visitorUser.loading) {
+    return (
+      <ScreenContainer>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Loading profile…</Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   if (!user) {
     return (
       <ScreenContainer>
         <View style={styles.missingWrap}>
-          <Text style={styles.missingText}>User not found</Text>
+          <Text style={styles.missingText}>
+            {visitorUser.error || 'User not found'}
+          </Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
             <Text style={styles.missingBackText}>Go back</Text>
           </TouchableOpacity>

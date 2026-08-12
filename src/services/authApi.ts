@@ -89,6 +89,10 @@ export const authApi = {
     return apiRequest<ApiUser>('/users/me');
   },
 
+  getById(userId: string): Promise<ApiUser> {
+    return apiRequest<ApiUser>(`/users/${userId}`);
+  },
+
   updateMe(payload: UpdateMePayload): Promise<ApiUser> {
     return apiRequest<ApiUser>('/users/me', {
       method: 'PATCH',
