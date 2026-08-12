@@ -25,8 +25,14 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
 
   const completePayment = () => {
     if (jobId) {
-      markJobPaid(jobId);
-      navigation.replace('JobInProgress', { jobId });
+      void (async () => {
+        try {
+          await markJobPaid(jobId);
+        } catch {
+          // Payments are still mock UI; engagement may already be in_progress.
+        }
+        navigation.replace('JobInProgress', { jobId });
+      })();
       return;
     }
     navigation.goBack();

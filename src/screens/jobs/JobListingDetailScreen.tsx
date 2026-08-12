@@ -1,5 +1,12 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -9,21 +16,63 @@ import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { jobService } from '../../services';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useAuth } from '../../context/AuthContext';
 import { ScreenProps } from '../../navigation/types';
+import { JobListing } from '../../data/types';
+import { ApiError } from '../../lib/apiClient';
 
 export default function JobListingDetailScreen({
   route,
   navigation,
 }: ScreenProps<'JobListingDetail'>) {
   const { applyToListing } = useUserJobs();
-  const job = jobService.getByIdSync(route.params.jobId);
+  const { apiUser } = useAuth();
+  const [job, setJob] = useState<JobListing | undefined>(() =>
+    jobService.getByIdSync(route.params.jobId),
+  );
+  const [loading, setLoading] = useState(!job);
+  const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
-  if (!job) {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await jobService.getById(route.params.jobId);
+      setJob(next);
+      if (!next) setError('Job not found');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to load job');
+      setJob(undefined);
+    } finally {
+      setLoading(false);
+    }
+  }, [route.params.jobId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) {
     return (
       <ScreenContainer>
         <View style={styles.missingWrap}>
-          <Text style={styles.missingText}>Job not found</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (!job || error) {
+    return (
+      <ScreenContainer>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>{error || 'Job not found'}</Text>
+          <TouchableOpacity onPress={() => void load()} style={styles.missingBack}>
+            <Text style={styles.missingBackText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.missingBackText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -41,6 +90,8 @@ export default function JobListingDetailScreen({
           : job.type === 'gig'
             ? 'Gig'
             : 'Freelance';
+
+  const canApply = apiUser?.accountType === 'talent';
 
   return (
     <ScreenContainer padded={false}>
@@ -73,11 +124,6 @@ export default function JobListingDetailScreen({
             <View style={styles.typeBadge}>
               <Text style={styles.typeText}>{typeLabel}</Text>
             </View>
-            {job.matchScore ? (
-              <View style={styles.matchBadge}>
-                <Text style={styles.matchText}>{job.matchScore}% match</Text>
-              </View>
-            ) : null}
           </View>
 
           <View style={styles.metaRow}>
@@ -104,16 +150,38 @@ export default function JobListingDetailScreen({
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button
-          title="Apply Now"
-          fullWidth
-          onPress={() => {
-            const userJobId = applyToListing(job.id);
-            if (userJobId) {
-              navigation.navigate('JobInProgress', { jobId: userJobId });
-            }
-          }}
-        />
+        {applyError ? (
+          <Text style={styles.applyError}>{applyError}</Text>
+        ) : null}
+        {canApply ? (
+          <Button
+            title={applying ? 'Applying…' : 'Apply Now'}
+            fullWidth
+            disabled={applying}
+            onPress={() => {
+              void (async () => {
+                setApplying(true);
+                setApplyError(null);
+                try {
+                  const userJobId = await applyToListing(job.id);
+                  if (userJobId) {
+                    navigation.navigate('JobInProgress', { jobId: userJobId });
+                  }
+                } catch (e) {
+                  setApplyError(
+                    e instanceof ApiError ? e.message : 'Could not apply',
+                  );
+                } finally {
+                  setApplying(false);
+                }
+              })();
+            }}
+          />
+        ) : (
+          <Text style={styles.applyHint}>
+            Sign in as talent to apply to this listing.
+          </Text>
+        )}
       </View>
     </ScreenContainer>
   );
@@ -162,13 +230,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   typeText: { ...typography.caption, color: '#193CB8', fontWeight: '600' },
-  matchBadge: {
-    backgroundColor: colors.primary + '15',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.button,
-  },
-  matchText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   metaText: { ...typography.bodySmall, color: colors.textSecondary },
   sectionTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
@@ -192,7 +253,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.white,
+    gap: spacing.sm,
   },
+  applyError: { ...typography.caption, color: colors.error ?? '#DC2626', textAlign: 'center' },
+  applyHint: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center' },
   missingWrap: {
     flex: 1,
     alignItems: 'center',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -8,6 +8,7 @@ import TextInput from '../../components/ui/TextInput';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { ApiError } from '../../lib/apiClient';
 
 const JOB_TYPES = ['full-time', 'part-time', 'contract', 'freelance'] as const;
 const TOTAL_STEPS = 3;
@@ -20,20 +21,33 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   const [location, setLocation] = useState('');
   const [salary, setSalary] = useState('');
   const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const goNext = () => {
     if (step < TOTAL_STEPS) {
       navigation.navigate('PostJob', { step: step + 1 });
       return;
     }
-    createPostedJob({
-      title,
-      description,
-      location,
-      budget: salary,
-      jobType: type,
-    });
-    navigation.navigate('MainTabs', { screen: 'JobsTab' });
+    void (async () => {
+      setSubmitting(true);
+      try {
+        await createPostedJob({
+          title,
+          description,
+          location,
+          budget: salary,
+          jobType: type,
+        });
+        navigation.navigate('MainTabs', { screen: 'JobsTab' });
+      } catch (e) {
+        Alert.alert(
+          'Could not post job',
+          e instanceof ApiError ? e.message : 'Please try again.',
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   return (
@@ -100,10 +114,16 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
 
       <View style={styles.footer}>
         <Button
-          title={step === TOTAL_STEPS ? 'Post Job' : 'Continue'}
+          title={
+            submitting
+              ? 'Posting…'
+              : step === TOTAL_STEPS
+                ? 'Post Job'
+                : 'Continue'
+          }
           onPress={goNext}
           fullWidth
-          disabled={step === 1 && !title.trim()}
+          disabled={submitting || (step === 1 && !title.trim())}
         />
       </View>
     </ScreenContainer>

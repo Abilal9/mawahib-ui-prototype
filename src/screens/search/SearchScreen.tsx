@@ -62,7 +62,8 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   const [filterOpen, setFilterOpen] = useState(false);
 
   const talents = catalogService.listTalents();
-  const jobs = jobService.listSync();
+  const [jobs, setJobs] = useState<Job[]>(() => jobService.listSync());
+  const [jobsError, setJobsError] = useState<string | null>(null);
   const services = catalogService.listServices();
 
   useEffect(() => {
@@ -71,6 +72,19 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
       setChip(null);
     }
   }, [route.params?.contentType]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const next = await jobService.refresh();
+        setJobs(next);
+        setJobsError(null);
+      } catch (e) {
+        setJobs([]);
+        setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+      }
+    })();
+  }, []);
 
   const chipOptions = chipsForTab(tab);
 
@@ -234,7 +248,32 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
           </View>
         ) : null}
 
-        {results.length === 0 ? (
+        {tab === 'jobs' && jobsError ? (
+          <View style={styles.empty}>
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+            <Text style={styles.emptyTitle}>Could not load jobs</Text>
+            <Text style={styles.emptyText}>{jobsError}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                void (async () => {
+                  try {
+                    const next = await jobService.refresh();
+                    setJobs(next);
+                    setJobsError(null);
+                  } catch (e) {
+                    setJobsError(
+                      e instanceof Error ? e.message : 'Failed to load jobs',
+                    );
+                  }
+                })();
+              }}
+            >
+              <Text style={{ ...typography.bodySmall, color: colors.primary, fontWeight: '600' }}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : results.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="compass-outline" size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>No results found</Text>

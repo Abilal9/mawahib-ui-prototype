@@ -248,20 +248,22 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             onPress={() => openNotification(item)}
             onAccept={() => {
               const userJobId = resolveUserJobId(item);
-              if (userJobId) {
-                acceptJob(userJobId);
-              }
               clearActions(item.id);
-              if (userJobId) {
-                navigation.navigate('JobInProgress', { jobId: userJobId });
-              } else {
+              if (!userJobId) {
                 navigation.navigate('MainTabs', { screen: 'JobsTab' });
+                return;
               }
+              void (async () => {
+                const engagementId = await acceptJob(userJobId);
+                navigation.navigate('JobInProgress', {
+                  jobId: engagementId || userJobId,
+                });
+              })();
             }}
             onDecline={() => {
               const userJobId = resolveUserJobId(item);
               if (userJobId) {
-                declineJob(userJobId);
+                void declineJob(userJobId);
               }
               remove(item.id);
             }}

@@ -24,7 +24,7 @@ import { openUserProfile } from '../../utils/openUserProfile';
 
 type JobsTab = 'received' | 'sent';
 type ReceivedSection = 'requests' | 'in-progress' | 'upcoming' | 'completed';
-type SentSection = 'requests' | 'posted' | 'completed';
+type SentSection = 'requests' | 'in-progress' | 'posted' | 'completed';
 type SectionSort = 'most-recent' | 'oldest' | 'due-date';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -49,6 +49,7 @@ const SENT_SECTIONS: {
   countColor: string;
 }[] = [
   { key: 'requests', title: 'Request', dot: '#C084FC', countColor: '#8B5CF6' },
+  { key: 'in-progress', title: 'In Progress Jobs', dot: '#60A5FA', countColor: '#3B82F6' },
   { key: 'posted', title: 'Posted Jobs', dot: '#60A5FA', countColor: '#3B82F6' },
   { key: 'completed', title: 'Completed Jobs', dot: '#22C55E', countColor: '#16A34A' },
 ];
@@ -208,7 +209,7 @@ function JobFlowCard({
 }
 
 export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
-  const { jobs: userJobs } = useUserJobs();
+  const { jobs: userJobs, loading, error, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
   const { accountType } = useAuth();
   /** Business defaults to sent (post/request); talent to received (apply/incoming). */
@@ -227,7 +228,7 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
     upcoming: 'most-recent',
     completed: 'most-recent',
     posted: 'most-recent',
-  });
+  } as Record<ReceivedSection | SentSection, SectionSort>);
 
   const receivedJobs = useMemo(
     () => userJobs.filter((j) => j.type === 'received'),
@@ -256,11 +257,13 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
   const sentSectioned = useMemo(() => {
     const bySection = {
       requests: sentJobs.filter((j) => j.section === 'requests'),
+      'in-progress': sentJobs.filter((j) => j.section === 'in-progress'),
       posted: sentJobs.filter((j) => j.section === 'posted'),
       completed: sentJobs.filter((j) => j.section === 'completed'),
     };
     return {
       requests: sortJobs(bySection.requests, sectionSort.requests),
+      'in-progress': sortJobs(bySection['in-progress'], sectionSort['in-progress']),
       posted: sortJobs(bySection.posted, sectionSort.posted),
       completed: sortJobs(bySection.completed, sectionSort.completed),
     };
@@ -273,6 +276,22 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
         <Text style={styles.headerTitle}>Jobs</Text>
         <View style={styles.headerSpacer} />
       </View>
+
+      {error ? (
+        <View style={{ paddingHorizontal: spacing.screen, paddingBottom: spacing.md, gap: spacing.sm }}>
+          <Text style={{ ...typography.bodySmall, color: colors.error }}>{error}</Text>
+          <TouchableOpacity onPress={() => void refresh()}>
+            <Text style={{ ...typography.bodySmall, color: colors.primary, fontWeight: '600' }}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {loading && userJobs.length === 0 ? (
+        <View style={{ padding: spacing.xl }}>
+          <Text style={{ ...typography.body, color: colors.textSecondary }}>Loading jobs…</Text>
+        </View>
+      ) : null}
 
       <View style={styles.tabBar}>
         {(['received', 'sent'] as JobsTab[]).map((tab) => (
@@ -370,7 +389,9 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
             onScroll={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               const page = Math.round(x / (PANEL_WIDTH + spacing.md));
-              setActiveSentSection(Math.max(0, Math.min(2, page)));
+              setActiveSentSection(
+                Math.max(0, Math.min(SENT_SECTIONS.length - 1, page)),
+              );
             }}
             scrollEventThrottle={16}
           >

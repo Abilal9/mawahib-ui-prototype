@@ -357,7 +357,8 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const { unreadCount } = useNotifications();
   const stories = catalogService.listStories();
   const [feedPosts, setFeedPosts] = useState(posts);
-  const [jobList, setJobList] = useState(() => jobService.listSync());
+  const [jobList, setJobList] = useState<Job[]>([]);
+  const [jobsError, setJobsError] = useState<string | null>(null);
   const [serviceList, setServiceList] = useState(() => catalogService.listServices());
   const [talentList, setTalentList] = useState(() => catalogService.listTalents());
   const [refreshing, setRefreshing] = useState(false);
@@ -366,11 +367,31 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     setFeedPosts(posts);
   }, [posts]);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const jobs = await jobService.refresh();
+        setJobList(jobs);
+        setJobsError(null);
+      } catch (e) {
+        setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+        setJobList([]);
+      }
+    })();
+  }, []);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS));
     setFeedPosts(posts.map((p) => ({ ...p })));
-    setJobList([...jobService.listSync()]);
+    try {
+      const jobs = await jobService.refresh();
+      setJobList(jobs);
+      setJobsError(null);
+    } catch (e) {
+      setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+      setJobList([]);
+    }
     setServiceList([...catalogService.listServices()]);
     setTalentList([...catalogService.listTalents()]);
     setRefreshing(false);
@@ -467,33 +488,67 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
 
         {feedPosts[0] ? renderFeedPost(feedPosts[0]) : null}
 
-        {jobList.length > 0 ? (
-          <>
-            <SectionHeader
-              title="Jobs matches for you"
-              onPress={() => openExplore('jobs')}
-            />
-            <FlatList
-              data={jobList}
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.carousel}
-              renderItem={({ item }) => (
-                <JobMatchCard
-                  job={item}
-                  onPress={() =>
-                    navigation.navigate('JobListingDetail', { jobId: item.id })
+        <SectionHeader
+          title="Jobs matches for you"
+          onPress={() => openExplore('jobs')}
+        />
+        {jobsError ? (
+          <View style={{ paddingHorizontal: spacing.screen, marginBottom: spacing.lg }}>
+            <Text style={{ ...typography.bodySmall, color: colors.error }}>{jobsError}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                void (async () => {
+                  try {
+                    const jobs = await jobService.refresh();
+                    setJobList(jobs);
+                    setJobsError(null);
+                  } catch (e) {
+                    setJobsError(
+                      e instanceof Error ? e.message : 'Failed to load jobs',
+                    );
                   }
-                  onDismiss={() =>
-                    setJobList((prev) => prev.filter((j) => j.id !== item.id))
-                  }
-                />
-              )}
-            />
-          </>
-        ) : null}
+                })();
+              }}
+            >
+              <Text
+                style={{
+                  ...typography.bodySmall,
+                  color: colors.primary,
+                  fontWeight: '600',
+                  marginTop: spacing.xs,
+                }}
+              >
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : jobList.length === 0 ? (
+          <View style={{ paddingHorizontal: spacing.screen, marginBottom: spacing.lg }}>
+            <Text style={{ ...typography.bodySmall, color: colors.textSecondary }}>
+              No open job listings yet.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={jobList}
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.carousel}
+            renderItem={({ item }) => (
+              <JobMatchCard
+                job={item}
+                onPress={() =>
+                  navigation.navigate('JobListingDetail', { jobId: item.id })
+                }
+                onDismiss={() =>
+                  setJobList((prev) => prev.filter((j) => j.id !== item.id))
+                }
+              />
+            )}
+          />
+        )}
 
         {feedPosts[1] ? renderFeedPost(feedPosts[1]) : null}
 

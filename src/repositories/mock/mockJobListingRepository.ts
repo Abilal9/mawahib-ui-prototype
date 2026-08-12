@@ -1,13 +1,15 @@
 import { JobListing } from '../../data/types';
-import { jobs as seedJobs, getJobById } from '../../data/mock/jobs';
 import { JobListingRepository } from '../types';
 
-let listings: JobListing[] = [...seedJobs];
+/**
+ * Marketplace listings are served by Nest (`jobService` → marketplaceApi).
+ * This mock remains only so the repository registry type-checks; it stays empty.
+ */
+let listings: JobListing[] = [];
 
-/** Catalog job listings — mock; swap for Supabase later. */
 export const mockJobListingRepository: JobListingRepository = {
   list: () => listings,
-  getById: (id) => listings.find((j) => j.id === id) ?? getJobById(id),
+  getById: (id) => listings.find((j) => j.id === id),
   create: (input) => {
     const listing: JobListing = {
       id: input.id ?? `job-${Date.now()}`,

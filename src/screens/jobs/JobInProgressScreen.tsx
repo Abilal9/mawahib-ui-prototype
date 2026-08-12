@@ -360,8 +360,14 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
           <Button
             title="Accept"
             onPress={() => {
-              acceptJob(userJob.id);
-              navigation.goBack();
+              void (async () => {
+                const engagementId = await acceptJob(userJob.id);
+                if (engagementId) {
+                  navigation.replace('JobInProgress', { jobId: engagementId });
+                } else {
+                  navigation.goBack();
+                }
+              })();
             }}
             fullWidth
           />
@@ -452,7 +458,7 @@ export default function JobInProgressScreen({ route, navigation }: ScreenProps<'
             <Button
               title="Confirm Decline"
               onPress={() => {
-                declineJob(userJob.id, declineReason);
+                void declineJob(userJob.id, declineReason);
                 setDeclineOpen(false);
                 navigation.goBack();
               }}

@@ -1,14 +1,25 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { User, JobListing } from '../data/types';
 import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
-import { jobService, userService } from '../services';
-import { repositories } from '../repositories';
+import { ApiError } from '../lib/apiClient';
 import { useAuth } from './AuthContext';
-
-/**
- * In-memory jobs store for the prototype.
- * Seeds via userJob repository; listing lookups via jobService.
- */
+import { jobService } from '../services';
+import {
+  AcceptApplicationResult,
+  ApiApplication,
+  ApiEngagement,
+  mapApplicationToUserJob,
+  mapEngagementToUserJob,
+  mapListingToPostedUserJob,
+  marketplaceApi,
+} from '../services/marketplaceApi';
 
 interface RequestEditsPayload {
   date: string;
@@ -50,361 +61,240 @@ export interface CreatePostedJobPayload {
 
 interface UserJobsContextValue {
   jobs: UserJob[];
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
   getJobById: (id: string) => UserJob | undefined;
-  /**
-   * Apply to an explore/home job listing as the provider (sent / pending application).
-   * Reuses an existing application for the same listing when present.
-   */
-  applyToListing: (listingId: string) => string | undefined;
-  /** @deprecated Use applyToListing — kept briefly for any stale call sites */
-  openFromListing: (listingId: string) => string | undefined;
-  /** Client applies to a provider service — pending until provider accepts (then pending-payment) */
-  createServiceRequest: (payload: CreateServiceRequestPayload) => string;
-  /** Business posts a job listing + a "posted" UserJob row */
-  createPostedJob: (payload: CreatePostedJobPayload) => string;
-  acceptJob: (id: string) => void;
-  declineJob: (id: string, reason?: string) => void;
+  applyToListing: (listingId: string) => Promise<string | undefined>;
+  /** @deprecated Use applyToListing */
+  openFromListing: (listingId: string) => Promise<string | undefined>;
+  createServiceRequest: (payload: CreateServiceRequestPayload) => never;
+  createPostedJob: (payload: CreatePostedJobPayload) => Promise<string>;
+  acceptJob: (id: string) => Promise<string | undefined>;
+  declineJob: (id: string, reason?: string) => Promise<void>;
   requestEdits: (id: string, payload: RequestEditsPayload) => void;
-  /** After client pays a pending-payment job → moves to in-progress */
-  markJobPaid: (id: string) => void;
-  /** in-progress → completed (canonical terminal success; `done` treated as alias in filters) */
-  markJobCompleted: (id: string) => void;
-  /** Provider re-accepts after sent-for-review → pending-payment */
+  markJobPaid: (id: string) => Promise<void>;
+  markJobCompleted: (id: string) => Promise<void>;
   acceptAfterReview: (id: string) => void;
   submitReview: (id: string, payload: SubmitReviewPayload) => void;
+  withdrawApplication: (id: string) => Promise<void>;
 }
 
-const UserJobsContext = createContext<UserJobsContextValue | undefined>(undefined);
+const UserJobsContext = createContext<UserJobsContextValue | undefined>(
+  undefined,
+);
 
-function nowIso() {
-  return new Date().toISOString();
+function isAcceptResult(
+  value: ApiApplication | AcceptApplicationResult,
+): value is AcceptApplicationResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'engagement' in value &&
+    'application' in value
+  );
 }
 
-function detailsFromListing(listing: JobListing): UserJobDetails {
-  return {
-    serviceName: listing.title,
-    packageName: listing.type.replace('-', ' '),
-    addons: [],
-    deadline: '05/14/2025',
-    locationUrl: undefined,
-    notes: listing.description,
-    attachmentName: 'Job-brief.pdf',
-    attachmentSize: '800 KB',
-    packagePrice: 1000,
-    currencySymbol: '﷼',
-    requestedAt: new Date().toLocaleString('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }),
-  };
-}
+function mergeMarketplaceRows(
+  viewerId: string,
+  me: User,
+  applications: ApiApplication[],
+  engagements: ApiEngagement[],
+  myListings: Awaited<ReturnType<typeof marketplaceApi.listMyListings>>,
+): UserJob[] {
+  const engagementAppIds = new Set(
+    engagements
+      .map((e) => e.applicationId)
+      .filter((id): id is string => Boolean(id)),
+  );
 
-/** Provider applying to a posted job → sent pending application (not a received request). */
-function applicationFromListing(listing: JobListing): UserJob {
-  const directory = userService.listSync();
-  return {
-    id: `uj-apply-${listing.id}`,
-    listingId: listing.id,
-    title: listing.title,
-    type: 'sent',
-    status: 'pending',
-    statusLabel: 'Pending',
-    counterpart: {
-      ...directory[1],
-      id: `listing-${listing.id}`,
-      name: listing.company,
-      avatar: listing.logo ?? directory[1]?.avatar,
-      title: listing.location,
-    },
-    date: listing.salary,
-    createdAt: nowIso(),
-    section: 'requests',
-    activityLabel: 'Applied',
-    activityValue: 'Just Now',
-    details: detailsFromListing(listing),
-  };
-}
+  const fromApps = applications
+    .filter((app) => !engagementAppIds.has(app.id))
+    .map((app) => mapApplicationToUserJob(app, viewerId));
 
-function findExistingApplication(jobs: UserJob[], listingId: string) {
-  return jobs.find(
-    (j) => (j.listingId === listingId || j.id === listingId) && j.type === 'sent'
+  const fromEngagements = engagements.map((eng) =>
+    mapEngagementToUserJob(eng, viewerId),
+  );
+
+  const fromListings = myListings.map((listing) =>
+    mapListingToPostedUserJob(listing, me),
+  );
+
+  return [...fromEngagements, ...fromApps, ...fromListings].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );
 }
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
-  const { mappedUser } = useAuth();
-  const [jobs, setJobs] = useState<UserJob[]>(() => repositories.userJobs.list());
+  const { mappedUser, apiUser, isSignedIn } = useAuth();
+  const [jobs, setJobs] = useState<UserJob[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const syncJobs = (updater: (prev: UserJob[]) => UserJob[]) => {
-    setJobs((prev) => {
-      const next = updater(prev);
-      repositories.userJobs.replaceAll(next);
-      return next;
-    });
-  };
+  const refresh = useCallback(async () => {
+    if (!isSignedIn || !apiUser || !mappedUser) {
+      setJobs([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const viewerId = apiUser.id;
+      const isBusiness = apiUser.accountType === 'business';
+
+      const [myApplications, myEngagements, myListings] = await Promise.all([
+        marketplaceApi.listMyApplications(),
+        marketplaceApi.listMyEngagements(),
+        isBusiness
+          ? marketplaceApi.listMyListings()
+          : Promise.resolve([] as Awaited<
+              ReturnType<typeof marketplaceApi.listMyListings>
+            >),
+      ]);
+
+      let ownerApplications: ApiApplication[] = [];
+      if (isBusiness && myListings.length > 0) {
+        const nested = await Promise.all(
+          myListings.map((listing) =>
+            marketplaceApi.listApplicationsForListing(listing.id).catch(() => []),
+          ),
+        );
+        ownerApplications = nested.flat();
+      }
+
+      const allApps = [...myApplications, ...ownerApplications];
+      const byId = new Map(allApps.map((a) => [a.id, a]));
+      const applications = Array.from(byId.values());
+
+      setJobs(
+        mergeMarketplaceRows(
+          viewerId,
+          mappedUser,
+          applications,
+          myEngagements,
+          myListings,
+        ),
+      );
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.message : 'Failed to load marketplace data',
+      );
+      setJobs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUser, isSignedIn, mappedUser]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const value = useMemo<UserJobsContextValue>(
     () => ({
       jobs,
+      loading,
+      error,
+      refresh,
       getJobById: (id) =>
         jobs.find((j) => j.id === id || j.listingId === id),
-      applyToListing: (listingId) => {
-        const existing = findExistingApplication(jobs, listingId);
+      applyToListing: async (listingId) => {
+        const existing = jobs.find(
+          (j) =>
+            (j.listingId === listingId || j.id === listingId) &&
+            j.type === 'sent' &&
+            j.status === 'pending',
+        );
         if (existing) return existing.id;
-        const listing = jobService.getByIdSync(listingId);
-        if (!listing) return undefined;
-        const created = applicationFromListing(listing);
-        syncJobs((prev) => [created, ...prev]);
+        const created = await marketplaceApi.apply(listingId);
+        await refresh();
         return created.id;
       },
-      openFromListing: (listingId) => {
-        const existing = findExistingApplication(jobs, listingId);
+      openFromListing: async (listingId) => {
+        const existing = jobs.find(
+          (j) =>
+            (j.listingId === listingId || j.id === listingId) &&
+            j.type === 'sent',
+        );
         if (existing) return existing.id;
-        const listing = jobService.getByIdSync(listingId);
-        if (!listing) return undefined;
-        const created = applicationFromListing(listing);
-        syncJobs((prev) => [created, ...prev]);
+        const created = await marketplaceApi.apply(listingId);
+        await refresh();
         return created.id;
       },
-      createServiceRequest: (payload) => {
-        const id = `uj-req-${Date.now()}`;
-        const deadline = payload.deadline?.trim() || undefined;
-        const dateLabel =
-          payload.dateLabel?.trim() || deadline || 'Flexible';
-        const locationParts = [
-          payload.locationDetails?.trim(),
-          payload.city?.trim(),
-          payload.country?.trim(),
-        ].filter(Boolean);
-        const created: UserJob = {
-          id,
-          title: payload.serviceName,
-          type: 'sent',
-          status: 'pending',
-          statusLabel: 'Pending',
-          counterpart: payload.provider,
-          date: dateLabel,
-          dueDate: deadline,
-          createdAt: nowIso(),
-          section: 'requests',
-          activityLabel: 'Requested',
-          activityValue: 'Just Now',
-          details: {
-            serviceName: payload.serviceName,
-            packageName: payload.packageName,
-            addons: payload.addons,
-            deadline: deadline ?? 'Flexible',
-            locationUrl: payload.locationUrl?.trim() || undefined,
-            notes: [
-              payload.notes?.trim() || '',
-              locationParts.length
-                ? `Location: ${locationParts.join(', ')}`
-                : '',
-            ]
-              .filter(Boolean)
-              .join('\n\n'),
-            attachmentName: payload.attachmentName?.trim() || '',
-            attachmentSize: payload.attachmentSize?.trim() || '',
-            packagePrice: payload.packagePrice,
-            currencySymbol: '',
-            requestedAt: new Date().toLocaleString('en-US', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            }),
-          },
-        };
-        syncJobs((prev) => [created, ...prev]);
-        return id;
+      createServiceRequest: (_payload) => {
+        throw new Error(
+          'Direct service requests are not available yet. Use job listings and applications.',
+        );
       },
-      createPostedJob: (payload) => {
+      createPostedJob: async (payload) => {
         const me = mappedUser;
-        if (!me) {
-          throw new Error('Not authenticated');
-        }
-        const listing = jobService.createListing({
+        if (!me) throw new Error('Not authenticated');
+        const listing = await jobService.createListing({
           title: payload.title.trim() || 'Untitled job',
           company: me.name,
           type: payload.jobType ?? 'freelance',
           location: payload.location?.trim() || me.location || 'Remote',
           salary: payload.budget?.trim() || 'Negotiable',
-          description: payload.description?.trim() || 'Job posted from Mawahib.',
+          description:
+            payload.description?.trim() || 'Job posted from Mawahib.',
           skills: payload.skills ?? [],
-          status: 'open',
-          logo: typeof me.avatar === 'string' ? me.avatar : undefined,
           exploreTag: 'Design',
+          publish: true,
         });
-        const id = `uj-posted-${listing.id}`;
-        const created: UserJob = {
-          id,
-          listingId: listing.id,
-          title: listing.title,
-          type: 'received',
-          status: 'pending',
-          statusLabel: 'Open',
-          counterpart: me,
-          date: listing.salary,
-          createdAt: nowIso(),
-          section: 'posted',
-          jobType: listing.type,
-          activityLabel: 'Posted',
-          activityValue: 'Just Now',
-          details: detailsFromListing(listing),
-        };
-        syncJobs((prev) => [created, ...prev]);
+        await refresh();
+        return `listing-${listing.id}`;
+      },
+      acceptJob: async (id) => {
+        const result = await marketplaceApi.patchApplication(id, 'accepted');
+        await refresh();
+        if (isAcceptResult(result)) return result.engagement.id;
         return id;
       },
-      acceptJob: (id) => {
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  status: 'pending-payment',
-                  statusLabel: 'Pending Payment',
-                  section: 'requests',
-                  createdAt: nowIso(),
-                  activityLabel: 'Requested',
-                  activityValue: 'Just Now',
-                }
-              : job
-          )
-        );
+      declineJob: async (id) => {
+        const job = jobs.find((j) => j.id === id);
+        if (job?.section === 'posted' && job.listingId) {
+          await marketplaceApi.transitionListing(job.listingId, 'closed');
+        } else if (job?.type === 'received' && job.status === 'pending') {
+          await marketplaceApi.patchApplication(id, 'rejected');
+        } else {
+          await marketplaceApi.transitionEngagement(id, 'declined');
+        }
+        await refresh();
       },
-      acceptAfterReview: (id) => {
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  status: 'pending-payment',
-                  statusLabel: 'Pending Payment',
-                  section: 'requests',
-                  createdAt: nowIso(),
-                  activityLabel: 'Accepted',
-                  activityValue: 'Just Now',
-                }
-              : job
-          )
-        );
+      requestEdits: () => {
+        // Edit-request flow remains UI-only until messaging/payments phases.
       },
-      markJobPaid: (id) => {
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  status: 'in-progress',
-                  statusLabel: 'In Progress',
-                  section: 'in-progress',
-                  createdAt: nowIso(),
-                  activityLabel: 'Due Date',
-                  activityValue: job.dueDate || job.date || 'TBD',
-                }
-              : job
-          )
-        );
+      markJobPaid: async (id) => {
+        await marketplaceApi.transitionEngagement(id, 'in_progress');
+        await refresh();
       },
-      markJobCompleted: (id) => {
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  status: 'completed',
-                  statusLabel: 'Completed',
-                  section: 'completed',
-                  createdAt: nowIso(),
-                  activityLabel: 'Completed',
-                  activityValue: 'Just Now',
-                }
-              : job
-          )
-        );
+      markJobCompleted: async (id) => {
+        const eng = await marketplaceApi.getEngagement(id);
+        if (eng.status === 'in_progress') {
+          await marketplaceApi.transitionEngagement(id, 'delivered');
+        }
+        const latest = await marketplaceApi.getEngagement(id);
+        if (latest.status === 'delivered') {
+          await marketplaceApi.transitionEngagement(id, 'completed');
+        }
+        await refresh();
       },
-      declineJob: (id, reason) => {
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  status: 'declined',
-                  statusLabel: 'Declined',
-                  section: 'requests',
-                  createdAt: nowIso(),
-                  activityLabel: 'Declined',
-                  activityValue: reason?.trim() ? 'With reason' : 'No reason',
-                }
-              : job
-          )
-        );
+      acceptAfterReview: () => {
+        // Deferred with payments.
       },
-      requestEdits: (id, payload) => {
-        syncJobs((prev) =>
-          prev.map((job) => {
-            if (job.id !== id) return job;
-            const priceDigits = payload.packagePrice.replace(/[^\d]/g, '');
-            const nextPrice = priceDigits ? Number(priceDigits) : undefined;
-            const baseDetails = job.details;
-            return {
-              ...job,
-              status: 'sent-for-review',
-              statusLabel: 'Sent for Changes',
-              section: 'requests',
-              createdAt: nowIso(),
-              date: payload.date || job.date,
-              dueDate: payload.date || job.dueDate,
-              activityLabel: 'Sent',
-              activityValue: payload.packagePrice
-                ? `Updated ${payload.packagePrice}`
-                : payload.notes?.trim()
-                  ? 'With notes'
-                  : 'Changes sent',
-              details: baseDetails
-                ? {
-                    ...baseDetails,
-                    deadline: payload.date || baseDetails.deadline,
-                    notes: payload.notes?.trim()
-                      ? payload.notes.trim()
-                      : baseDetails.notes,
-                    packagePrice: nextPrice ?? baseDetails.packagePrice,
-                    addons: nextPrice != null ? [] : baseDetails.addons,
-                  }
-                : baseDetails,
-            };
-          })
-        );
+      submitReview: () => {
+        // Reviews are a later phase.
       },
-      submitReview: (id, payload) => {
-        const rating = Math.min(5, Math.max(1, Math.round(payload.rating)));
-        syncJobs((prev) =>
-          prev.map((job) =>
-            job.id === id
-              ? {
-                  ...job,
-                  rating,
-                  reviewText: payload.text?.trim() || undefined,
-                  reviewImages:
-                    payload.images && payload.images.length > 0
-                      ? payload.images
-                      : undefined,
-                  activityLabel: 'Rated',
-                  activityValue: `${rating} star${rating === 1 ? '' : 's'}`,
-                }
-              : job
-          )
-        );
+      withdrawApplication: async (id) => {
+        await marketplaceApi.patchApplication(id, 'withdrawn');
+        await refresh();
       },
     }),
-    [jobs, mappedUser],
+    [jobs, loading, error, refresh, mappedUser],
   );
 
-  return <UserJobsContext.Provider value={value}>{children}</UserJobsContext.Provider>;
+  return (
+    <UserJobsContext.Provider value={value}>{children}</UserJobsContext.Provider>
+  );
 }
 
 export function useUserJobs() {

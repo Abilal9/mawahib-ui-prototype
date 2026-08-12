@@ -1,10 +1,12 @@
 import { UserJob } from '../../data/types/userJobs';
-import { userJobs as seedJobs } from '../../data/mock/userJobs';
 import { UserJobRepository } from '../types';
 
-let jobs: UserJob[] = [...seedJobs];
+/**
+ * Marketplace applications/engagements load from Nest via UserJobsContext.
+ * Local mock store stays empty (no seed fallback).
+ */
+let jobs: UserJob[] = [];
 
-/** In-app UserJob engagements — mock store. */
 export const mockUserJobRepository: UserJobRepository = {
   list: () => jobs,
   getById: (id) => jobs.find((j) => j.id === id || j.listingId === id),

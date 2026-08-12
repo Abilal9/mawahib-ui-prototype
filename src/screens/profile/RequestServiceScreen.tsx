@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -262,31 +263,41 @@ export default function RequestServiceScreen({
   const sendRequest = () => {
     if (!provider || !selectedService || !selectedPackage) return;
 
-    createServiceRequest({
-      provider,
-      serviceName: selectedService.title,
-      packageName: selectedPackage,
-      packagePrice,
-      addons: selectedAddons.map((a) => ({
-        name: a.title,
-        price: parsePrice(a.priceLabel),
-      })),
-      deadline:
-        scheduleMode === 'deadline' && deadlineDate
-          ? formatDate(deadlineDate)
-          : rangeTo
-            ? formatDate(rangeTo)
-            : undefined,
-      dateLabel: dateSummary || undefined,
-      locationUrl: mapsLink.trim() || undefined,
-      country: country.trim() || undefined,
-      city: city.trim() || undefined,
-      locationDetails: locationDetails.trim() || undefined,
-      notes: notes.trim() || undefined,
-      attachmentName: attachments[0]?.name,
-      attachmentSize: attachments[0]?.size,
-    });
-    setSent(true);
+    try {
+      createServiceRequest({
+        provider,
+        serviceName: selectedService.title,
+        packageName: selectedPackage,
+        packagePrice,
+        addons: selectedAddons.map((a) => ({
+          name: a.title,
+          price: parsePrice(a.priceLabel),
+        })),
+        deadline:
+          scheduleMode === 'deadline' && deadlineDate
+            ? formatDate(deadlineDate)
+            : rangeTo
+              ? formatDate(rangeTo)
+              : undefined,
+        dateLabel: dateSummary || undefined,
+        locationUrl: mapsLink.trim() || undefined,
+        country: country.trim() || undefined,
+        city: city.trim() || undefined,
+        locationDetails: locationDetails.trim() || undefined,
+        notes: notes.trim() || undefined,
+        attachmentName: attachments[0]?.name,
+        attachmentSize: attachments[0]?.size,
+      });
+      setSent(true);
+    } catch (e) {
+      Alert.alert(
+        'Not available yet',
+        e instanceof Error
+          ? e.message
+          : 'Direct service requests will ship in a later phase. Apply to job listings for now.',
+      );
+      return;
+    }
   };
 
   /** Drop the request stack so Back from Jobs doesn't return into the wizard. */
