@@ -15,9 +15,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { profileService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
+import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
+import { PortfolioProject } from '../../data/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_WIDTH * 0.85;
@@ -31,12 +32,22 @@ export default function PortfolioProjectDetailScreen({
   const isVisitorView = Boolean(ownerUserId);
   const { content, removePortfolioProject } = useMyProfile();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const visitor = useVisitorProfessionalProfile(
+    isVisitorView ? ownerUserId : undefined,
+  );
 
-  const project = isVisitorView
-    ? profileService.getVisitorContent(ownerUserId!).portfolio.find(
-        (p) => p.id === route.params.projectId
-      )
+  const project: PortfolioProject | undefined = isVisitorView
+    ? visitor.portfolio.find((p) => p.id === route.params.projectId)
     : content.portfolio.find((p) => p.id === route.params.projectId);
+
+  if (isVisitorView && visitor.loading) {
+    return (
+      <ScreenContainer>
+        <StatusBar style="dark" />
+        <Text style={styles.missing}>Loading…</Text>
+      </ScreenContainer>
+    );
+  }
 
   if (!project) {
     return (
@@ -164,9 +175,10 @@ export default function PortfolioProjectDetailScreen({
             <TouchableOpacity
               style={styles.modalDangerBtn}
               onPress={() => {
-                removePortfolioProject(project.id);
                 setDeleteOpen(false);
-                navigation.goBack();
+                void removePortfolioProject(project.id).then(() =>
+                  navigation.goBack(),
+                );
               }}
               activeOpacity={0.85}
             >

@@ -19,10 +19,11 @@ import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
-import { profileService, userService } from '../../services';
+import { userService } from '../../services';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
+import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 
 /**
  * Visitor multi-step flow to request a provider's service (no payment yet).
@@ -85,10 +86,8 @@ export default function RequestServiceScreen({
   const { createServiceRequest } = useUserJobs();
 
   const provider = userService.resolveProfileUser(route.params.userId);
-  const services = useMemo(
-    () => profileService.getVisitorContent(route.params.userId).services,
-    [route.params.userId]
-  );
+  const visitor = useVisitorProfessionalProfile(route.params.userId);
+  const services = visitor.services;
   const currencyLocation = provider?.location;
 
   const initialService = services.find((s) => s.id === route.params.serviceId);

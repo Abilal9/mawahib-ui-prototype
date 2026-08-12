@@ -27,17 +27,24 @@ import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
-import { ProfileTab } from '../../data/types';
+import { ProfileTab, ProfileContent } from '../../data/types';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
+import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import {
   userService,
-  profileService,
   catalogService,
   connectionService,
+  profileService,
 } from '../../services';
 import { ScreenProps } from '../../navigation/types';
+
+const EMPTY_VISITOR_ABOUT: ProfileContent = {
+  ...profileService.getEmptyContent(),
+  portfolio: [],
+  services: [],
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
@@ -60,6 +67,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   } = useConnections();
   const { user: me } = useMyProfile();
   const { posts } = usePosts();
+  const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
   const user =
     userService.resolveProfileUser(route.params.userId) ??
     userService.getByIdSync(route.params.userId);
@@ -99,7 +107,6 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   }
 
   const relation = getRelation(user.id);
-  const content = profileService.getVisitorContent(user.id);
   const profileUser = {
     ...user,
     title: user.title ?? talent?.category ?? 'Creative Professional',
@@ -259,7 +266,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
 
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
-            <AboutTab content={content} isOwn={false} onAdd={() => {}} onEdit={() => {}} />
+            <AboutTab content={EMPTY_VISITOR_ABOUT} isOwn={false} onAdd={() => {}} onEdit={() => {}} />
           )}
 
           {activeTab === 'Portfolio' && (
@@ -276,7 +283,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                   <Ionicons name="share-outline" size={20} color={colors.primary} />
                 </TouchableOpacity>
               </View>
-              {content.portfolio.map((project) => (
+              {visitorProfessional.portfolio.map((project) => (
                 <TouchableOpacity
                   key={project.id}
                   style={styles.projectCard}
@@ -321,7 +328,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           )}
 
           {activeTab === 'Services' &&
-            (content.services.length === 0 ? (
+            (visitorProfessional.services.length === 0 ? (
               <View style={styles.tabPad}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Services</Text>
@@ -333,7 +340,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Services</Text>
                 </View>
-                {content.services.map((service) => (
+                {visitorProfessional.services.map((service) => (
                   <TouchableOpacity
                     key={service.id}
                     style={styles.serviceCard}

@@ -72,7 +72,8 @@ export default function ManageProfileListScreen({
   const { type } = route.params;
   const isPortfolio = type === 'portfolio';
   const insets = useSafeAreaInsets();
-  const { content, setPortfolio, setServices } = useMyProfile();
+  const { content, setPortfolio, setServices, removePortfolioProject, removeService } =
+    useMyProfile();
 
   const contextList = isPortfolio ? content.portfolio : content.services;
   const [draft, setDraft] = useState<ListItem[]>(() => [...contextList]);
@@ -292,13 +293,30 @@ export default function ManageProfileListScreen({
   };
 
   const handleSave = () => {
-    if (isPortfolio) {
-      setPortfolio(draft as PortfolioProject[]);
-    } else {
-      setServices(draft as ProfileService[]);
-    }
-    allowLeaveRef.current = true;
-    navigation.goBack();
+    void (async () => {
+      try {
+        const removed = [...removedIdsRef.current];
+        for (const id of removed) {
+          if (isPortfolio) {
+            await removePortfolioProject(id);
+          } else {
+            await removeService(id);
+          }
+        }
+        if (isPortfolio) {
+          await setPortfolio(draft as PortfolioProject[]);
+        } else {
+          await setServices(draft as ProfileService[]);
+        }
+        allowLeaveRef.current = true;
+        navigation.goBack();
+      } catch (err) {
+        Alert.alert(
+          'Save failed',
+          err instanceof Error ? err.message : 'Could not save list changes',
+        );
+      }
+    })();
   };
 
   const confirmDelete = useCallback(

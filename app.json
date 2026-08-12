@@ -22,7 +22,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Mawahib to access your photos for portfolio, services, and avatar uploads."
+        }
+      ]
     ]
   }
 }

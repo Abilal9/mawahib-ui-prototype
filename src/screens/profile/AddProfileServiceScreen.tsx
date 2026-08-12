@@ -8,6 +8,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,26 +23,19 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ServicePackage } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
+import { pickAndUploadImage } from '../../lib/uploadMedia';
 
 /**
  * Multi-step wizard to create or edit a profile service.
  *
  * Steps: (1) name / description / media → (2) Basic/Standard/Premium packages →
- * (3) optional add-ons → (4) review & publish into ProfileContext.
+ * (3) optional add-ons → (4) review & publish into Nest services API.
  * Pass `serviceId` in route params to edit an existing service instead of creating one.
  */
 const TOTAL_STEPS = 4;
 const MAX_MEDIA = 10;
 
-/** Prototype stand-ins for a real media picker — `addMedia` cycles through these URLs. */
-const SAMPLE_MEDIA = [
-  'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1558655146-d09347e92766?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1542744094-24638eff58bb?w=400&h=400&fit=crop',
-];
+type MediaItem = { uri: string; mediaAssetId: string };
 
 type PackageName = ServicePackage['name'];
 type PackageDraft = { price: string; delivery: string; features: string[] };
@@ -102,11 +97,22 @@ export default function AddProfileServiceScreen({
 
   const [step, setStep] = useState(1);
   const [mediaDragging, setMediaDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Step 1
   const [name, setName] = useState(existing?.title ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
-  const [media, setMedia] = useState<string[]>(existing?.images ?? []);
+  const [media, setMedia] = useState<MediaItem[]>(() => {
+    if (!existing) return [];
+    const ids = existing.mediaAssetIds ?? [];
+    return existing.images
+      .map((uri, index) =>
+        ids[index] ? { uri, mediaAssetId: ids[index] } : null,
+      )
+      .filter((item): item is MediaItem => Boolean(item));
+  });
 
   // Step 2
   const [activePackage, setActivePackage] = useState<PackageName>('Basic');
@@ -152,9 +158,26 @@ export default function AddProfileServiceScreen({
     }));
   };
 
-  const addMedia = () => {
-    if (media.length >= MAX_MEDIA) return;
-    setMedia((prev) => [...prev, SAMPLE_MEDIA[prev.length % SAMPLE_MEDIA.length]]);
+  const addMedia = async () => {
+    if (media.length >= MAX_MEDIA || uploading) return;
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      const uploaded = await pickAndUploadImage('service', setUploadProgress);
+      if (!uploaded) return;
+      setMedia((prev) => [
+        ...prev,
+        { uri: uploaded.remoteUrl, mediaAssetId: uploaded.mediaAssetId },
+      ]);
+    } catch (err) {
+      Alert.alert(
+        'Upload failed',
+        err instanceof Error ? err.message : 'Could not upload image',
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+    }
   };
 
   const addFeature = () => {
@@ -201,13 +224,15 @@ export default function AddProfileServiceScreen({
   };
 
   /**
-   * Map wizard drafts → ProfileService and persist.
+   * Map wizard drafts → Nest service payload and persist.
    * Basic is always included; Standard/Premium only if the user filled any field.
-   * Empty delivery/features get prototype-friendly placeholders so cards still render.
-   * Mid-flow Save uses the same builder so incomplete packages are allowed.
    */
-  const persistService = () => {
-    const builtPackages: ServicePackage[] = PACKAGE_TABS.filter((key) => {
+  const persistService = async () => {
+    if (media.length === 0) {
+      throw new Error('Upload at least one image for this service');
+    }
+
+    const builtPackages = PACKAGE_TABS.filter((key) => {
       if (key === 'Basic') return true;
       const p = packages[key];
       return (
@@ -220,44 +245,51 @@ export default function AddProfileServiceScreen({
       const p = packages[key];
       return {
         name: key,
-        priceLabel: formatMoney(p.price),
-        delivery: p.delivery.trim() || 'Flexible',
+        price: Number(p.price.replace(/[^\d]/g, '') || '0'),
+        deliveryLabel: p.delivery.trim() || 'Flexible',
         includes: p.features.length ? p.features : ['Details TBD'],
       };
     });
 
     const payload = {
-      id: existing?.id ?? `ps-${Date.now()}`,
       title: name.trim() || 'Untitled service',
       description: description.trim(),
-      rating: existing?.rating ?? 5,
-      reviewCount: existing?.reviewCount ?? 0,
-      images: media.length > 0 ? media : [SAMPLE_MEDIA[0]],
+      mediaAssetIds: media.map((m) => m.mediaAssetId),
       packages: builtPackages,
       addons: addons.map((a) => ({
-        id: a.id,
         title: a.title,
-        priceLabel: a.priceLabel,
+        price: Number(digitsFromLabel(a.priceLabel)),
       })),
     };
 
     if (isEditing && existing) {
-      updateService(existing.id, payload);
+      await updateService(existing.id, payload);
     } else {
-      addService(payload);
+      await addService(payload);
     }
   };
 
   const publish = () => {
-    persistService();
-    navigation.goBack();
+    void (async () => {
+      try {
+        setSaving(true);
+        await persistService();
+        navigation.goBack();
+      } catch (err) {
+        Alert.alert(
+          'Save failed',
+          err instanceof Error ? err.message : 'Could not save service',
+        );
+      } finally {
+        setSaving(false);
+      }
+    })();
   };
 
   /** Save progress from any step without finishing the wizard (name required). */
   const saveProgress = () => {
     if (!name.trim()) return;
-    persistService();
-    navigation.goBack();
+    publish();
   };
 
   const canSave = name.trim().length > 0;
@@ -356,13 +388,36 @@ export default function AddProfileServiceScreen({
                 First image is the cover. Hold the grip to drag and reorder.
               </Text>
               <ReorderableMediaGrid
-                uris={media}
-                onChange={setMedia}
+                uris={media.map((m) => m.uri)}
+                onChange={(uris) => {
+                  const byUri = new Map(media.map((m) => [m.uri, m]));
+                  setMedia(
+                    uris
+                      .map((uri) => byUri.get(uri))
+                      .filter((item): item is MediaItem => Boolean(item)),
+                  );
+                }}
                 maxItems={MAX_MEDIA}
-                onAdd={addMedia}
+                onAdd={() => {
+                  void addMedia();
+                }}
                 videoIndex={media.length > 4 ? 4 : undefined}
                 onDraggingChange={setMediaDragging}
               />
+              {(uploading || uploadProgress != null) && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.mediaHint}>
+                    Uploading
+                    {uploadProgress != null
+                      ? ` ${Math.round(uploadProgress * 100)}%`
+                      : '…'}
+                  </Text>
+                </View>
+              )}
+              {saving ? (
+                <Text style={styles.mediaHint}>Saving service…</Text>
+              ) : null}
             </>
           ) : null}
 
@@ -541,10 +596,10 @@ export default function AddProfileServiceScreen({
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.reviewMediaRow}
                   >
-                    {media.map((uri, i) => (
+                    {media.map((item, i) => (
                       <Image
-                        key={`${uri}-${i}`}
-                        source={{ uri }}
+                        key={`${item.mediaAssetId}-${i}`}
+                        source={{ uri: item.uri }}
                         style={styles.reviewThumb}
                         contentFit="cover"
                       />

@@ -47,6 +47,8 @@ export interface PortfolioProject {
   title: string;
   description: string;
   images: string[];
+  /** Backend media asset ids aligned with `images` order when known */
+  mediaAssetIds?: string[];
   hasVideo?: boolean;
   videoIndex?: number;
 }
@@ -72,6 +74,8 @@ export interface ServiceOffering {
   rating: number;
   reviewCount: number;
   images: string[];
+  /** Backend media asset ids aligned with `images` order when known */
+  mediaAssetIds?: string[];
   packages: ServicePackage[];
   addons?: ServiceAddon[];
 }

@@ -17,10 +17,11 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { colors, spacing, radius, typography } from '../../theme';
-import { catalogService, profileService, userService } from '../../services';
+import { catalogService, userService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
+import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 
 /**
  * Service detail with three data paths:
@@ -36,18 +37,29 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   const isVisitorView = Boolean(ownerUserId);
   const { user: me, content, removeService } = useMyProfile();
   const owner = ownerUserId ? userService.resolveProfileUser(ownerUserId) : undefined;
+  const visitor = useVisitorProfessionalProfile(
+    isVisitorView ? ownerUserId : undefined,
+  );
 
   // Prefer profile-shaped services (packages/addons); fall back to catalog below if missing.
   const profileOffering = isVisitorView
-    ? profileService.getVisitorContent(ownerUserId!).services.find(
-        (s) => s.id === route.params.serviceId
-      )
+    ? visitor.services.find((s) => s.id === route.params.serviceId)
     : content.services.find((s) => s.id === route.params.serviceId);
 
   const currencyLocation = isVisitorView ? owner?.location : me.location;
 
   const [activePackage, setActivePackage] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  if (isVisitorView && visitor.loading) {
+    return (
+      <ScreenContainer>
+        <View style={styles.missingWrap}>
+          <Text style={styles.missingText}>Loading…</Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   if (!catalogListing && !profileOffering) {
     return (
@@ -214,9 +226,10 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
               <TouchableOpacity
                 style={styles.modalDangerBtn}
                 onPress={() => {
-                  removeService(profileOffering.id);
                   setDeleteOpen(false);
-                  navigation.goBack();
+                  void removeService(profileOffering.id).then(() =>
+                    navigation.goBack(),
+                  );
                 }}
                 activeOpacity={0.85}
               >

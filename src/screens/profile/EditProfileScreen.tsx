@@ -8,6 +8,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,14 +21,7 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
-
-const SAMPLE_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
-];
+import { pickAndUploadImage } from '../../lib/uploadMedia';
 
 export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfile'>) {
   const insets = useSafeAreaInsets();
@@ -34,12 +29,25 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
   const [title, setTitle] = useState(user.title ?? '');
   const [location, setLocation] = useState(user.location ?? '');
   const [avatar, setAvatar] = useState<string | number>(user.avatar);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-  const cycleAvatar = () => {
-    const current =
-      typeof avatar === 'string' ? SAMPLE_AVATARS.indexOf(avatar) : -1;
-    const next = SAMPLE_AVATARS[(current + 1) % SAMPLE_AVATARS.length];
-    setAvatar(next);
+  const pickAvatar = async () => {
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      const uploaded = await pickAndUploadImage('avatar', setUploadProgress);
+      if (!uploaded) return;
+      setAvatar(uploaded.remoteUrl);
+    } catch (err) {
+      Alert.alert(
+        'Upload failed',
+        err instanceof Error ? err.message : 'Could not upload avatar',
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+    }
   };
 
   const save = () => {
@@ -58,50 +66,57 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
           <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={styles.title}>Edit Profile</Text>
         <View style={styles.iconBtn} />
       </View>
 
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.avatarBlock}>
-            <TouchableOpacity onPress={cycleAvatar} activeOpacity={0.85}>
-              <Image source={toImageSource(avatar)} style={styles.avatar} contentFit="cover" />
-              <View style={styles.cameraBadge}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity
+            style={styles.avatarWrap}
+            onPress={() => {
+              void pickAvatar();
+            }}
+            disabled={uploading}
+          >
+            <Image source={toImageSource(avatar)} style={styles.avatar} contentFit="cover" />
+            <View style={styles.cameraBadge}>
+              {uploading ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
                 <Ionicons name="camera" size={16} color={colors.white} />
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.avatarHint}>Tap photo to change (demo samples)</Text>
-          </View>
+              )}
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>
+            {uploadProgress != null
+              ? `Uploading ${Math.round(uploadProgress * 100)}%`
+              : 'Tap photo to upload a new avatar'}
+          </Text>
 
           <Text style={styles.label}>Title</Text>
           <TextInput
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="e.g. Event Photographer"
+            placeholder="e.g. Product Designer"
             placeholderTextColor={colors.textSecondary}
           />
-
           <Text style={styles.label}>Location</Text>
           <TextInput
             style={styles.input}
             value={location}
             onChangeText={setLocation}
-            placeholder="e.g. Riyadh, Saudi Arabia"
+            placeholder="City, Country"
             placeholderTextColor={colors.textSecondary}
           />
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <Button title="Save Changes" onPress={save} fullWidth />
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          <Button title="Save" onPress={save} disabled={uploading} />
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -109,77 +124,57 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.white,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...typography.h3, color: colors.text },
-  content: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
-  },
-  avatarBlock: {
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-    gap: spacing.sm,
-  },
-  avatar: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: colors.borderLight,
-    borderWidth: 3,
-    borderColor: colors.white,
-  },
+  title: { ...typography.h3, color: colors.text },
+  content: { padding: spacing.screen, alignItems: 'center' },
+  avatarWrap: { marginTop: spacing.md, marginBottom: spacing.sm },
+  avatar: { width: 96, height: 96, borderRadius: 48 },
   cameraBadge: {
     position: 'absolute',
-    right: 2,
-    bottom: 2,
+    right: 0,
+    bottom: 0,
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
   },
   avatarHint: {
     ...typography.caption,
     color: colors.textSecondary,
+    marginBottom: spacing.lg,
   },
   label: {
-    ...typography.caption,
+    ...typography.label,
     color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: spacing.sm,
+    alignSelf: 'stretch',
+    marginBottom: spacing.xs,
   },
   input: {
     ...typography.body,
     color: colors.text,
+    alignSelf: 'stretch',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.card,
-    backgroundColor: colors.background,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
   },
   footer: {
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.white,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
 });

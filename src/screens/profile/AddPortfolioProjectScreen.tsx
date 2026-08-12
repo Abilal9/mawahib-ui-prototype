@@ -8,6 +8,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -18,17 +20,11 @@ import ReorderableMediaGrid from '../../components/ui/ReorderableMediaGrid';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
+import { pickAndUploadImage } from '../../lib/uploadMedia';
 
 const MAX_MEDIA = 10;
 
-const SAMPLE_MEDIA = [
-  'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1558655146-d09347e92766?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1542744094-24638eff58bb?w=400&h=400&fit=crop',
-];
+type MediaItem = { uri: string; mediaAssetId: string };
 
 export default function AddPortfolioProjectScreen({
   navigation,
@@ -42,46 +38,77 @@ export default function AddPortfolioProjectScreen({
     : undefined;
   const isEditing = Boolean(existing);
 
-  const [title, setTitle] = useState(
-    existing?.title ?? 'E-commerce App Redesign'
-  );
-  const [description, setDescription] = useState(
-    existing?.description ??
-      'A complete UX/UI redesign for a multi-category shopping experience focused on speed and clarity.'
-  );
-  const [media, setMedia] = useState<string[]>(
-    () => existing?.images ?? [...SAMPLE_MEDIA]
-  );
+  const [title, setTitle] = useState(existing?.title ?? '');
+  const [description, setDescription] = useState(existing?.description ?? '');
+  const [media, setMedia] = useState<MediaItem[]>(() => {
+    if (!existing) return [];
+    const ids = existing.mediaAssetIds ?? [];
+    return existing.images
+      .map((uri, index) =>
+        ids[index] ? { uri, mediaAssetId: ids[index] } : null,
+      )
+      .filter((item): item is MediaItem => Boolean(item));
+  });
   const [mediaDragging, setMediaDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-  const addMedia = () => {
-    if (media.length >= MAX_MEDIA) return;
-    setMedia((prev) => [...prev, SAMPLE_MEDIA[prev.length % SAMPLE_MEDIA.length]]);
+  const addMedia = async () => {
+    if (media.length >= MAX_MEDIA || uploading) return;
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      const uploaded = await pickAndUploadImage('portfolio', setUploadProgress);
+      if (!uploaded) return;
+      setMedia((prev) => [
+        ...prev,
+        { uri: uploaded.remoteUrl, mediaAssetId: uploaded.mediaAssetId },
+      ]);
+    } catch (err) {
+      Alert.alert(
+        'Upload failed',
+        err instanceof Error ? err.message : 'Could not upload image',
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+    }
   };
 
-  const save = () => {
+  const save = async () => {
+    if (media.length === 0) {
+      Alert.alert('Add media', 'Upload at least one image for this project.');
+      return;
+    }
     const trimmedTitle = title.trim() || 'Untitled project';
     const trimmedDesc = description.trim();
-    const images = media.length > 0 ? media : [SAMPLE_MEDIA[0]];
+    const mediaAssetIds = media.map((m) => m.mediaAssetId);
 
-    if (isEditing && existing) {
-      updatePortfolioProject(existing.id, {
-        ...existing,
-        title: trimmedTitle,
-        description: trimmedDesc,
-        images,
-        hasVideo: images.length > 4,
-      });
-    } else {
-      addPortfolioProject({
-        id: `proj-${Date.now()}`,
-        title: trimmedTitle,
-        description: trimmedDesc,
-        images,
-        hasVideo: images.length > 4,
-      });
+    try {
+      setSaving(true);
+      if (isEditing && existing) {
+        await updatePortfolioProject(existing.id, {
+          title: trimmedTitle,
+          description: trimmedDesc,
+          mediaAssetIds,
+        });
+      } else {
+        await addPortfolioProject({
+          title: trimmedTitle,
+          description: trimmedDesc,
+          mediaAssetIds,
+        });
+      }
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert(
+        'Save failed',
+        err instanceof Error ? err.message : 'Could not save project',
+      );
+    } finally {
+      setSaving(false);
     }
-    navigation.goBack();
   };
 
   return (
@@ -121,20 +148,44 @@ export default function AddPortfolioProjectScreen({
               {media.length}/{MAX_MEDIA}
             </Text>
           </View>
-          <Text style={styles.mediaHint}>
-            First image is the cover. Hold the grip to drag and reorder.
-          </Text>
+          {(uploading || uploadProgress != null) && (
+            <View style={styles.progressRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.progressText}>
+                Uploading
+                {uploadProgress != null
+                  ? ` ${Math.round(uploadProgress * 100)}%`
+                  : '…'}
+              </Text>
+            </View>
+          )}
           <ReorderableMediaGrid
-            uris={media}
-            onChange={setMedia}
+            uris={media.map((m) => m.uri)}
+            onChange={(uris) => {
+              const byUri = new Map(media.map((m) => [m.uri, m]));
+              setMedia(
+                uris
+                  .map((uri) => byUri.get(uri))
+                  .filter((item): item is MediaItem => Boolean(item)),
+              );
+            }}
             maxItems={MAX_MEDIA}
-            onAdd={addMedia}
+            onAdd={() => {
+              void addMedia();
+            }}
             videoIndex={media.length > 4 ? 4 : undefined}
             onDraggingChange={setMediaDragging}
           />
         </ScrollView>
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <Button title={isEditing ? 'Save Changes' : 'Publish Project'} onPress={save} />
+
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          <Button
+            title={saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add project'}
+            onPress={() => {
+              void save();
+            }}
+            disabled={saving || uploading}
+          />
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -147,45 +198,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.white,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.h3, color: colors.text },
   content: { padding: spacing.screen, paddingBottom: spacing.xxl },
-  label: { ...typography.label, color: colors.text, marginTop: spacing.md, marginBottom: spacing.sm },
-  labelInline: { ...typography.label, color: colors.text },
+  label: { ...typography.label, color: colors.textSecondary, marginBottom: spacing.xs },
+  labelInline: { ...typography.label, color: colors.textSecondary },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.button,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     ...typography.body,
     color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    backgroundColor: colors.white,
   },
   multiline: { minHeight: 110 },
   mediaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
   mediaCount: { ...typography.caption, color: colors.textSecondary },
-  mediaHint: {
-    ...typography.caption,
-    color: colors.textSecondary,
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
+  progressText: { ...typography.caption, color: colors.textSecondary },
   footer: {
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
 });

@@ -25,17 +25,24 @@ import {
   type ApiUser,
   type UpdateMePayload,
 } from '../services/authApi';
+import {
+  mapPortfolioProject,
+  portfolioApi,
+} from '../services/portfolioApi';
+import {
+  mapServiceOffering,
+  servicesApi,
+} from '../services/servicesApi';
 
 /**
  * Signed-in user's editable profile.
- * Identity/basics hydrate from Nest `/users/me` when authenticated.
- * Portfolio/services/about sections remain local mock until later phases.
+ * Identity/basics + portfolio/services hydrate from Nest when authenticated.
+ * About list sections remain local until a later phase.
  */
 
 const FALLBACK_AVATAR =
   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
 
-/** Neutral placeholder — never the mock seed identity. */
 const emptyUser = (): User => ({
   id: '',
   name: '',
@@ -55,6 +62,9 @@ const emptyUser = (): User => ({
 interface ProfileContextValue {
   user: User;
   content: ProfileContent;
+  profileLoading: boolean;
+  profileError: string | null;
+  refreshProfessionalProfile: () => Promise<void>;
   useEmptyProfile: () => void;
   useFilledProfile: () => void;
   applySignupProfile: (basics: { name: string; location: string }) => void;
@@ -72,14 +82,50 @@ interface ProfileContextValue {
   setEducation: (education: ProfileEducation[]) => void;
   setExperience: (experience: ProfileExperience[]) => void;
   setCertifications: (certifications: ProfileCertification[]) => void;
-  addPortfolioProject: (project: PortfolioProject) => void;
-  setPortfolio: (portfolio: PortfolioProject[]) => void;
-  updatePortfolioProject: (projectId: string, project: PortfolioProject) => void;
-  removePortfolioProject: (projectId: string) => void;
-  addService: (service: ProfileService) => void;
-  setServices: (services: ProfileService[]) => void;
-  updateService: (serviceId: string, service: ProfileService) => void;
-  removeService: (serviceId: string) => void;
+  addPortfolioProject: (input: {
+    title: string;
+    description: string;
+    mediaAssetIds: string[];
+  }) => Promise<PortfolioProject>;
+  setPortfolio: (portfolio: PortfolioProject[]) => Promise<void>;
+  updatePortfolioProject: (
+    projectId: string,
+    input: {
+      title: string;
+      description: string;
+      mediaAssetIds: string[];
+    },
+  ) => Promise<PortfolioProject>;
+  removePortfolioProject: (projectId: string) => Promise<void>;
+  addService: (input: {
+    title: string;
+    description: string;
+    mediaAssetIds: string[];
+    packages: Array<{
+      name: 'Basic' | 'Standard' | 'Premium';
+      price: number;
+      deliveryLabel: string;
+      includes: string[];
+    }>;
+    addons?: Array<{ title: string; price: number }>;
+  }) => Promise<ProfileService>;
+  setServices: (services: ProfileService[]) => Promise<void>;
+  updateService: (
+    serviceId: string,
+    input: {
+      title: string;
+      description: string;
+      mediaAssetIds: string[];
+      packages: Array<{
+        name: 'Basic' | 'Standard' | 'Premium';
+        price: number;
+        deliveryLabel: string;
+        includes: string[];
+      }>;
+      addons?: Array<{ title: string; price: number }>;
+    },
+  ) => Promise<ProfileService>;
+  removeService: (serviceId: string) => Promise<void>;
   removePostId: (postId: string) => void;
   addPostId: (postId: string) => void;
 }
@@ -105,6 +151,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { apiUser, mappedUser, isSignedIn, accessToken } = useAuth();
   const [content, setContent] = useState<ProfileContent>(seedEmpty);
   const [user, setUser] = useState<User>(emptyUser);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const hydrateFromApiUser = useCallback((next: ApiUser) => {
     const mapped = mapApiUserToUser(next);
@@ -119,7 +167,31 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const clearLocalProfile = useCallback(() => {
     setContent(seedEmpty());
     setUser(emptyUser());
+    setProfileError(null);
   }, []);
+
+  const refreshProfessionalProfile = useCallback(async () => {
+    if (!isSignedIn || !accessToken) return;
+    setProfileLoading(true);
+    setProfileError(null);
+    try {
+      const [portfolio, services] = await Promise.all([
+        portfolioApi.listMine(),
+        servicesApi.listMine(),
+      ]);
+      setContent((prev) => ({
+        ...prev,
+        portfolio: portfolio.map(mapPortfolioProject),
+        services: services.map(mapServiceOffering),
+      }));
+    } catch (err) {
+      setProfileError(
+        err instanceof Error ? err.message : 'Failed to load portfolio/services',
+      );
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [accessToken, isSignedIn]);
 
   useEffect(() => {
     if (!isSignedIn || !apiUser) {
@@ -127,7 +199,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       return;
     }
     hydrateFromApiUser(apiUser);
-  }, [apiUser, isSignedIn, hydrateFromApiUser, clearLocalProfile]);
+    void refreshProfessionalProfile();
+  }, [
+    apiUser,
+    isSignedIn,
+    hydrateFromApiUser,
+    clearLocalProfile,
+    refreshProfessionalProfile,
+  ]);
 
   const persistMe = useCallback(
     async (payload: UpdateMePayload) => {
@@ -142,10 +221,26 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     () => ({
       user: mappedUser ?? user,
       content,
-      useEmptyProfile: () => setContent(seedEmpty()),
+      profileLoading,
+      profileError,
+      refreshProfessionalProfile,
+      useEmptyProfile: () =>
+        setContent((prev) => ({
+          ...seedEmpty(),
+          bio: prev.bio,
+          talents: prev.talents,
+          portfolio: prev.portfolio,
+          services: prev.services,
+        })),
       useFilledProfile: () => {
-        // Demo content only — identity stays the authenticated API user.
-        setContent(seedFilled());
+        const filled = seedFilled();
+        setContent((prev) => ({
+          ...filled,
+          bio: prev.bio || filled.bio,
+          talents: prev.talents.length ? prev.talents : filled.talents,
+          portfolio: prev.portfolio,
+          services: prev.services,
+        }));
       },
       applySignupProfile: ({ name, location }) => {
         setContent(seedEmpty());
@@ -181,32 +276,84 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setExperience: (experience) => setContent((prev) => ({ ...prev, experience })),
       setCertifications: (certifications) =>
         setContent((prev) => ({ ...prev, certifications })),
-      addPortfolioProject: (project) =>
-        setContent((prev) => ({ ...prev, portfolio: [project, ...prev.portfolio] })),
-      setPortfolio: (portfolio) => setContent((prev) => ({ ...prev, portfolio })),
-      updatePortfolioProject: (projectId, project) =>
+      addPortfolioProject: async (input) => {
+        const created = mapPortfolioProject(
+          await portfolioApi.create({
+            title: input.title,
+            description: input.description,
+            mediaAssetIds: input.mediaAssetIds,
+          }),
+        );
         setContent((prev) => ({
           ...prev,
-          portfolio: prev.portfolio.map((p) => (p.id === projectId ? project : p)),
-        })),
-      removePortfolioProject: (projectId) =>
+          portfolio: [created, ...prev.portfolio],
+        }));
+        return created;
+      },
+      setPortfolio: async (portfolio) => {
+        const ordered = await portfolioApi.reorder(portfolio.map((p) => p.id));
+        setContent((prev) => ({
+          ...prev,
+          portfolio: ordered.map(mapPortfolioProject),
+        }));
+      },
+      updatePortfolioProject: async (projectId, input) => {
+        const updated = mapPortfolioProject(
+          await portfolioApi.update(projectId, {
+            title: input.title,
+            description: input.description,
+            mediaAssetIds: input.mediaAssetIds,
+          }),
+        );
+        setContent((prev) => ({
+          ...prev,
+          portfolio: prev.portfolio.map((p) =>
+            p.id === projectId ? updated : p,
+          ),
+        }));
+        return updated;
+      },
+      removePortfolioProject: async (projectId) => {
+        await portfolioApi.remove(projectId);
         setContent((prev) => ({
           ...prev,
           portfolio: prev.portfolio.filter((p) => p.id !== projectId),
-        })),
-      addService: (service) =>
-        setContent((prev) => ({ ...prev, services: [service, ...prev.services] })),
-      setServices: (services) => setContent((prev) => ({ ...prev, services })),
-      updateService: (serviceId, service) =>
+        }));
+      },
+      addService: async (input) => {
+        const created = mapServiceOffering(await servicesApi.create(input));
         setContent((prev) => ({
           ...prev,
-          services: prev.services.map((s) => (s.id === serviceId ? service : s)),
-        })),
-      removeService: (serviceId) =>
+          services: [created, ...prev.services],
+        }));
+        return created;
+      },
+      setServices: async (services) => {
+        const ordered = await servicesApi.reorder(services.map((s) => s.id));
+        setContent((prev) => ({
+          ...prev,
+          services: ordered.map(mapServiceOffering),
+        }));
+      },
+      updateService: async (serviceId, input) => {
+        const updated = mapServiceOffering(
+          await servicesApi.update(serviceId, input),
+        );
+        setContent((prev) => ({
+          ...prev,
+          services: prev.services.map((s) =>
+            s.id === serviceId ? updated : s,
+          ),
+        }));
+        return updated;
+      },
+      removeService: async (serviceId) => {
+        await servicesApi.remove(serviceId);
         setContent((prev) => ({
           ...prev,
           services: prev.services.filter((s) => s.id !== serviceId),
-        })),
+        }));
+      },
       removePostId: (postId) =>
         setContent((prev) => ({
           ...prev,
@@ -218,7 +365,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           postIds: [postId, ...prev.postIds],
         })),
     }),
-    [content, user, mappedUser, hydrateFromApiUser, clearLocalProfile, persistMe],
+    [
+      content,
+      user,
+      mappedUser,
+      profileLoading,
+      profileError,
+      refreshProfessionalProfile,
+      hydrateFromApiUser,
+      clearLocalProfile,
+      persistMe,
+    ],
   );
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
