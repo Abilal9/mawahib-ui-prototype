@@ -20,6 +20,7 @@ import { colors, spacing, typography } from '../../theme';
 import { RootStackScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { mapAuthError } from '../../lib/authErrors';
 
 export default function SignInScreen({ navigation }: RootStackScreenProps<'SignIn'>) {
   const { signInWithEmail, authError, clearAuthError } = useAuth();
@@ -38,7 +39,7 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
       hydrateFromApiUser(apiUser);
       navigation.replace('MainTabs');
     } catch (e) {
-      Alert.alert('Sign in failed', authError || (e as Error).message);
+      Alert.alert('Sign in failed', mapAuthError(e, authError || undefined));
     } finally {
       setLoading(false);
     }

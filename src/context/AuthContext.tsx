@@ -10,6 +10,9 @@ import React, {
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { ApiError } from '../lib/apiClient';
+import { mapAuthError } from '../lib/authErrors';
+import { getAuthRedirectUrl } from '../lib/authRedirect';
+import { isPasswordValid } from '../lib/passwordRules';
 import { supabase } from '../lib/supabase';
 import { authApi, mapApiUserToUser, type ApiUser } from '../services/authApi';
 import type { User } from '../data/types';
@@ -45,6 +48,12 @@ interface AuthContextValue {
   }) => Promise<{ needsEmailConfirmation: boolean }>;
   verifySignupOtp: (email: string, token: string) => Promise<void>;
   resendSignupOtp: (email: string) => Promise<void>;
+  /**
+   * Phone OTP readiness (requires Supabase SMS provider).
+   * Does not create a separate Mawahib user — same Nest bootstrap on session.
+   */
+  sendPhoneOtp: (phone: string) => Promise<void>;
+  verifyPhoneOtp: (phone: string, token: string) => Promise<ApiUser>;
   /** Idempotent Nest bootstrap + load /users/me */
   bootstrapSession: (input?: {
     accountType?: AccountType;
@@ -244,10 +253,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountType: AccountType;
     }) => {
       setAuthError(null);
+      if (!isPasswordValid(input.password)) {
+        const message =
+          'Password must be at least 8 characters and include upper, lower, number, and special character.';
+        setAuthError(message);
+        throw new Error(message);
+      }
+      const redirectTo = getAuthRedirectUrl();
       const { data, error } = await supabase.auth.signUp({
         email: input.email.trim(),
         password: input.password,
         options: {
+          emailRedirectTo: redirectTo,
           data: {
             display_name: input.name.trim(),
             city: input.city.trim(),
@@ -256,8 +273,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       });
       if (error) {
-        setAuthError(error.message);
-        throw error;
+        const message = mapAuthError(error);
+        setAuthError(message);
+        throw new Error(message);
       }
       setAccountType(input.accountType);
       setSignUpBasics({
@@ -272,6 +290,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           locationCity: input.city.trim(),
         });
       }
+      // When email confirmations are enabled, Supabase returns no session until verified.
+      // ConfirmCodeScreen expects a 6-digit OTP from the Confirm signup email template.
       return { needsEmailConfirmation: !data.session };
     },
     [hydrateBackendUser],
@@ -286,8 +306,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         type: 'signup',
       });
       if (error) {
-        setAuthError(error.message);
-        throw error;
+        const message = mapAuthError(error);
+        setAuthError(message);
+        throw new Error(message);
       }
       if (data.session) {
         await hydrateBackendUser(data.session);
@@ -301,12 +322,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: email.trim(),
+      options: {
+        emailRedirectTo: getAuthRedirectUrl(),
+      },
     });
     if (error) {
-      setAuthError(error.message);
-      throw error;
+      const message = mapAuthError(error);
+      setAuthError(message);
+      throw new Error(message);
     }
   }, []);
+
+  const sendPhoneOtp = useCallback(async (phone: string) => {
+    setAuthError(null);
+    const normalized = phone.trim();
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: normalized,
+    });
+    if (error) {
+      const message = mapAuthError(error);
+      setAuthError(message);
+      throw new Error(message);
+    }
+  }, []);
+
+  const verifyPhoneOtp = useCallback(
+    async (phone: string, token: string) => {
+      setAuthError(null);
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: phone.trim(),
+        token: token.trim(),
+        type: 'sms',
+      });
+      if (error) {
+        const message = mapAuthError(error);
+        setAuthError(message);
+        throw new Error(message);
+      }
+      const user = await hydrateBackendUser(data.session);
+      if (!user) {
+        throw new Error('Phone verified but failed to load profile');
+      }
+      return user;
+    },
+    [hydrateBackendUser],
+  );
 
   const bootstrapSession = useCallback(
     async (input?: {
@@ -343,8 +403,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       if (error) {
-        setAuthError(error.message);
-        throw error;
+        const message = mapAuthError(error);
+        setAuthError(message);
+        throw new Error(message);
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
@@ -386,6 +447,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       registerWithEmail,
       verifySignupOtp,
       resendSignupOtp,
+      sendPhoneOtp,
+      verifyPhoneOtp,
       bootstrapSession,
       refreshMe,
       signInWithEmail,
@@ -405,6 +468,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       registerWithEmail,
       verifySignupOtp,
       resendSignupOtp,
+      sendPhoneOtp,
+      verifyPhoneOtp,
       bootstrapSession,
       refreshMe,
       signInWithEmail,

@@ -13,17 +13,26 @@ import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { mapAuthError } from '../../lib/authErrors';
 
 const CODE_LENGTH = 6;
 
 export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'ConfirmCode'>) {
-  const { verifySignupOtp, resendSignupOtp, clearAuthError } = useAuth();
+  const {
+    verifySignupOtp,
+    resendSignupOtp,
+    verifyPhoneOtp,
+    sendPhoneOtp,
+    clearAuthError,
+  } = useAuth();
   const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const [timer, setTimer] = useState(60);
   const [loading, setLoading] = useState(false);
   const inputRefs = useRef<(RNTextInput | null)[]>([]);
-  const destination = route.params?.email || route.params?.phone || 'your device';
   const email = route.params?.email || '';
+  const phone = route.params?.phone || '';
+  const destination = email || phone || 'your device';
+  const isPhone = Boolean(phone) && !email;
 
   useEffect(() => {
     if (timer <= 0) return;
@@ -51,26 +60,39 @@ export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'Co
   const isComplete = code.every((d) => d !== '');
 
   const handleVerify = async () => {
-    if (!isComplete || !email) return;
+    if (!isComplete) return;
+    if (!email && !phone) {
+      Alert.alert('Missing destination', 'Go back and start signup again.');
+      return;
+    }
     clearAuthError();
     setLoading(true);
     try {
-      await verifySignupOtp(email, code.join(''));
+      if (isPhone) {
+        await verifyPhoneOtp(phone, code.join(''));
+      } else {
+        await verifySignupOtp(email, code.join(''));
+      }
       navigation.navigate('TurnOnNotifications');
     } catch (e) {
-      Alert.alert('Verification failed', (e as Error).message);
+      Alert.alert('Verification failed', mapAuthError(e));
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email && !phone) return;
     try {
-      await resendSignupOtp(email);
+      if (isPhone) {
+        await sendPhoneOtp(phone);
+      } else {
+        await resendSignupOtp(email);
+      }
       setTimer(60);
+      Alert.alert('Code sent', 'Check for a new verification code.');
     } catch (e) {
-      Alert.alert('Could not resend code', (e as Error).message);
+      Alert.alert('Could not resend code', mapAuthError(e));
     }
   };
 
@@ -82,6 +104,9 @@ export default function ConfirmCodeScreen({ route, navigation }: ScreenProps<'Co
         <Text style={styles.subtitle}>
           Enter the 6-digit code sent to{'\n'}
           <Text style={styles.destination}>{destination}</Text>
+          {isPhone
+            ? '\n\nUse the SMS code — do not share it with anyone.'
+            : '\n\nUse the code from your email — do not open confirmation links in a browser (they can expire).'}
         </Text>
 
         <View style={styles.codeRow}>

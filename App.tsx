@@ -15,6 +15,7 @@ import { UserJobsProvider } from './src/context/UserJobsContext';
 import { ConnectionsProvider } from './src/context/ConnectionsContext';
 import { PostsProvider } from './src/context/PostsContext';
 import { NotificationsProvider } from './src/context/NotificationsContext';
+import AuthDeepLinkListener from './src/components/auth/AuthDeepLinkListener';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -51,6 +52,7 @@ function AppProviders() {
                 <ConnectionsProvider>
                   <NavigationContainer>
                     <StatusBar style="dark" />
+                    <AuthDeepLinkListener />
                     <RootNavigator />
                   </NavigationContainer>
                 </ConnectionsProvider>

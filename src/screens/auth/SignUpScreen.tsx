@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,12 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import Checkbox from '../../components/ui/Checkbox';
+import PasswordRequirements from '../../components/auth/PasswordRequirements';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { mapAuthError } from '../../lib/authErrors';
+import { isPasswordValid } from '../../lib/passwordRules';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
   const { accountType, registerWithEmail, clearAuthError } = useAuth();
@@ -29,19 +32,51 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const accountLabel = accountType === 'business' ? 'Business' : 'Talent';
-  const canSubmit =
-    !loading &&
-    agreed &&
-    !!accountType &&
-    name.trim().length > 0 &&
-    email.trim().length > 0 &&
-    city.trim().length > 0 &&
-    password.length >= 6 &&
-    password === confirmPassword;
+  const passwordOk = isPasswordValid(password);
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const showMismatch =
+    (submitted || confirmPassword.length > 0) &&
+    password.length > 0 &&
+    !passwordsMatch;
+
+  const canSubmit = useMemo(
+    () =>
+      !loading &&
+      agreed &&
+      !!accountType &&
+      name.trim().length > 0 &&
+      email.trim().length > 0 &&
+      city.trim().length > 0 &&
+      passwordOk &&
+      passwordsMatch,
+    [
+      agreed,
+      accountType,
+      city,
+      email,
+      loading,
+      name,
+      passwordOk,
+      passwordsMatch,
+    ],
+  );
 
   const handleSignUp = async () => {
+    setSubmitted(true);
+    if (!passwordOk) {
+      Alert.alert(
+        'Weak password',
+        'Meet all password requirements before continuing.',
+      );
+      return;
+    }
+    if (!passwordsMatch) {
+      Alert.alert('Passwords do not match', 'Confirm password must match.');
+      return;
+    }
     if (!canSubmit || !accountType) return;
     clearAuthError();
     setLoading(true);
@@ -59,7 +94,7 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
         navigation.navigate('TurnOnNotifications');
       }
     } catch (e) {
-      Alert.alert('Sign up failed', (e as Error).message);
+      Alert.alert('Sign up failed', mapAuthError(e));
     } finally {
       setLoading(false);
     }
@@ -120,6 +155,7 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             onChangeText={setPassword}
             secureTextEntry
           />
+          <PasswordRequirements password={password} />
 
           <TextInput
             label="Confirm Password"
@@ -128,6 +164,9 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             onChangeText={setConfirmPassword}
             secureTextEntry
           />
+          {showMismatch ? (
+            <Text style={styles.errorText}>Passwords do not match</Text>
+          ) : null}
 
           <TouchableOpacity
             style={styles.termsRow}
@@ -143,7 +182,9 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
 
           <Button
             title="Sign Up"
-            onPress={handleSignUp}
+            onPress={() => {
+              void handleSignUp();
+            }}
             fullWidth
             disabled={!canSubmit}
             style={styles.signUpButton}
@@ -208,6 +249,12 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
   },
   termsRow: {
     flexDirection: 'row',

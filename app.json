@@ -4,10 +4,12 @@
     "slug": "mawahib-ui-prototype",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "mawahib",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mawahib.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +18,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mawahib.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +31,8 @@
         {
           "photosPermission": "Allow Mawahib to access your photos for portfolio, services, and avatar uploads."
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }
