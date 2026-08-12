@@ -140,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const hydrateInFlight = useRef<Promise<ApiUser | null> | null>(null);
+  const lastHydrateErrorRef = useRef<string | null>(null);
   const accountTypeRef = useRef(accountType);
   const signUpBasicsRef = useRef(signUpBasics);
   accountTypeRef.current = accountType;
@@ -183,10 +184,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(active);
 
       const run = async (): Promise<ApiUser | null> => {
+        // Always prefer the session token we were given. After signInWithPassword /
+        // SIGNED_IN, getSession() can still be empty briefly (RN storage race),
+        // which produced a false 401 and signed the user back out.
+        const accessToken = active.access_token;
         try {
           let user: ApiUser;
           try {
-            user = await authApi.getMe();
+            user = await authApi.getMe(accessToken);
             // Keep Nest verification flags aligned with Supabase when session confirms email/phone.
             const emailVerified = isEmailConfirmed(active);
             const phoneVerified = Boolean(active.user.phone_confirmed_at);
@@ -194,14 +199,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               (emailVerified && !user.emailVerified) ||
               (phoneVerified && !user.phoneVerified)
             ) {
-              user = await authApi.updateMe({
-                ...(emailVerified && !user.emailVerified
-                  ? { emailVerified: true }
-                  : {}),
-                ...(phoneVerified && !user.phoneVerified
-                  ? { phoneVerified: true }
-                  : {}),
-              });
+              user = await authApi.updateMe(
+                {
+                  ...(emailVerified && !user.emailVerified
+                    ? { emailVerified: true }
+                    : {}),
+                  ...(phoneVerified && !user.phoneVerified
+                    ? { phoneVerified: true }
+                    : {}),
+                },
+                accessToken,
+              );
             }
           } catch (err) {
             if (!(err instanceof ApiError) || err.status !== 404) {
@@ -214,18 +222,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 city: signUpBasicsRef.current?.city,
                 phoneE164: signUpBasicsRef.current?.phoneE164,
               }),
+              accessToken,
             );
           }
+          lastHydrateErrorRef.current = null;
           applyApiUser(user);
           return user;
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
             await supabase.auth.signOut();
             clearAuthenticatedState();
+            lastHydrateErrorRef.current = err.message;
             return null;
           }
           const message =
             err instanceof Error ? err.message : 'Failed to restore session';
+          lastHydrateErrorRef.current = message;
           setAuthError(message);
           // Keep Supabase session for retry, but do not enter the app without Nest user.
           setApiUser(null);
@@ -430,13 +442,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
-        throw new Error('Phone verified but failed to load profile');
+        throw new Error(
+          `Phone verified but failed to load profile: ${
+            lastHydrateErrorRef.current || 'Nest /users/me failed'
+          }`,
+        );
       }
       if (!user.phoneVerified) {
-        return authApi.updateMe({ phoneVerified: true }).then((updated) => {
-          applyApiUser(updated);
-          return updated;
-        });
+        return authApi
+          .updateMe({ phoneVerified: true }, data.session?.access_token)
+          .then((updated) => {
+            applyApiUser(updated);
+            return updated;
+          });
       }
       return user;
     },
@@ -477,6 +495,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       setAuthError(null);
+      lastHydrateErrorRef.current = null;
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -486,9 +505,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(message);
         throw new Error(message);
       }
+      if (!data.session?.access_token) {
+        const message = 'Signed in but no session token was returned';
+        setAuthError(message);
+        throw new Error(message);
+      }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
-        throw new Error('Signed in but failed to load profile');
+        const detail =
+          lastHydrateErrorRef.current ||
+          'Nest /users/me failed after Supabase sign-in';
+        const message = `Signed in but failed to load profile: ${detail}`;
+        setAuthError(message);
+        throw new Error(message);
       }
       return user;
     },

@@ -10,7 +10,20 @@ export class ApiError extends Error {
   }
 }
 
-async function authHeader(): Promise<Record<string, string>> {
+export type ApiRequestInit = RequestInit & {
+  /**
+   * Prefer the known access token from a just-created Supabase session.
+   * Avoids a race where getSession() has not persisted yet after signIn.
+   */
+  accessToken?: string;
+};
+
+async function authHeader(
+  accessToken?: string,
+): Promise<Record<string, string>> {
+  if (accessToken) {
+    return { Authorization: `Bearer ${accessToken}` };
+  }
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
@@ -21,15 +34,16 @@ async function authHeader(): Promise<Record<string, string>> {
 
 export async function apiRequest<T>(
   path: string,
-  init: RequestInit = {},
+  init: ApiRequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(init.headers);
+  const { accessToken, ...rest } = init;
+  const headers = new Headers(rest.headers);
   headers.set('Content-Type', 'application/json');
-  const auth = await authHeader();
+  const auth = await authHeader(accessToken);
   Object.entries(auth).forEach(([k, v]) => headers.set(k, v));
 
   const res = await fetch(`${appEnv.apiBaseUrl}${path}`, {
-    ...init,
+    ...rest,
     headers,
   });
 

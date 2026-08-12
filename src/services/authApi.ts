@@ -111,25 +111,27 @@ export function mapApiUserToUser(api: ApiUser): User {
 }
 
 export const authApi = {
-  bootstrap(payload: BootstrapPayload): Promise<ApiUser> {
+  bootstrap(payload: BootstrapPayload, accessToken?: string): Promise<ApiUser> {
     return apiRequest<ApiUser>('/auth/bootstrap', {
       method: 'POST',
       body: JSON.stringify(payload),
+      accessToken,
     });
   },
 
-  getMe(): Promise<ApiUser> {
-    return apiRequest<ApiUser>('/users/me');
+  getMe(accessToken?: string): Promise<ApiUser> {
+    return apiRequest<ApiUser>('/users/me', { accessToken });
   },
 
   getById(userId: string): Promise<ApiUser> {
     return apiRequest<ApiUser>(`/users/${userId}`);
   },
 
-  updateMe(payload: UpdateMePayload): Promise<ApiUser> {
+  updateMe(payload: UpdateMePayload, accessToken?: string): Promise<ApiUser> {
     return apiRequest<ApiUser>('/users/me', {
       method: 'PATCH',
       body: JSON.stringify(payload),
+      accessToken,
     });
   },
 };
