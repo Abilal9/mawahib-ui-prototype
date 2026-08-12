@@ -1,8 +1,9 @@
 import { User } from '../types';
 
 /**
- * Canonical signed-in seed user (u1).
- * ProfileContext may overlay signup edits, but id/name/avatar start here.
+ * Legacy explore/messaging seed users (NOT auth identity).
+ * Signed-in identity always comes from Nest `/users/me`.
+ * Do not navigate to UserProfile with these ids — use real backend UUIDs only.
  */
 export const currentUser: User = {
   id: 'u1',

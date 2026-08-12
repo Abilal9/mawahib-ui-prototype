@@ -46,7 +46,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const [tabsHeight, setTabsHeight] = React.useState(TABS_FALLBACK);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { user, content, useEmptyProfile } = useMyProfile();
+  const { user, content, profileError, refreshProfessionalProfile } = useMyProfile();
   const { connectedUsers } = useConnections();
   const { posts } = usePosts();
   const { accountType } = useAuth();
@@ -117,6 +117,20 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
           <ProfileTabs active={activeTab} onChange={setActiveTab} />
         </View>
 
+        {profileError ? (
+          <TouchableOpacity
+            style={styles.errorBanner}
+            onPress={() => {
+              void refreshProfessionalProfile();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.errorBannerText}>
+              Couldn’t load portfolio/services. Tap to retry.
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Tall enough that short tabs can still scroll until sticky tabs pin */}
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
@@ -138,11 +152,6 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                 </TouchableOpacity>
               ) : null}
               <AboutTab content={content} isOwn onAdd={openAbout} onEdit={openAbout} />
-              {content.bio ? (
-                <TouchableOpacity style={styles.demoEmpty} onPress={useEmptyProfile}>
-                  <Text style={styles.demoEmptyText}>Preview empty profile</Text>
-                </TouchableOpacity>
-              ) : null}
             </>
           )}
 
@@ -441,19 +450,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  demoEmpty: {
+  errorBanner: {
     marginHorizontal: spacing.screen,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
     paddingVertical: spacing.md,
-    alignItems: 'center',
+    paddingHorizontal: spacing.md,
     borderRadius: radius.button,
+    backgroundColor: colors.error + '14',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
+    borderColor: colors.error + '40',
   },
-  demoEmptyText: {
+  errorBannerText: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.error,
+    textAlign: 'center',
   },
   tabPad: {
     paddingHorizontal: spacing.screen,

@@ -33,15 +33,12 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
-import {
-  catalogService,
-  connectionService,
-  profileService,
-} from '../../services';
+import { emptyProfileContent } from '../../context/ProfileContext';
+import { connectionService } from '../../services';
 import { ScreenProps } from '../../navigation/types';
 
 const EMPTY_VISITOR_ABOUT: ProfileContent = {
-  ...profileService.getEmptyContent(),
+  ...emptyProfileContent(),
   portfolio: [],
   services: [],
 };
@@ -70,9 +67,6 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
   const visitorUser = useVisitorUser(route.params.userId);
   const user = visitorUser.user;
-  const talent = user
-    ? catalogService.listTalents().find((t) => t.user.id === user.id)
-    : undefined;
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
@@ -120,9 +114,9 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const relation = getRelation(user.id);
   const profileUser = {
     ...user,
-    title: user.title ?? talent?.category ?? 'Creative Professional',
-    rating: talent?.rating ?? user.rating ?? 4.8,
-    reviewCount: talent?.reviewCount ?? user.reviewCount ?? 24,
+    title: user.title || 'Creative Professional',
+    rating: user.rating ?? 0,
+    reviewCount: user.reviewCount ?? 0,
   };
   const userPosts = posts.filter((p) => p.author.id === user.id);
   const visitorConnectionCount = connectionService.getConnectionsForUser(user.id).length;
@@ -275,71 +269,95 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           <ProfileTabs active={activeTab} onChange={setActiveTab} />
         </View>
 
+        {visitorProfessional.error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              {visitorProfessional.error}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
             <AboutTab content={EMPTY_VISITOR_ABOUT} isOwn={false} onAdd={() => {}} onEdit={() => {}} />
           )}
 
-          {activeTab === 'Portfolio' && (
-            <View style={styles.tabPad}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Portfolio</Text>
-                <TouchableOpacity
-                  style={styles.actionIconBtn}
-                  onPress={() =>
-                    shareProfile({ userId: user.id, userName: user.name })
-                  }
-                  hitSlop={8}
-                >
-                  <Ionicons name="share-outline" size={20} color={colors.primary} />
-                </TouchableOpacity>
+          {activeTab === 'Portfolio' &&
+            (visitorProfessional.loading ? (
+              <View style={styles.tabPad}>
+                <Text style={styles.emptyCopy}>Loading portfolio…</Text>
               </View>
-              {visitorProfessional.portfolio.map((project) => (
-                <TouchableOpacity
-                  key={project.id}
-                  style={styles.projectCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('PortfolioProjectDetail', {
-                      projectId: project.id,
-                      userId: user.id,
-                    })
-                  }
-                >
-                  <Text style={styles.projectTitle}>{project.title}</Text>
-                  <Text style={styles.projectDesc} numberOfLines={2}>
-                    {project.description}
-                  </Text>
-                  <View style={styles.mediaGrid}>
-                    {project.images.slice(0, 3).map((uri, index) => {
-                      const videoIdx =
-                        project.videoIndex ?? project.images.length - 1;
-                      return (
-                        <View
-                          key={`${project.id}-${index}`}
-                          style={styles.mediaImageWrap}
-                        >
-                          <Image
-                            source={{ uri }}
-                            style={styles.mediaImage}
-                            contentFit="cover"
-                          />
-                          {project.hasVideo && index === videoIdx ? (
-                            <View style={styles.playOverlay}>
-                              <Ionicons name="play" size={18} color={colors.white} />
-                            </View>
-                          ) : null}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+            ) : visitorProfessional.portfolio.length === 0 ? (
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Portfolio</Text>
+                </View>
+                <Text style={styles.emptyCopy}>No portfolio projects yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.tabPad}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Portfolio</Text>
+                  <TouchableOpacity
+                    style={styles.actionIconBtn}
+                    onPress={() =>
+                      shareProfile({ userId: user.id, userName: user.name })
+                    }
+                    hitSlop={8}
+                  >
+                    <Ionicons name="share-outline" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+                {visitorProfessional.portfolio.map((project) => (
+                  <TouchableOpacity
+                    key={project.id}
+                    style={styles.projectCard}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      navigation.navigate('PortfolioProjectDetail', {
+                        projectId: project.id,
+                        userId: user.id,
+                      })
+                    }
+                  >
+                    <Text style={styles.projectTitle}>{project.title}</Text>
+                    <Text style={styles.projectDesc} numberOfLines={2}>
+                      {project.description}
+                    </Text>
+                    <View style={styles.mediaGrid}>
+                      {project.images.slice(0, 3).map((uri, index) => {
+                        const videoIdx =
+                          project.videoIndex ?? project.images.length - 1;
+                        return (
+                          <View
+                            key={`${project.id}-${index}`}
+                            style={styles.mediaImageWrap}
+                          >
+                            <Image
+                              source={{ uri }}
+                              style={styles.mediaImage}
+                              contentFit="cover"
+                            />
+                            {project.hasVideo && index === videoIdx ? (
+                              <View style={styles.playOverlay}>
+                                <Ionicons name="play" size={18} color={colors.white} />
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
 
           {activeTab === 'Services' &&
-            (visitorProfessional.services.length === 0 ? (
+            (visitorProfessional.loading ? (
+              <View style={styles.tabPad}>
+                <Text style={styles.emptyCopy}>Loading services…</Text>
+              </View>
+            ) : visitorProfessional.services.length === 0 ? (
               <View style={styles.tabPad}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Services</Text>
@@ -684,6 +702,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xxl,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.screen,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.error + '14',
+    borderWidth: 1,
+    borderColor: colors.error + '40',
+  },
+  errorBannerText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
   },
   missingWrap: {
     flex: 1,

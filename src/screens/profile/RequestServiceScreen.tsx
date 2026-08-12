@@ -19,11 +19,11 @@ import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
-import { userService } from '../../services';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
+import { useVisitorUser } from '../../hooks/useVisitorUser';
 
 /**
  * Visitor multi-step flow to request a provider's service (no payment yet).
@@ -85,7 +85,8 @@ export default function RequestServiceScreen({
   const insets = useSafeAreaInsets();
   const { createServiceRequest } = useUserJobs();
 
-  const provider = userService.resolveProfileUser(route.params.userId);
+  const providerUser = useVisitorUser(route.params.userId);
+  const provider = providerUser.user;
   const visitor = useVisitorProfessionalProfile(route.params.userId);
   const services = visitor.services;
   const currencyLocation = provider?.location;
@@ -297,6 +298,35 @@ export default function RequestServiceScreen({
   };
 
   // Success state replaces the wizard; Done / back both reset into JobsTab.
+  if (providerUser.loading || visitor.loading) {
+    return (
+      <ScreenContainer>
+        <StatusBar style="dark" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ ...typography.body, color: colors.textSecondary }}>
+            Loading provider…
+          </Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (!provider) {
+    return (
+      <ScreenContainer>
+        <StatusBar style="dark" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
+          <Text style={{ ...typography.body, color: colors.text, textAlign: 'center' }}>
+            Provider not found
+          </Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: spacing.lg }}>
+            <Text style={{ ...typography.bodyMedium, color: colors.primary }}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   if (sent) {
     const name = provider?.name ?? 'The provider';
     return (

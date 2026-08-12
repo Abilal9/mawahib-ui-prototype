@@ -17,11 +17,12 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import { colors, spacing, radius, typography } from '../../theme';
-import { catalogService, userService } from '../../services';
+import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
+import { useVisitorUser } from '../../hooks/useVisitorUser';
 
 /**
  * Service detail with three data paths:
@@ -36,7 +37,8 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   const ownerUserId = route.params.userId;
   const isVisitorView = Boolean(ownerUserId);
   const { user: me, content, removeService } = useMyProfile();
-  const owner = ownerUserId ? userService.resolveProfileUser(ownerUserId) : undefined;
+  const visitorUser = useVisitorUser(isVisitorView ? ownerUserId : undefined);
+  const owner = visitorUser.user ?? undefined;
   const visitor = useVisitorProfessionalProfile(
     isVisitorView ? ownerUserId : undefined,
   );

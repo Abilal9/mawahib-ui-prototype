@@ -17,7 +17,9 @@ import { UserJob } from '../data/types/userJobs';
 
 /**
  * Repository interfaces — UI/services depend on these.
- * Mock implementations use data/mock/* today; swap for Supabase later.
+ * Mock implementations remain ONLY for domains without a Nest module yet
+ * (posts, jobs, messages, notifications, connections, reviews, explore catalog).
+ * Auth / profile / portfolio / services / media must not use these for identity.
  */
 
 export interface UserRepository {

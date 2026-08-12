@@ -17,7 +17,6 @@ import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ABOUT_SECTION_LABELS, AboutSectionKey } from '../../data/types';
-import { profileService } from '../../services';
 import { ScreenProps } from '../../navigation/types';
 
 export default function EditAboutSectionScreen({
@@ -28,31 +27,23 @@ export default function EditAboutSectionScreen({
   const insets = useSafeAreaInsets();
   const profile = useMyProfile();
   const label = ABOUT_SECTION_LABELS[section];
-  const filledSeed = profileService.getFilledContent();
 
-  const [bio, setBio] = useState(profile.content.bio || filledSeed.bio);
-  const [talentsText, setTalentsText] = useState(
-    (profile.content.talents.length
-      ? profile.content.talents
-      : filledSeed.talents
-    ).join(', ')
-  );
-  const [languageName, setLanguageName] = useState('English');
-  const [languageLevel, setLanguageLevel] = useState('C1 Advanced');
-  const [eduSchool, setEduSchool] = useState('King Saud University');
-  const [eduDegree, setEduDegree] = useState("Bachelor's");
-  const [eduField, setEduField] = useState('Media & Communication');
-  const [eduYears, setEduYears] = useState('2016 – 2020');
-  const [expTitle, setExpTitle] = useState('Event Photographer');
-  const [expCompany, setExpCompany] = useState('Freelance');
-  const [expType, setExpType] = useState('Full-time');
-  const [expYears, setExpYears] = useState('2020 – Present');
-  const [expDesc, setExpDesc] = useState(
-    'Capturing brand and cultural events across Riyadh and Jeddah.'
-  );
-  const [certName, setCertName] = useState('Adobe Certified Professional');
-  const [certOrg, setCertOrg] = useState('Adobe');
-  const [certYear, setCertYear] = useState('2023');
+  const [bio, setBio] = useState(profile.content.bio);
+  const [talentsText, setTalentsText] = useState(profile.content.talents.join(', '));
+  const [languageName, setLanguageName] = useState('');
+  const [languageLevel, setLanguageLevel] = useState('');
+  const [eduSchool, setEduSchool] = useState('');
+  const [eduDegree, setEduDegree] = useState('');
+  const [eduField, setEduField] = useState('');
+  const [eduYears, setEduYears] = useState('');
+  const [expTitle, setExpTitle] = useState('');
+  const [expCompany, setExpCompany] = useState('');
+  const [expType, setExpType] = useState('');
+  const [expYears, setExpYears] = useState('');
+  const [expDesc, setExpDesc] = useState('');
+  const [certName, setCertName] = useState('');
+  const [certOrg, setCertOrg] = useState('');
+  const [certYear, setCertYear] = useState('');
 
   const save = () => {
     switch (section as AboutSectionKey) {

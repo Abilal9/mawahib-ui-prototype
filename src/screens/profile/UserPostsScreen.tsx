@@ -15,7 +15,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
 import { usePosts } from '../../context/PostsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { userService } from '../../services';
+import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { Post } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
@@ -38,7 +38,8 @@ export default function UserPostsScreen({
   const { posts } = usePosts();
   const userId = route.params?.userId;
   const isOwn = !userId || userId === me.id;
-  const profileUser = isOwn ? me : userService.getByIdSync(userId!);
+  const visitorUser = useVisitorUser(isOwn ? undefined : userId);
+  const profileUser = isOwn ? me : visitorUser.user;
 
   const userPosts = useMemo(() => {
     if (isOwn) {

@@ -17,7 +17,6 @@ import {
   ProfileService,
   User,
 } from '../data/types';
-import { profileService } from '../services';
 import { useAuth } from './AuthContext';
 import {
   authApi,
@@ -36,12 +35,25 @@ import {
 
 /**
  * Signed-in user's editable profile.
- * Identity/basics + portfolio/services hydrate from Nest when authenticated.
- * About list sections remain local until a later phase.
+ * Identity + portfolio/services hydrate from Nest only (no mock fallback).
+ * About list sections (education/experience/…) remain local until a later API.
  */
 
 const FALLBACK_AVATAR =
   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
+
+/** Real empty about shell — not a mock “filled” demo profile. */
+export const emptyProfileContent = (): ProfileContent => ({
+  bio: '',
+  languages: [],
+  talents: [],
+  education: [],
+  experience: [],
+  certifications: [],
+  portfolio: [],
+  services: [],
+  postIds: [],
+});
 
 const emptyUser = (): User => ({
   id: '',
@@ -65,8 +77,6 @@ interface ProfileContextValue {
   profileLoading: boolean;
   profileError: string | null;
   refreshProfessionalProfile: () => Promise<void>;
-  useEmptyProfile: () => void;
-  useFilledProfile: () => void;
   applySignupProfile: (basics: { name: string; location: string }) => void;
   hydrateFromApiUser: (apiUser: ApiUser) => void;
   clearLocalProfile: () => void;
@@ -132,9 +142,6 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
-const seedFilled = () => profileService.getFilledContent();
-const seedEmpty = () => profileService.getEmptyContent();
-
 function locationParts(location?: string): {
   locationCity?: string | null;
   locationCountry?: string | null;
@@ -149,7 +156,7 @@ function locationParts(location?: string): {
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { apiUser, mappedUser, isSignedIn, accessToken } = useAuth();
-  const [content, setContent] = useState<ProfileContent>(seedEmpty);
+  const [content, setContent] = useState<ProfileContent>(emptyProfileContent);
   const [user, setUser] = useState<User>(emptyUser);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -165,7 +172,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearLocalProfile = useCallback(() => {
-    setContent(seedEmpty());
+    setContent(emptyProfileContent());
     setUser(emptyUser());
     setProfileError(null);
   }, []);
@@ -224,26 +231,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       profileLoading,
       profileError,
       refreshProfessionalProfile,
-      useEmptyProfile: () =>
-        setContent((prev) => ({
-          ...seedEmpty(),
-          bio: prev.bio,
-          talents: prev.talents,
-          portfolio: prev.portfolio,
-          services: prev.services,
-        })),
-      useFilledProfile: () => {
-        const filled = seedFilled();
-        setContent((prev) => ({
-          ...filled,
-          bio: prev.bio || filled.bio,
-          talents: prev.talents.length ? prev.talents : filled.talents,
-          portfolio: prev.portfolio,
-          services: prev.services,
-        }));
-      },
       applySignupProfile: ({ name, location }) => {
-        setContent(seedEmpty());
+        setContent(emptyProfileContent());
         setUser({
           ...emptyUser(),
           name,
