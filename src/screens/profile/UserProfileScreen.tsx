@@ -27,21 +27,14 @@ import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
-import { ProfileTab, ProfileContent } from '../../data/types';
+import { ProfileTab } from '../../data/types';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
-import { emptyProfileContent } from '../../context/ProfileContext';
 import { connectionService } from '../../services';
 import { ScreenProps } from '../../navigation/types';
-
-const EMPTY_VISITOR_ABOUT: ProfileContent = {
-  ...emptyProfileContent(),
-  portfolio: [],
-  services: [],
-};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
@@ -279,7 +272,16 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
 
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
-            <AboutTab content={EMPTY_VISITOR_ABOUT} isOwn={false} onAdd={() => {}} onEdit={() => {}} />
+            <AboutTab
+              content={{
+                ...visitorUser.about,
+                portfolio: visitorProfessional.portfolio,
+                services: visitorProfessional.services,
+              }}
+              isOwn={false}
+              onAdd={() => {}}
+              onEdit={() => {}}
+            />
           )}
 
           {activeTab === 'Portfolio' &&

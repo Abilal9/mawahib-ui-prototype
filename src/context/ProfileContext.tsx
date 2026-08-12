@@ -168,6 +168,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       ...prev,
       bio: next.bio ?? '',
       talents: next.skills ?? prev.talents,
+      languages:
+        next.about?.languages?.map((l) => ({
+          ...l,
+          flag: l.flag ?? '',
+        })) ?? prev.languages,
+      education: next.about?.education ?? prev.education,
+      experience: next.about?.experience ?? prev.experience,
+      certifications: next.about?.certifications ?? prev.certifications,
     }));
   }, []);
 

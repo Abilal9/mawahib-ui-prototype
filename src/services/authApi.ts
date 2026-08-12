@@ -24,6 +24,39 @@ export interface ApiUser {
   phoneVerified: boolean;
   emailVerified: boolean;
   skills: string[];
+  about?: {
+    languages: Array<{
+      id: string;
+      name: string;
+      level: string;
+      flag?: string;
+    }>;
+    education: Array<{
+      id: string;
+      school: string;
+      degree: string;
+      field: string;
+      years: string;
+      gpa?: string;
+      description?: string;
+      logoColor?: string;
+    }>;
+    experience: Array<{
+      id: string;
+      title: string;
+      company: string;
+      type: string;
+      years: string;
+      description: string;
+      logoColor?: string;
+    }>;
+    certifications: Array<{
+      id: string;
+      name: string;
+      org: string;
+      year: string;
+    }>;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -61,10 +61,11 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   const [filters, setFilters] = useState(defaultExploreFilters);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const talents = catalogService.listTalents();
+  const [talents, setTalents] = useState<Talent[]>(() => catalogService.listTalents());
   const [jobs, setJobs] = useState<Job[]>(() => jobService.listSync());
   const [jobsError, setJobsError] = useState<string | null>(null);
-  const services = catalogService.listServices();
+  const [services, setServices] = useState(() => catalogService.listServices());
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   useEffect(() => {
     if (route.params?.contentType) {
@@ -76,12 +77,22 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   useEffect(() => {
     void (async () => {
       try {
-        const next = await jobService.refresh();
-        setJobs(next);
+        const [nextJobs, catalog] = await Promise.all([
+          jobService.refresh(),
+          catalogService.refresh(),
+        ]);
+        setJobs(nextJobs);
+        setTalents(catalog.talents);
+        setServices(catalog.services);
         setJobsError(null);
+        setCatalogError(null);
       } catch (e) {
         setJobs([]);
-        setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+        setTalents([]);
+        setServices([]);
+        const message = e instanceof Error ? e.message : 'Failed to load explore';
+        setJobsError(message);
+        setCatalogError(message);
       }
     })();
   }, []);
@@ -248,22 +259,29 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
           </View>
         ) : null}
 
-        {tab === 'jobs' && jobsError ? (
+        {(jobsError || catalogError) && results.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            <Text style={styles.emptyTitle}>Could not load jobs</Text>
-            <Text style={styles.emptyText}>{jobsError}</Text>
+            <Text style={styles.emptyTitle}>Could not load explore</Text>
+            <Text style={styles.emptyText}>{jobsError || catalogError}</Text>
             <TouchableOpacity
               onPress={() => {
                 void (async () => {
                   try {
-                    const next = await jobService.refresh();
-                    setJobs(next);
+                    const [nextJobs, catalog] = await Promise.all([
+                      jobService.refresh(),
+                      catalogService.refresh(),
+                    ]);
+                    setJobs(nextJobs);
+                    setTalents(catalog.talents);
+                    setServices(catalog.services);
                     setJobsError(null);
+                    setCatalogError(null);
                   } catch (e) {
-                    setJobsError(
-                      e instanceof Error ? e.message : 'Failed to load jobs',
-                    );
+                    const message =
+                      e instanceof Error ? e.message : 'Failed to load explore';
+                    setJobsError(message);
+                    setCatalogError(message);
                   }
                 })();
               }}

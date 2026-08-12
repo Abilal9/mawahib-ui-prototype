@@ -370,12 +370,19 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   useEffect(() => {
     void (async () => {
       try {
-        const jobs = await jobService.refresh();
+        const [jobs, catalog] = await Promise.all([
+          jobService.refresh(),
+          catalogService.refresh(),
+        ]);
         setJobList(jobs);
         setJobsError(null);
+        setServiceList(catalog.services);
+        setTalentList(catalog.talents);
       } catch (e) {
-        setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+        setJobsError(e instanceof Error ? e.message : 'Failed to load explore data');
         setJobList([]);
+        setServiceList([]);
+        setTalentList([]);
       }
     })();
   }, []);
@@ -385,15 +392,20 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS));
     setFeedPosts(posts.map((p) => ({ ...p })));
     try {
-      const jobs = await jobService.refresh();
+      const [jobs, catalog] = await Promise.all([
+        jobService.refresh(),
+        catalogService.refresh(),
+      ]);
       setJobList(jobs);
       setJobsError(null);
+      setServiceList(catalog.services);
+      setTalentList(catalog.talents);
     } catch (e) {
-      setJobsError(e instanceof Error ? e.message : 'Failed to load jobs');
+      setJobsError(e instanceof Error ? e.message : 'Failed to load explore data');
       setJobList([]);
+      setServiceList([]);
+      setTalentList([]);
     }
-    setServiceList([...catalogService.listServices()]);
-    setTalentList([...catalogService.listTalents()]);
     setRefreshing(false);
   };
 
