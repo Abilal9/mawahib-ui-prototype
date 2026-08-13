@@ -331,7 +331,9 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                 <JobCard
                   key={job.id}
                   job={job}
-                  onPress={() => navigation.navigate('JobListingDetail', { jobId: job.id })}
+                  onPress={() =>
+                    navigation.navigate('JobListingDetail', { listingId: job.id })
+                  }
                 />
               ))}
           </>

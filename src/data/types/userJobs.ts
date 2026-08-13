@@ -1,29 +1,41 @@
 import { User } from './index';
 
 /**
- * In-app work engagement statuses.
- *
- * Terminal success: prefer `completed` for both sent & received.
- * `done` is treated as an alias of `completed` (seed data / filters accept both).
- * `sent` is a legacy label; prefer statusLabel + type for display.
+ * Card-level status for a work request (or a listing the viewer posted).
+ * Mirrors the backend work-request status plus the engagement stages that
+ * follow acceptance.
  */
 export type UserJobStatus =
   | 'pending'
-  | 'sent-for-review'
+  | 'changes-requested'
   | 'pending-payment'
   | 'in-progress'
-  | 'upcoming'
-  | 'done'
+  | 'delivered'
   | 'completed'
-  | 'declined'
-  | 'sent';
+  | 'rejected'
+  | 'withdrawn'
+  | 'posted';
 
 /** Statuses that mean the engagement finished successfully */
-export const COMPLETED_USER_JOB_STATUSES: UserJobStatus[] = ['done', 'completed'];
+export const COMPLETED_USER_JOB_STATUSES: UserJobStatus[] = ['completed'];
 
 export function isCompletedStatus(status: UserJobStatus): boolean {
-  return status === 'done' || status === 'completed';
+  return status === 'completed';
 }
+
+/** Where the row came from — drives the small uppercase badge on cards. */
+export type UserJobSource =
+  | 'job_posting'
+  | 'service_request'
+  | 'direct_request'
+  | 'posted_listing';
+
+export type UserJobSection =
+  | 'requests'
+  | 'pending-payment'
+  | 'in-progress'
+  | 'completed'
+  | 'posted';
 
 export interface UserJobAddon {
   name: string;
@@ -45,25 +57,28 @@ export interface UserJobDetails {
 }
 
 export interface UserJob {
+  /** Work request id for requests, `listing-{uuid}` for posted listings. */
   id: string;
-  /** When created from an explore/home listing */
+  /** Set on every work request row; never a listing/application/engagement id. */
+  requestId?: string;
+  /** Set once the request has been accepted into an engagement. */
+  engagementId?: string;
+  /** Source job listing, when the row is linked to one. */
   listingId?: string;
+  source: UserJobSource;
   title: string;
   type: 'received' | 'sent';
   status: UserJobStatus;
   statusLabel: string;
+  /** Uppercase pill copy, e.g. JOB POSTING */
+  sourceLabel: string;
   counterpart: User;
   date: string;
   createdAt: string;
   dueDate?: string;
   jobType?: string;
-  section?:
-    | 'requests'
-    | 'in-progress'
-    | 'upcoming'
-    | 'completed'
-    | 'posted'
-    | 'history';
+  unread?: boolean;
+  section: UserJobSection;
   activityLabel?: string;
   activityValue?: string;
   details?: UserJobDetails;
@@ -74,30 +89,28 @@ export interface UserJob {
 }
 
 /**
- * Application to a JobListing — UserJob with type:'sent' and status:'pending'
- * (or later statuses as the lifecycle advances).
+ * A work request created by applying to a listing — a UserJob with
+ * source `job_posting`.
  */
 export type JobApplication = UserJob;
 
-/** Fill in missing detail fields for the request detail screen */
+/**
+ * Detail fields for a card, with empty placeholders where the backend has
+ * nothing yet. Never invents packages, add-ons or attachments.
+ */
 export function resolveJobDetails(job: UserJob): UserJobDetails {
   if (job.details) return job.details;
   return {
     serviceName: job.title,
-    packageName: 'Standard',
-    addons: [
-      { name: 'Export to Dev-ready Format', price: 300 },
-      { name: 'Design System Kit', price: 300 },
-    ],
-    deadline: job.dueDate ?? '05/14/2025',
-    locationUrl: 'https://share.google/V0pPts7OTNOeU4EqG',
-    notes:
-      'Please deliver according to the brief. Include source files and a short walkthrough of key screens.',
-    attachmentName: 'Brief.pdf',
-    attachmentSize: '1.2 MB',
-    packagePrice: 1000,
-    currencySymbol: '﷼',
-    requestedAt: '1 Jan 2024, 2:30 PM',
+    packageName: '',
+    addons: [],
+    deadline: job.dueDate ?? '',
+    notes: '',
+    attachmentName: '',
+    attachmentSize: '',
+    packagePrice: 0,
+    currencySymbol: '',
+    requestedAt: job.createdAt,
   };
 }
 

@@ -6,49 +6,33 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { User, JobListing } from '../data/types';
-import { UserJob, UserJobAddon, UserJobDetails } from '../data/types/userJobs';
+import { JobListing, User } from '../data/types';
+import {
+  UserJob,
+  UserJobDetails,
+  UserJobSection,
+  UserJobStatus,
+} from '../data/types/userJobs';
 import { ApiError } from '../lib/apiClient';
 import { useAuth } from './AuthContext';
 import { jobService } from '../services';
 import {
-  AcceptApplicationResult,
-  ApiApplication,
-  ApiEngagement,
-  mapApplicationToUserJob,
-  mapEngagementToUserJob,
-  mapListingToPostedUserJob,
+  ApiEngagementStatus,
+  ApiJobListing,
+  employmentTypeToUi,
   marketplaceApi,
 } from '../services/marketplaceApi';
-
-interface RequestEditsPayload {
-  date: string;
-  packagePrice: string;
-  notes?: string;
-}
-
-interface SubmitReviewPayload {
-  rating: number;
-  text?: string;
-  images?: string[];
-}
-
-export interface CreateServiceRequestPayload {
-  provider: User;
-  serviceName: string;
-  packageName: string;
-  packagePrice: number;
-  addons: UserJobAddon[];
-  deadline?: string;
-  dateLabel?: string;
-  locationUrl?: string;
-  country?: string;
-  city?: string;
-  locationDetails?: string;
-  notes?: string;
-  attachmentName?: string;
-  attachmentSize?: string;
-}
+import {
+  ApiWorkRequest,
+  CreateDirectWorkRequestInput,
+  CreateServiceWorkRequestInput,
+  PackageTier,
+  ProposedTermsInput,
+  SOURCE_BADGE_LABEL,
+  WorkRequestTerms,
+  effectiveTerms,
+  workRequestApi,
+} from '../services/workRequestApi';
 
 export interface CreatePostedJobPayload {
   title: string;
@@ -59,70 +43,242 @@ export interface CreatePostedJobPayload {
   skills?: string[];
 }
 
+export interface UnreadSummary {
+  sent: number;
+  received: number;
+}
+
+/**
+ * Accepting a request parks the engagement at `pending_payment`; nothing in the
+ * app may advance it until payments ship.
+ */
+export const PAYMENTS_UNAVAILABLE_MESSAGE =
+  'Payments are not available yet. This request stays in Pending Payment until in-app payments ship.';
+
 interface UserJobsContextValue {
   jobs: UserJob[];
   loading: boolean;
   error: string | null;
+  unread: UnreadSummary;
   refresh: () => Promise<void>;
+  refreshUnread: () => Promise<void>;
   getJobById: (id: string) => UserJob | undefined;
+  /** Applies to a listing and returns the created work request id. */
   applyToListing: (listingId: string) => Promise<string | undefined>;
-  /** @deprecated Use applyToListing */
-  openFromListing: (listingId: string) => Promise<string | undefined>;
-  createServiceRequest: (payload: CreateServiceRequestPayload) => never;
+  createServiceRequest: (
+    payload: CreateServiceWorkRequestInput,
+  ) => Promise<string>;
+  createDirectRequest: (
+    payload: CreateDirectWorkRequestInput,
+  ) => Promise<string>;
   createPostedJob: (payload: CreatePostedJobPayload) => Promise<string>;
-  acceptJob: (id: string) => Promise<string | undefined>;
-  declineJob: (id: string, reason?: string) => Promise<void>;
-  requestEdits: (id: string, payload: RequestEditsPayload) => void;
-  markJobPaid: (id: string) => Promise<void>;
-  markJobCompleted: (id: string) => Promise<void>;
-  acceptAfterReview: (id: string) => void;
-  submitReview: (id: string, payload: SubmitReviewPayload) => void;
-  withdrawApplication: (id: string) => Promise<void>;
+  acceptRequest: (id: string) => Promise<string | undefined>;
+  requestChanges: (
+    id: string,
+    proposedTerms: ProposedTermsInput,
+    comment?: string,
+  ) => Promise<void>;
+  acceptChanges: (id: string) => Promise<string | undefined>;
+  declineChanges: (id: string, comment?: string) => Promise<void>;
+  rejectRequest: (id: string, comment?: string) => Promise<void>;
+  withdrawRequest: (id: string, comment?: string) => Promise<void>;
+  markDelivered: (engagementId: string) => Promise<void>;
+  markCompleted: (engagementId: string) => Promise<void>;
+  /** Always rejects: money moves in a later phase. */
+  markJobPaid: (id: string) => Promise<never>;
+  closeListing: (listingId: string) => Promise<void>;
+  submitReview: (
+    id: string,
+    payload: { rating: number; text?: string; images?: string[] },
+  ) => void;
 }
 
 const UserJobsContext = createContext<UserJobsContextValue | undefined>(
   undefined,
 );
 
-function isAcceptResult(
-  value: ApiApplication | AcceptApplicationResult,
-): value is AcceptApplicationResult {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'engagement' in value &&
-    'application' in value
-  );
+export const PACKAGE_TIER_BY_NAME: Record<string, PackageTier> = {
+  Basic: 'basic',
+  Standard: 'standard',
+  Premium: 'premium',
+};
+
+function partyToUser(party: ApiWorkRequest['sender']): User {
+  return {
+    id: party.id,
+    name: party.displayName,
+    username: party.username,
+    avatar: party.avatarUrl ?? '',
+    title: party.title ?? undefined,
+    isVerified: party.isVerified,
+    followers: 0,
+    following: 0,
+    posts: 0,
+  };
 }
 
-function mergeMarketplaceRows(
+/** Engagement stages that outrank the request status on the card. */
+function engagementStage(
+  status: ApiEngagementStatus | null,
+): 'in-progress' | 'delivered' | 'completed' | null {
+  switch (status) {
+    case 'in_progress':
+      return 'in-progress';
+    case 'delivered':
+      return 'delivered';
+    case 'completed':
+      return 'completed';
+    default:
+      return null;
+  }
+}
+
+function mapStatus(request: ApiWorkRequest): {
+  status: UserJobStatus;
+  statusLabel: string;
+  section: UserJobSection;
+} {
+  const stage = engagementStage(request.workEngagementStatus);
+  if (stage === 'in-progress') {
+    return { status: 'in-progress', statusLabel: 'In Progress', section: 'in-progress' };
+  }
+  if (stage === 'delivered') {
+    return { status: 'delivered', statusLabel: 'Delivered', section: 'in-progress' };
+  }
+  if (stage === 'completed') {
+    return { status: 'completed', statusLabel: 'Completed', section: 'completed' };
+  }
+
+  switch (request.status) {
+    case 'pending_payment':
+      return {
+        status: 'pending-payment',
+        statusLabel: 'Awaiting Payment',
+        section: 'pending-payment',
+      };
+    case 'changes_requested':
+      return {
+        status: 'changes-requested',
+        statusLabel: 'Changes Requested',
+        section: 'requests',
+      };
+    case 'rejected':
+      return { status: 'rejected', statusLabel: 'Rejected', section: 'requests' };
+    case 'withdrawn':
+      return { status: 'withdrawn', statusLabel: 'Withdrawn', section: 'requests' };
+    default:
+      return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
+  }
+}
+
+function activityCopy(
+  request: ApiWorkRequest,
+  direction: 'sent' | 'received',
+): string {
+  if (request.source === 'job_posting') {
+    return direction === 'sent'
+      ? 'Applied to Job Posting'
+      : 'Application received';
+  }
+  if (request.source === 'service_request') {
+    return direction === 'sent' ? 'Service requested' : 'Service request received';
+  }
+  return direction === 'sent' ? 'Direct request sent' : 'Direct request received';
+}
+
+function priceLabel(terms: WorkRequestTerms): string {
+  if (!terms.price) return 'Negotiable';
+  return terms.currency && !terms.price.includes(terms.currency)
+    ? `${terms.currency} ${terms.price}`
+    : terms.price;
+}
+
+function detailsFromTerms(
+  request: ApiWorkRequest,
+  terms: WorkRequestTerms,
+): UserJobDetails {
+  return {
+    serviceName: request.serviceTitle || terms.title || request.title,
+    packageName: terms.packageName || terms.packageTier || '',
+    addons: (terms.addons ?? []).map((addon) => ({
+      name: addon.title,
+      price: Number(addon.price.replace(/[^\d.]/g, '')) || 0,
+    })),
+    deadline: terms.deadlineLabel || '',
+    notes: terms.notes || terms.scope || '',
+    attachmentName: '',
+    attachmentSize: '',
+    packagePrice: Number(terms.price.replace(/[^\d.]/g, '')) || 0,
+    currencySymbol: terms.currency || '',
+    requestedAt: new Date(request.createdAt).toLocaleString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  };
+}
+
+/** A work request card. `id` is always the work request id. */
+export function mapWorkRequestToUserJob(
+  request: ApiWorkRequest,
   viewerId: string,
+): UserJob {
+  const direction =
+    request.direction ??
+    (request.senderUserId === viewerId ? 'sent' : 'received');
+  const mapped = mapStatus(request);
+  const terms = effectiveTerms(request);
+  const counterparty =
+    request.counterparty ??
+    (direction === 'sent' ? request.recipient : request.sender);
+
+  return {
+    id: request.id,
+    requestId: request.id,
+    engagementId: request.workEngagementId ?? undefined,
+    listingId: request.jobListingId ?? undefined,
+    source: request.source,
+    sourceLabel: SOURCE_BADGE_LABEL[request.source],
+    title: terms.title || request.title,
+    type: direction,
+    status: mapped.status,
+    statusLabel: mapped.statusLabel,
+    section: mapped.section,
+    counterpart: partyToUser(counterparty),
+    date: terms.deadlineLabel || priceLabel(terms),
+    createdAt: request.createdAt,
+    jobType: terms.employmentType ?? undefined,
+    unread: request.unread,
+    activityLabel: 'Activity',
+    activityValue: activityCopy(request, direction),
+    details: detailsFromTerms(request, terms),
+  };
+}
+
+/** A listing the viewer posted — lives in Sent → Posted Jobs. */
+export function mapListingToPostedUserJob(
+  listing: ApiJobListing,
   me: User,
-  applications: ApiApplication[],
-  engagements: ApiEngagement[],
-  myListings: Awaited<ReturnType<typeof marketplaceApi.listMyListings>>,
-): UserJob[] {
-  const engagementAppIds = new Set(
-    engagements
-      .map((e) => e.applicationId)
-      .filter((id): id is string => Boolean(id)),
-  );
-
-  const fromApps = applications
-    .filter((app) => !engagementAppIds.has(app.id))
-    .map((app) => mapApplicationToUserJob(app, viewerId));
-
-  const fromEngagements = engagements.map((eng) =>
-    mapEngagementToUserJob(eng, viewerId),
-  );
-
-  const fromListings = myListings.map((listing) =>
-    mapListingToPostedUserJob(listing, me),
-  );
-
-  return [...fromEngagements, ...fromApps, ...fromListings].sort(
-    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
-  );
+): UserJob {
+  return {
+    id: `listing-${listing.id}`,
+    listingId: listing.id,
+    source: 'posted_listing',
+    sourceLabel: 'POSTED JOB',
+    title: listing.title,
+    type: 'sent',
+    status: 'posted',
+    statusLabel: listing.status.replace(/_/g, ' '),
+    section: 'posted',
+    counterpart: me,
+    date: listing.salaryLabel || 'Negotiable',
+    createdAt: listing.createdAt,
+    jobType: employmentTypeToUi(listing.employmentType),
+    activityLabel: 'Posted',
+    activityValue: listing.status.replace(/_/g, ' '),
+  };
 }
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
@@ -130,60 +286,60 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<UserJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unread, setUnread] = useState<UnreadSummary>({ sent: 0, received: 0 });
+
+  const refreshUnread = useCallback(async () => {
+    if (!isSignedIn || !apiUser) {
+      setUnread({ sent: 0, received: 0 });
+      return;
+    }
+    try {
+      const summary = await workRequestApi.unreadSummary();
+      setUnread({
+        sent: summary.sentUnread,
+        received: summary.receivedUnread,
+      });
+    } catch {
+      // Badge counts are cosmetic; a failed poll should not surface an error.
+    }
+  }, [apiUser, isSignedIn]);
 
   const refresh = useCallback(async () => {
     if (!isSignedIn || !apiUser || !mappedUser) {
       setJobs([]);
+      setUnread({ sent: 0, received: 0 });
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const viewerId = apiUser.id;
-      const isBusiness = apiUser.accountType === 'business';
-
-      const [myApplications, myEngagements, myListings] = await Promise.all([
-        marketplaceApi.listMyApplications(),
-        marketplaceApi.listMyEngagements(),
-        isBusiness
-          ? marketplaceApi.listMyListings()
-          : Promise.resolve([] as Awaited<
-              ReturnType<typeof marketplaceApi.listMyListings>
-            >),
+      const [sent, received, myListings] = await Promise.all([
+        workRequestApi.listMine('sent'),
+        workRequestApi.listMine('received'),
+        // Posted listings are a side panel; losing them must not empty the inbox.
+        marketplaceApi.listMyListings().catch(() => [] as ApiJobListing[]),
       ]);
 
-      let ownerApplications: ApiApplication[] = [];
-      if (isBusiness && myListings.length > 0) {
-        const nested = await Promise.all(
-          myListings.map((listing) =>
-            marketplaceApi.listApplicationsForListing(listing.id).catch(() => []),
-          ),
-        );
-        ownerApplications = nested.flat();
-      }
-
-      const allApps = [...myApplications, ...ownerApplications];
-      const byId = new Map(allApps.map((a) => [a.id, a]));
-      const applications = Array.from(byId.values());
+      const requests = [...sent, ...received].map((request) =>
+        mapWorkRequestToUserJob(request, apiUser.id),
+      );
+      const posted = myListings.map((listing) =>
+        mapListingToPostedUserJob(listing, mappedUser),
+      );
 
       setJobs(
-        mergeMarketplaceRows(
-          viewerId,
-          mappedUser,
-          applications,
-          myEngagements,
-          myListings,
+        [...requests, ...posted].sort(
+          (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
         ),
       );
     } catch (e) {
-      setError(
-        e instanceof ApiError ? e.message : 'Failed to load marketplace data',
-      );
+      setError(e instanceof ApiError ? e.message : 'Failed to load your jobs');
       setJobs([]);
     } finally {
       setLoading(false);
     }
-  }, [apiUser, isSignedIn, mappedUser]);
+    await refreshUnread();
+  }, [apiUser, isSignedIn, mappedUser, refreshUnread]);
 
   useEffect(() => {
     void refresh();
@@ -194,36 +350,32 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       jobs,
       loading,
       error,
+      unread,
       refresh,
+      refreshUnread,
       getJobById: (id) =>
-        jobs.find((j) => j.id === id || j.listingId === id),
+        jobs.find((j) => j.id === id || j.requestId === id),
       applyToListing: async (listingId) => {
         const existing = jobs.find(
           (j) =>
-            (j.listingId === listingId || j.id === listingId) &&
+            j.listingId === listingId &&
             j.type === 'sent' &&
-            j.status === 'pending',
+            j.source === 'job_posting',
         );
         if (existing) return existing.id;
-        const created = await marketplaceApi.apply(listingId);
+        const result = await marketplaceApi.apply(listingId);
+        await refresh();
+        return result.workRequest.id;
+      },
+      createServiceRequest: async (payload) => {
+        const created = await workRequestApi.createFromService(payload);
         await refresh();
         return created.id;
       },
-      openFromListing: async (listingId) => {
-        const existing = jobs.find(
-          (j) =>
-            (j.listingId === listingId || j.id === listingId) &&
-            j.type === 'sent',
-        );
-        if (existing) return existing.id;
-        const created = await marketplaceApi.apply(listingId);
+      createDirectRequest: async (payload) => {
+        const created = await workRequestApi.createDirect(payload);
         await refresh();
         return created.id;
-      },
-      createServiceRequest: (_payload) => {
-        throw new Error(
-          'Direct service requests are not available yet. Use job listings and applications.',
-        );
       },
       createPostedJob: async (payload) => {
         const me = mappedUser;
@@ -234,62 +386,58 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
           type: payload.jobType ?? 'freelance',
           location: payload.location?.trim() || me.location || 'Remote',
           salary: payload.budget?.trim() || 'Negotiable',
-          description:
-            payload.description?.trim() || 'Job posted from Mawahib.',
+          description: payload.description?.trim() || 'Job posted from Mawahib.',
           skills: payload.skills ?? [],
           exploreTag: 'Design',
           publish: true,
         });
         await refresh();
-        return `listing-${listing.id}`;
+        return listing.id;
       },
-      acceptJob: async (id) => {
-        const result = await marketplaceApi.patchApplication(id, 'accepted');
+      acceptRequest: async (id) => {
+        const result = await workRequestApi.accept(id);
         await refresh();
-        if (isAcceptResult(result)) return result.engagement.id;
-        return id;
+        return result.engagement.id;
       },
-      declineJob: async (id) => {
-        const job = jobs.find((j) => j.id === id);
-        if (job?.section === 'posted' && job.listingId) {
-          await marketplaceApi.transitionListing(job.listingId, 'closed');
-        } else if (job?.type === 'received' && job.status === 'pending') {
-          await marketplaceApi.patchApplication(id, 'rejected');
-        } else {
-          await marketplaceApi.transitionEngagement(id, 'declined');
-        }
+      requestChanges: async (id, proposedTerms, comment) => {
+        await workRequestApi.requestChanges(id, proposedTerms, comment);
         await refresh();
       },
-      requestEdits: () => {
-        // Edit-request flow remains UI-only until messaging/payments phases.
+      acceptChanges: async (id) => {
+        const result = await workRequestApi.acceptChanges(id);
+        await refresh();
+        return result.engagement.id;
       },
-      markJobPaid: async (id) => {
-        await marketplaceApi.transitionEngagement(id, 'in_progress');
+      declineChanges: async (id, comment) => {
+        await workRequestApi.declineChanges(id, comment);
         await refresh();
       },
-      markJobCompleted: async (id) => {
-        const eng = await marketplaceApi.getEngagement(id);
-        if (eng.status === 'in_progress') {
-          await marketplaceApi.transitionEngagement(id, 'delivered');
-        }
-        const latest = await marketplaceApi.getEngagement(id);
-        if (latest.status === 'delivered') {
-          await marketplaceApi.transitionEngagement(id, 'completed');
-        }
+      rejectRequest: async (id, comment) => {
+        await workRequestApi.reject(id, comment);
         await refresh();
       },
-      acceptAfterReview: () => {
-        // Deferred with payments.
+      withdrawRequest: async (id, comment) => {
+        await workRequestApi.withdraw(id, comment);
+        await refresh();
+      },
+      markDelivered: async (engagementId) => {
+        await marketplaceApi.transitionEngagement(engagementId, 'delivered');
+        await refresh();
+      },
+      markCompleted: async (engagementId) => {
+        await marketplaceApi.transitionEngagement(engagementId, 'completed');
+        await refresh();
+      },
+      markJobPaid: () => Promise.reject(new Error(PAYMENTS_UNAVAILABLE_MESSAGE)),
+      closeListing: async (listingId) => {
+        await marketplaceApi.transitionListing(listingId, 'closed');
+        await refresh();
       },
       submitReview: () => {
         // Reviews are a later phase.
       },
-      withdrawApplication: async (id) => {
-        await marketplaceApi.patchApplication(id, 'withdrawn');
-        await refresh();
-      },
     }),
-    [jobs, loading, error, refresh, mappedUser],
+    [jobs, loading, error, unread, refresh, refreshUnread, mappedUser],
   );
 
   return (

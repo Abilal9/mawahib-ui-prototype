@@ -256,6 +256,19 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
               </TouchableOpacity>
             </View>
           )}
+
+          <View style={styles.hireRow}>
+            <TouchableOpacity
+              style={styles.hireBtn}
+              onPress={() =>
+                navigation.navigate('DirectRequest', { userId: user.id })
+              }
+              activeOpacity={0.85}
+            >
+              <Ionicons name="briefcase-outline" size={18} color={colors.primary} />
+              <Text style={styles.hireText}>Request Work</Text>
+            </TouchableOpacity>
+          </View>
         </ProfileCollapsingHeader>
 
         <View onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}>
@@ -572,6 +585,22 @@ const styles = StyleSheet.create({
   },
   messageText: { ...typography.button, color: colors.primary },
   messageTextDisabled: { color: colors.textSecondary },
+  hireRow: {
+    paddingHorizontal: spacing.screen,
+    marginBottom: spacing.xs,
+  },
+  hireBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.white,
+    borderRadius: radius.button,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingVertical: spacing.md,
+  },
+  hireText: { ...typography.button, color: colors.primary },
   modalBackdrop: {
     flex: 1,
     backgroundColor: colors.overlay,

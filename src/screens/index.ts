@@ -75,7 +75,8 @@ export { default as PremiumScreen } from './profile/PremiumScreen';
 export { default as JobsScreen } from './jobs/JobsScreen';
 export { default as JobListingDetailScreen } from './jobs/JobListingDetailScreen';
 export { default as PostJobScreen } from './jobs/PostJobScreen';
-export { default as JobInProgressScreen } from './jobs/JobInProgressScreen';
+export { default as WorkRequestDetailScreen } from './jobs/WorkRequestDetailScreen';
+export { default as DirectRequestScreen } from './jobs/DirectRequestScreen';
 export { default as WriteReviewScreen } from './jobs/WriteReviewScreen';
 
 // Payments

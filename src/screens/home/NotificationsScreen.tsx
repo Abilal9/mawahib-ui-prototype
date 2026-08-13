@@ -120,7 +120,7 @@ function NotificationItem({
 }
 
 export default function NotificationsScreen({ navigation }: ScreenProps<'Notifications'>) {
-  const { getJobById, acceptJob, declineJob } = useUserJobs();
+  const { getJobById, acceptRequest, rejectRequest } = useUserJobs();
   const { user: me } = useMyProfile();
   const {
     notifications,
@@ -141,14 +141,15 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     markAllRead();
   };
 
-  const resolveUserJobId = (item: Notification) => {
+  /** Notifications carry ids from either side; only work requests can be opened. */
+  const resolveRequestId = (item: Notification) => {
     if (item.userJobId) {
-      const byUserJob = getJobById(item.userJobId);
-      if (byUserJob) return byUserJob.id;
+      const byRequest = getJobById(item.userJobId);
+      if (byRequest?.requestId) return byRequest.requestId;
     }
     if (item.jobId) {
       const byListing = getJobById(item.jobId);
-      if (byListing) return byListing.id;
+      if (byListing?.requestId) return byListing.requestId;
     }
     return undefined;
   };
@@ -158,11 +159,11 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
 
     switch (item.type) {
       case 'job': {
-        const userJobId = resolveUserJobId(item);
-        if (userJobId) {
-          navigation.navigate('JobInProgress', { jobId: userJobId });
+        const requestId = resolveRequestId(item);
+        if (requestId) {
+          navigation.navigate('WorkRequestDetail', { requestId });
         } else if (item.jobId) {
-          navigation.navigate('JobListingDetail', { jobId: item.jobId });
+          navigation.navigate('JobListingDetail', { listingId: item.jobId });
         } else {
           navigation.navigate('MainTabs', { screen: 'JobsTab' });
         }
@@ -247,32 +248,30 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             item={item}
             onPress={() => openNotification(item)}
             onAccept={() => {
-              const userJobId = resolveUserJobId(item);
+              const requestId = resolveRequestId(item);
               clearActions(item.id);
-              if (!userJobId) {
+              if (!requestId) {
                 navigation.navigate('MainTabs', { screen: 'JobsTab' });
                 return;
               }
               void (async () => {
-                const engagementId = await acceptJob(userJobId);
-                navigation.navigate('JobInProgress', {
-                  jobId: engagementId || userJobId,
-                });
+                await acceptRequest(requestId);
+                navigation.navigate('WorkRequestDetail', { requestId });
               })();
             }}
             onDecline={() => {
-              const userJobId = resolveUserJobId(item);
-              if (userJobId) {
-                void declineJob(userJobId);
+              const requestId = resolveRequestId(item);
+              if (requestId) {
+                void rejectRequest(requestId);
               }
               remove(item.id);
             }}
             onRate={(rating) => {
               clearRatingPrompt(item.id);
-              const userJobId = resolveUserJobId(item);
-              if (userJobId) {
+              const requestId = resolveRequestId(item);
+              if (requestId) {
                 navigation.navigate('WriteReview', {
-                  jobId: userJobId,
+                  jobId: requestId,
                   initialRating: rating,
                 });
               }

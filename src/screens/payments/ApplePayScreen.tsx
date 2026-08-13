@@ -1,27 +1,19 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { useUserJobs } from '../../context/UserJobsContext';
+import { PAYMENTS_UNAVAILABLE_MESSAGE } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
 export default function ApplePayScreen({ route, navigation }: ScreenProps<'ApplePay'>) {
   const amount = route.params?.amount ?? 0;
-  const jobId = route.params?.jobId;
-  const { markJobPaid } = useUserJobs();
+  const requestId = route.params?.requestId;
 
   const completePay = () => {
-    if (jobId) {
-      void (async () => {
-        try {
-          await markJobPaid(jobId);
-        } catch {
-          // Payments are still mock UI; engagement may already be in_progress.
-        }
-        navigation.replace('JobInProgress', { jobId });
-      })();
+    if (requestId) {
+      Alert.alert('Payments not available yet', PAYMENTS_UNAVAILABLE_MESSAGE);
       return;
     }
     navigation.goBack();

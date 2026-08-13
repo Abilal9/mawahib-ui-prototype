@@ -1,10 +1,6 @@
-import { JobListing, User } from '../data/types';
-import {
-  UserJob,
-  UserJobDetails,
-  UserJobStatus,
-} from '../data/types/userJobs';
+import { JobListing } from '../data/types';
 import { apiRequest } from '../lib/apiClient';
+import type { ApiWorkRequest } from './workRequestApi';
 
 export type ApiEmploymentType =
   | 'full_time'
@@ -137,15 +133,13 @@ export interface ApiEngagement {
   }>;
 }
 
-export interface AcceptApplicationResult {
+/** Applying creates the application *and* the work request that carries it. */
+export interface ApplyToListingResult {
   application: ApiApplication;
-  engagement: ApiEngagement;
+  workRequest: ApiWorkRequest;
 }
 
-const EMPLOYMENT_TO_UI: Record<
-  ApiEmploymentType,
-  JobListing['type']
-> = {
+const EMPLOYMENT_TO_UI: Record<ApiEmploymentType, JobListing['type']> = {
   full_time: 'full-time',
   part_time: 'part-time',
   contract: 'contract',
@@ -161,18 +155,10 @@ const EMPLOYMENT_TO_API: Record<JobListing['type'], ApiEmploymentType> = {
   gig: 'gig',
 };
 
-function partyToUser(party: ApiParty): User {
-  return {
-    id: party.id,
-    name: party.displayName,
-    username: party.username,
-    avatar: party.avatarUrl ?? '',
-    title: party.title ?? undefined,
-    isVerified: party.isVerified,
-    followers: 0,
-    following: 0,
-    posts: 0,
-  };
+export function employmentTypeToUi(
+  type: ApiEmploymentType,
+): JobListing['type'] {
+  return EMPLOYMENT_TO_UI[type];
 }
 
 function listingStatusToUi(
@@ -209,205 +195,6 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
   };
 }
 
-function applicationStatusToUserJob(
-  status: ApiApplicationStatus,
-): { status: UserJobStatus; statusLabel: string; section: UserJob['section'] } {
-  switch (status) {
-    case 'accepted':
-      return {
-        status: 'in-progress',
-        statusLabel: 'Accepted',
-        section: 'in-progress',
-      };
-    case 'rejected':
-      return { status: 'declined', statusLabel: 'Rejected', section: 'requests' };
-    case 'withdrawn':
-      return {
-        status: 'declined',
-        statusLabel: 'Withdrawn',
-        section: 'requests',
-      };
-    case 'under_review':
-      return {
-        status: 'pending',
-        statusLabel: 'Under Review',
-        section: 'requests',
-      };
-    default:
-      return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
-  }
-}
-
-function engagementStatusToUserJob(
-  status: ApiEngagementStatus,
-): { status: UserJobStatus; statusLabel: string; section: UserJob['section'] } {
-  switch (status) {
-    case 'pending_payment':
-      return {
-        status: 'pending-payment',
-        statusLabel: 'Pending Payment',
-        section: 'requests',
-      };
-    case 'in_progress':
-      return {
-        status: 'in-progress',
-        statusLabel: 'In Progress',
-        section: 'in-progress',
-      };
-    case 'delivered':
-      return {
-        status: 'in-progress',
-        statusLabel: 'Delivered',
-        section: 'in-progress',
-      };
-    case 'completed':
-      return {
-        status: 'completed',
-        statusLabel: 'Completed',
-        section: 'completed',
-      };
-    case 'declined':
-    case 'cancelled':
-      return { status: 'declined', statusLabel: 'Cancelled', section: 'requests' };
-    case 'requested':
-    case 'accepted':
-      return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
-    default:
-      return { status: 'pending', statusLabel: status, section: 'requests' };
-  }
-}
-
-function detailsFromEngagement(api: ApiEngagement): UserJobDetails {
-  const d = api.detail;
-  const addonsRaw = Array.isArray(d?.addons) ? d!.addons : [];
-  return {
-    serviceName: d?.serviceName || api.title,
-    packageName: d?.packageName || '',
-    addons: addonsRaw as UserJobDetails['addons'],
-    deadline: d?.deadlineLabel || api.dueAt || 'Flexible',
-    locationUrl: d?.locationUrl ?? undefined,
-    notes: d?.notes || d?.coverLetter || '',
-    attachmentName: '',
-    attachmentSize: '',
-    packagePrice: Number(d?.packagePrice ?? 0),
-    currencySymbol: d?.currency === 'SAR' ? '﷼' : d?.currency || '',
-    requestedAt: new Date(api.createdAt).toLocaleString('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }),
-  };
-}
-
-/** Map an application for the viewer (talent = sent, business owner = received). */
-export function mapApplicationToUserJob(
-  api: ApiApplication,
-  viewerId: string,
-): UserJob {
-  const mapped = applicationStatusToUserJob(api.status);
-  const isApplicant = api.applicantId === viewerId;
-  const listing = api.listing;
-  const counterpart = isApplicant
-    ? partyToUser({
-        id: listing?.posterId ?? listing?.poster?.id ?? '',
-        displayName: listing?.companyName || listing?.poster?.displayName || 'Business',
-        username: listing?.poster?.username || 'business',
-        isVerified: listing?.poster?.isVerified ?? false,
-        avatarUrl: listing?.poster?.avatarUrl ?? null,
-        title: listing?.location ?? null,
-      })
-    : partyToUser(api.applicant);
-
-  return {
-    id: api.id,
-    listingId: api.listingId,
-    title: listing?.title || 'Application',
-    type: isApplicant ? 'sent' : 'received',
-    status: mapped.status,
-    statusLabel: mapped.statusLabel,
-    counterpart,
-    date: listing?.salaryLabel || 'Negotiable',
-    createdAt: api.createdAt,
-    section: mapped.section,
-    jobType: listing ? EMPLOYMENT_TO_UI[listing.employmentType] : undefined,
-    activityLabel: isApplicant ? 'Applied' : 'Applicant',
-    activityValue: mapped.statusLabel,
-    details: listing
-      ? {
-          serviceName: listing.title,
-          packageName: EMPLOYMENT_TO_UI[listing.employmentType],
-          addons: [],
-          deadline: 'Flexible',
-          notes: api.coverLetter || listing.description,
-          attachmentName: '',
-          attachmentSize: '',
-          packagePrice: 0,
-          currencySymbol: '﷼',
-          requestedAt: new Date(api.createdAt).toLocaleString('en-US'),
-        }
-      : undefined,
-  };
-}
-
-export function mapEngagementToUserJob(
-  api: ApiEngagement,
-  viewerId: string,
-): UserJob {
-  const mapped = engagementStatusToUserJob(api.status);
-  const isClient = api.clientId === viewerId;
-  return {
-    id: api.id,
-    listingId: api.listingId ?? undefined,
-    title: api.title,
-    type: isClient ? 'received' : 'sent',
-    status: mapped.status,
-    statusLabel: mapped.statusLabel,
-    counterpart: partyToUser(isClient ? api.provider : api.client),
-    date: api.dueAt || api.updatedAt,
-    dueDate: api.dueAt ?? undefined,
-    createdAt: api.createdAt,
-    section: mapped.section,
-    activityLabel: 'Engagement',
-    activityValue: mapped.statusLabel,
-    details: detailsFromEngagement(api),
-  };
-}
-
-export function mapListingToPostedUserJob(
-  api: ApiJobListing,
-  me: User,
-): UserJob {
-  return {
-    id: `listing-${api.id}`,
-    listingId: api.id,
-    title: api.title,
-    type: 'sent',
-    status: api.status === 'open' ? 'pending' : api.status === 'in_progress' ? 'in-progress' : api.status === 'completed' ? 'completed' : 'pending',
-    statusLabel: api.status.replace('_', ' '),
-    counterpart: me,
-    date: api.salaryLabel || 'Negotiable',
-    createdAt: api.createdAt,
-    section: 'posted',
-    jobType: EMPLOYMENT_TO_UI[api.employmentType],
-    activityLabel: 'Posted',
-    activityValue: api.status,
-    details: {
-      serviceName: api.title,
-      packageName: EMPLOYMENT_TO_UI[api.employmentType],
-      addons: [],
-      deadline: 'Flexible',
-      notes: api.description,
-      attachmentName: '',
-      attachmentSize: '',
-      packagePrice: 0,
-      currencySymbol: '﷼',
-      requestedAt: new Date(api.createdAt).toLocaleString('en-US'),
-    },
-  };
-}
-
 export const marketplaceApi = {
   listOpenListings(params?: {
     q?: string;
@@ -428,6 +215,7 @@ export const marketplaceApi = {
     return apiRequest<ApiJobListing>(`/job-listings/${id}`);
   },
 
+  /** Listings the viewer posted — any account type may post. */
   listMyListings(): Promise<ApiJobListing[]> {
     return apiRequest<ApiJobListing[]>('/users/me/job-listings');
   },
@@ -493,11 +281,8 @@ export const marketplaceApi = {
     });
   },
 
-  apply(
-    listingId: string,
-    coverLetter?: string,
-  ): Promise<ApiApplication> {
-    return apiRequest<ApiApplication>(
+  apply(listingId: string, coverLetter?: string): Promise<ApplyToListingResult> {
+    return apiRequest<ApplyToListingResult>(
       `/job-listings/${listingId}/applications`,
       {
         method: 'POST',
@@ -510,27 +295,6 @@ export const marketplaceApi = {
     return apiRequest<ApiApplication[]>(
       `/job-listings/${listingId}/applications`,
     );
-  },
-
-  listMyApplications(): Promise<ApiApplication[]> {
-    return apiRequest<ApiApplication[]>('/users/me/applications');
-  },
-
-  patchApplication(
-    id: string,
-    status: ApiApplicationStatus,
-  ): Promise<ApiApplication | AcceptApplicationResult> {
-    return apiRequest<ApiApplication | AcceptApplicationResult>(
-      `/applications/${id}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ status }),
-      },
-    );
-  },
-
-  listMyEngagements(): Promise<ApiEngagement[]> {
-    return apiRequest<ApiEngagement[]>('/users/me/engagements');
   },
 
   getEngagement(id: string): Promise<ApiEngagement> {

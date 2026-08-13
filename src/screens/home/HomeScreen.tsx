@@ -552,7 +552,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
               <JobMatchCard
                 job={item}
                 onPress={() =>
-                  navigation.navigate('JobListingDetail', { jobId: item.id })
+                  navigation.navigate('JobListingDetail', { listingId: item.id })
                 }
                 onDismiss={() =>
                   setJobList((prev) => prev.filter((j) => j.id !== item.id))

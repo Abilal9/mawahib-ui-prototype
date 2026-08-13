@@ -38,7 +38,7 @@ export type RootStackParamList = {
   AddProfileService: { serviceId?: string } | undefined;
   ManageProfileList: { type: 'portfolio' | 'services' };
   PortfolioProjectDetail: { projectId: string; userId?: string };
-  JobListingDetail: { jobId: string };
+  JobListingDetail: { listingId: string };
   ConfirmCode: { phone?: string; email?: string };
   ProfileSetup: { step?: number };
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
@@ -65,10 +65,12 @@ export type RootStackParamList = {
   Settings: undefined;
   Premium: undefined;
   PostJob: { step?: number };
-  JobInProgress: { jobId: string };
+  /** The unified request detail — every inbox row opens here. */
+  WorkRequestDetail: { requestId: string };
+  DirectRequest: { userId: string };
   WriteReview: { jobId: string; initialRating?: number };
-  ConfirmPayment: { serviceId?: string; amount?: number; jobId?: string };
-  ApplePay: { amount?: number; jobId?: string };
+  ConfirmPayment: { serviceId?: string; amount?: number; requestId?: string };
+  ApplePay: { amount?: number; requestId?: string };
   ScanCard: undefined;
   StoryViewer: { storyId: string };
   FullPhotoPreview: { images: string[]; initialIndex?: number };

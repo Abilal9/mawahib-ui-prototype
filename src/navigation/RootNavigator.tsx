@@ -42,7 +42,8 @@ import {
   SettingsScreen,
   PremiumScreen,
   PostJobScreen,
-  JobInProgressScreen,
+  WorkRequestDetailScreen,
+  DirectRequestScreen,
   WriteReviewScreen,
   JobListingDetailScreen,
   ConfirmPaymentScreen,
@@ -167,7 +168,8 @@ export default function RootNavigator() {
       <Stack.Screen name="Premium" component={PremiumScreen} />
       <Stack.Screen name="PostJob" component={PostJobScreen} />
       <Stack.Screen name="JobListingDetail" component={JobListingDetailScreen} />
-      <Stack.Screen name="JobInProgress" component={JobInProgressScreen} />
+      <Stack.Screen name="WorkRequestDetail" component={WorkRequestDetailScreen} />
+      <Stack.Screen name="DirectRequest" component={DirectRequestScreen} />
       <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
       <Stack.Screen name="ConfirmPayment" component={ConfirmPaymentScreen} />
       <Stack.Screen name="ApplePay" component={ApplePayScreen} />

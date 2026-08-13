@@ -21,7 +21,11 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
 import { stripCurrencyGlyphs } from '../../utils/currency';
-import { useUserJobs } from '../../context/UserJobsContext';
+import {
+  PACKAGE_TIER_BY_NAME,
+  useUserJobs,
+} from '../../context/UserJobsContext';
+import { ApiError } from '../../lib/apiClient';
 import { ScreenProps } from '../../navigation/types';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
@@ -98,6 +102,8 @@ export default function RequestServiceScreen({
 
   const [step, setStep] = useState(1);
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
 
   // Step 1
   const [selectedServiceId, setSelectedServiceId] = useState(
@@ -150,10 +156,6 @@ export default function RequestServiceScreen({
         selectedService.packages.find((p) => p.name === selectedPackage)?.priceLabel ?? '0'
       )
     : 0;
-
-  const selectedAddons = (selectedService?.addons ?? []).filter((a) =>
-    selectedAddonIds.includes(a.id)
-  );
 
   const canNextStep1 = Boolean(selectedService && selectedPackage);
   const scheduleReady =
@@ -257,47 +259,47 @@ export default function RequestServiceScreen({
   };
 
   /**
-   * Persist a pending sent request (no payment). Duration mode stores the range end
-   * as `deadline` and the full "from – to" string as `dateLabel` for UI display.
+   * Creates a `service_request` work request. Location and attachments are not
+   * carried by the terms yet, so they are folded into the notes.
    */
   const sendRequest = () => {
     if (!provider || !selectedService || !selectedPackage) return;
 
-    try {
-      createServiceRequest({
-        provider,
-        serviceName: selectedService.title,
-        packageName: selectedPackage,
-        packagePrice,
-        addons: selectedAddons.map((a) => ({
-          name: a.title,
-          price: parsePrice(a.priceLabel),
-        })),
-        deadline:
-          scheduleMode === 'deadline' && deadlineDate
-            ? formatDate(deadlineDate)
-            : rangeTo
-              ? formatDate(rangeTo)
-              : undefined,
-        dateLabel: dateSummary || undefined,
-        locationUrl: mapsLink.trim() || undefined,
-        country: country.trim() || undefined,
-        city: city.trim() || undefined,
-        locationDetails: locationDetails.trim() || undefined,
-        notes: notes.trim() || undefined,
-        attachmentName: attachments[0]?.name,
-        attachmentSize: attachments[0]?.size,
-      });
-      setSent(true);
-    } catch (e) {
-      Alert.alert(
-        'Not available yet',
-        e instanceof Error
-          ? e.message
-          : 'Direct service requests will ship in a later phase. Apply to job listings for now.',
-      );
-      return;
-    }
+    const locationLine =
+      mapsLink.trim() ||
+      [city.trim(), country.trim()].filter(Boolean).join(', ') ||
+      locationDetails.trim();
+    const notesLines = [
+      notes.trim(),
+      locationLine ? `Location: ${locationLine}` : '',
+      attachments.length > 0
+        ? `Attachments: ${attachments.map((a) => a.name).join(', ')}`
+        : '',
+    ].filter(Boolean);
+
+    void (async () => {
+      setSubmitting(true);
+      try {
+        const requestId = await createServiceRequest({
+          serviceOfferingId: selectedService.id,
+          packageTier: PACKAGE_TIER_BY_NAME[selectedPackage],
+          addonIds: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
+          notes: notesLines.join('\n') || undefined,
+          deadlineLabel: dateSummary || undefined,
+        });
+        setCreatedRequestId(requestId);
+        setSent(true);
+      } catch (e) {
+        Alert.alert(
+          'Could not send request',
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Please try again.',
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   /** Drop the request stack so Back from Jobs doesn't return into the wizard. */
@@ -363,7 +365,18 @@ export default function RequestServiceScreen({
           </Text>
         </View>
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <Button title="Done" fullWidth onPress={goToJobs} />
+          {createdRequestId ? (
+            <Button
+              title="View Request"
+              fullWidth
+              onPress={() =>
+                navigation.replace('WorkRequestDetail', {
+                  requestId: createdRequestId,
+                })
+              }
+            />
+          ) : null}
+          <Button title="Go to Jobs" variant="outline" fullWidth onPress={goToJobs} />
         </View>
       </ScreenContainer>
     );
@@ -813,7 +826,12 @@ export default function RequestServiceScreen({
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
           {step === 7 ? (
-            <Button title="Send Request" fullWidth onPress={sendRequest} />
+            <Button
+              title={submitting ? 'Sending…' : 'Send Request'}
+              fullWidth
+              disabled={submitting}
+              onPress={sendRequest}
+            />
           ) : showSkip ? (
             <View style={styles.footerRow}>
               <Button

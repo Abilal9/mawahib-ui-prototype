@@ -27,8 +27,9 @@ export default function JobListingDetailScreen({
 }: ScreenProps<'JobListingDetail'>) {
   const { applyToListing } = useUserJobs();
   const { apiUser } = useAuth();
+  const { listingId } = route.params;
   const [job, setJob] = useState<JobListing | undefined>(() =>
-    jobService.getByIdSync(route.params.jobId),
+    jobService.getByIdSync(listingId),
   );
   const [loading, setLoading] = useState(!job);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export default function JobListingDetailScreen({
     setLoading(true);
     setError(null);
     try {
-      const next = await jobService.getById(route.params.jobId);
+      const next = await jobService.getById(listingId);
       setJob(next);
       if (!next) setError('Job not found');
     } catch (e) {
@@ -48,7 +49,7 @@ export default function JobListingDetailScreen({
     } finally {
       setLoading(false);
     }
-  }, [route.params.jobId]);
+  }, [listingId]);
 
   useEffect(() => {
     void load();
@@ -91,7 +92,8 @@ export default function JobListingDetailScreen({
             ? 'Gig'
             : 'Freelance';
 
-  const canApply = apiUser?.accountType === 'talent';
+  /** Any signed-in user may apply; the API rejects applying to your own listing. */
+  const canApply = Boolean(apiUser);
 
   return (
     <ScreenContainer padded={false}>
@@ -163,9 +165,9 @@ export default function JobListingDetailScreen({
                 setApplying(true);
                 setApplyError(null);
                 try {
-                  const userJobId = await applyToListing(job.id);
-                  if (userJobId) {
-                    navigation.navigate('JobInProgress', { jobId: userJobId });
+                  const requestId = await applyToListing(job.id);
+                  if (requestId) {
+                    navigation.navigate('WorkRequestDetail', { requestId });
                   }
                 } catch (e) {
                   setApplyError(
@@ -179,7 +181,7 @@ export default function JobListingDetailScreen({
           />
         ) : (
           <Text style={styles.applyHint}>
-            Sign in as talent to apply to this listing.
+            Sign in to apply to this listing.
           </Text>
         )}
       </View>

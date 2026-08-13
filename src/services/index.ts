@@ -8,6 +8,7 @@ export { postService } from './postService';
 export { userService } from './userService';
 export { jobService } from './jobService';
 export { marketplaceApi } from './marketplaceApi';
+export { workRequestApi } from './workRequestApi';
 export { exploreApi } from './exploreApi';
 export { messageService } from './messageService';
 export { notificationService } from './notificationService';

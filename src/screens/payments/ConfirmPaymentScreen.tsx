@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { catalogService } from '../../services';
-import { useUserJobs } from '../../context/UserJobsContext';
+import { PAYMENTS_UNAVAILABLE_MESSAGE } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
 
 const CARDS = [
@@ -15,24 +15,20 @@ const CARDS = [
 ];
 
 export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<'ConfirmPayment'>) {
-  const { markJobPaid } = useUserJobs();
   const service = route.params?.serviceId
     ? catalogService.getServiceById(route.params.serviceId)
     : null;
-  const jobId = route.params?.jobId;
+  const requestId = route.params?.requestId;
   const amount = route.params?.amount ?? service?.price ?? 0;
   const [selectedCard, setSelectedCard] = useState('c1');
 
+  /**
+   * Work requests must never be marked paid from the app: the engagement stays
+   * at pending_payment until real payments ship.
+   */
   const completePayment = () => {
-    if (jobId) {
-      void (async () => {
-        try {
-          await markJobPaid(jobId);
-        } catch {
-          // Payments are still mock UI; engagement may already be in_progress.
-        }
-        navigation.replace('JobInProgress', { jobId });
-      })();
+    if (requestId) {
+      Alert.alert('Payments not available yet', PAYMENTS_UNAVAILABLE_MESSAGE);
       return;
     }
     navigation.goBack();
@@ -89,6 +85,9 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
       </ScrollView>
 
       <View style={styles.footer}>
+        {requestId ? (
+          <Text style={styles.blockedNotice}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
+        ) : null}
         <Button
           title={`Pay AED ${amount.toLocaleString()}`}
           onPress={completePayment}
@@ -97,7 +96,7 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
         <TouchableOpacity
           style={styles.applePayLink}
           onPress={() => {
-            navigation.navigate('ApplePay', { amount, jobId });
+            navigation.navigate('ApplePay', { amount, requestId });
           }}
         >
           <Text style={styles.applePayText}>Pay with Apple Pay</Text>
@@ -141,6 +140,7 @@ const styles = StyleSheet.create({
   addCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   addCardText: { ...typography.bodyMedium, color: colors.primary },
   footer: { padding: spacing.screen, borderTopWidth: 1, borderTopColor: colors.borderLight, backgroundColor: colors.white },
+  blockedNotice: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.sm },
   applePayLink: { alignItems: 'center', marginTop: spacing.md },
   applePayText: { ...typography.bodySmall, color: colors.textSecondary },
 });

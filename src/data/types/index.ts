@@ -81,10 +81,17 @@ export interface Job {
 export type JobListing = Job;
 
 /**
- * Application to a listing is modeled as UserJob with type:'sent', status:'pending'.
- * See UserJobsContext.applyToListing / applicationFromListing.
+ * Every deal in the marketplace is a work request; a UserJob is the card model
+ * for one. See UserJobsContext.
  */
-export type { UserJob, UserJobStatus, UserJobDetails, UserJobAddon } from './userJobs';
+export type {
+  UserJob,
+  UserJobStatus,
+  UserJobDetails,
+  UserJobAddon,
+  UserJobSection,
+  UserJobSource,
+} from './userJobs';
 export type { JobApplication } from './userJobs';
 
 export interface Message {
@@ -115,7 +122,7 @@ export interface Notification {
   postId?: string;
   /** Explore / catalog listing id (optional deep link) */
   jobId?: string;
-  /** In-app UserJob id for Accept / Rate / JobInProgress */
+  /** Work request id for Accept / Rate / WorkRequestDetail */
   userJobId?: string;
   conversationId?: string;
   actions?: Array<'accept' | 'decline'>;
