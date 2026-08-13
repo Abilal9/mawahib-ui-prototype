@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
@@ -664,6 +665,8 @@ export default function WorkRequestDetailScreen({
                   title="Request Changes"
                   variant="secondary"
                   style={styles.halfBtn}
+                  textStyle={styles.requestChangesText}
+                  numberOfLines={1}
                   disabled={busy}
                   onPress={openChanges}
                 />
@@ -673,6 +676,8 @@ export default function WorkRequestDetailScreen({
                   title="Decline Changes"
                   variant="secondary"
                   style={styles.halfBtn}
+                  textStyle={styles.requestChangesText}
+                  numberOfLines={1}
                   disabled={busy}
                   onPress={() =>
                     void runAction(
@@ -686,7 +691,9 @@ export default function WorkRequestDetailScreen({
                 <Button
                   title="Reject"
                   variant="secondary"
-                  style={styles.halfBtn}
+                  style={styles.rejectHalfBtn}
+                  textStyle={styles.rejectBtnText}
+                  numberOfLines={1}
                   disabled={busy}
                   onPress={() => {
                     setRejectReason('');
@@ -915,7 +922,7 @@ export default function WorkRequestDetailScreen({
 
               <Text style={styles.fieldLabel}>Price</Text>
               <View style={styles.priceInputRow}>
-                <Text style={styles.currencyText}>{currency}</Text>
+                <CurrencyIcon size={18} color={colors.primary} />
                 <TextInput
                   placeholder="0"
                   placeholderTextColor={colors.textSecondary}
@@ -1145,7 +1152,20 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderLight,
   },
   secondaryActions: { flexDirection: 'row', gap: spacing.sm },
-  halfBtn: { flex: 1 },
+  halfBtn: { flex: 1, paddingHorizontal: spacing.md },
+  requestChangesText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rejectHalfBtn: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.error + '18',
+  },
+  rejectBtnText: {
+    color: colors.error,
+    fontWeight: '600',
+  },
   footerHint: { ...typography.caption, color: colors.textSecondary },
   modalBackdrop: {
     flex: 1,
@@ -1247,11 +1267,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     minHeight: 42,
     gap: spacing.xs,
-  },
-  currencyText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontWeight: '600',
   },
   priceInput: {
     flex: 1,

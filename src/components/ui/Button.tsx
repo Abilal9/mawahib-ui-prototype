@@ -22,6 +22,8 @@ interface ButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   fullWidth?: boolean;
+  /** Keep the label on a single line (useful for compact footer actions). */
+  numberOfLines?: number;
 }
 
 export default function Button({
@@ -34,6 +36,7 @@ export default function Button({
   style,
   textStyle,
   fullWidth = false,
+  numberOfLines,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
@@ -57,7 +60,12 @@ export default function Button({
           size="small"
         />
       ) : (
-        <Text style={[styles.text, styles[`text_${variant}`], textStyle]}>
+        <Text
+          style={[styles.text, styles[`text_${variant}`], textStyle]}
+          numberOfLines={numberOfLines}
+          adjustsFontSizeToFit={numberOfLines === 1}
+          minimumFontScale={0.85}
+        >
           {title}
         </Text>
       )}
