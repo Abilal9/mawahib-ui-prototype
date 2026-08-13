@@ -19,6 +19,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
@@ -116,6 +117,7 @@ export default function RequestServiceScreen({
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
 
   // Step 1
   const [selectedServiceId, setSelectedServiceId] = useState(
@@ -807,7 +809,7 @@ export default function RequestServiceScreen({
               title={submitting ? 'Sending…' : 'Send Request'}
               fullWidth
               disabled={submitting}
-              onPress={sendRequest}
+              onPress={() => setConfirmSend(true)}
             />
           ) : showSkip ? (
             <View style={styles.footerRow}>
@@ -885,6 +887,19 @@ export default function RequestServiceScreen({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfirmActionModal
+        visible={confirmSend}
+        title="Send Request?"
+        message="Your service request will be sent to this provider."
+        confirmLabel="Send Request"
+        busy={submitting}
+        onCancel={() => setConfirmSend(false)}
+        onConfirm={() => {
+          setConfirmSend(false);
+          sendRequest();
+        }}
+      />
 
       <ActionBusyOverlay visible={submitting} message="Sending request…" />
       <SuccessConfirmationModal

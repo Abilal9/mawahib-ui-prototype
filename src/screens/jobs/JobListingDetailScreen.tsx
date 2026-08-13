@@ -358,12 +358,12 @@ export default function JobListingDetailScreen({
           </>
         ) : canApply ? (
           <Button
-            title={applying ? 'Applying…' : 'Apply Now'}
+            title={applying ? 'Applying…' : 'Apply'}
             fullWidth
             disabled={applying}
             onPress={() =>
               setConfirm({
-                title: 'Apply to Listing?',
+                title: 'Apply?',
                 message:
                   'Your application will be sent to the listing owner as a work request.',
                 confirmLabel: 'Apply',

@@ -75,22 +75,22 @@ const STATUS_LABEL: Record<ApiWorkRequest['status'], string> = {
   pending: 'Pending',
   changes_requested: 'Changes Requested',
   changes_declined: 'Changes Declined',
-  pending_payment: 'Awaiting Payment',
+  pending_payment: 'Pending Payment',
   rejected: 'Rejected',
   withdrawn: 'Cancelled',
 };
 
 const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
-  created: 'Request sent',
-  changes_requested: 'Changes requested',
-  changes_accepted: 'Changes accepted',
-  changes_declined: 'Changes declined',
-  changes_cancelled: 'Change request cancelled',
-  accepted: 'Accepted',
-  rejected: 'Rejected',
-  withdrawn: 'Request cancelled',
+  created: 'Request Sent',
+  changes_requested: 'Changes Requested',
+  changes_accepted: 'Changes Accepted',
+  changes_declined: 'Changes Declined',
+  changes_cancelled: 'Change Request Cancelled',
+  accepted: 'Request Accepted',
+  rejected: 'Request Rejected',
+  withdrawn: 'Request Cancelled',
   viewed: 'Viewed',
-  listing_closed: 'Listing closed',
+  listing_closed: 'Listing Closed',
   note: 'Note',
 };
 
@@ -319,18 +319,15 @@ export default function WorkRequestDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [declineOpen, setDeclineOpen] = useState(false);
-  const [declineReason, setDeclineReason] = useState('');
   const [confirm, setConfirm] = useState<{
     title: string;
     message: string;
     confirmLabel: string;
     danger?: boolean;
+    commentPlaceholder?: string;
     successKey?: MarketplaceSuccessKey;
     landingOverride?: Parameters<typeof showSuccess>[1];
-    run: () => Promise<unknown>;
+    run: (comment?: string) => Promise<unknown>;
   } | null>(null);
 
   const [changesOpen, setChangesOpen] = useState(false);
@@ -384,13 +381,14 @@ export default function WorkRequestDetailScreen({
    * confirm and hand off to the Jobs inbox instead of refreshing this screen.
    */
   const runAction = async (
-    action: () => Promise<unknown>,
+    action: (comment?: string) => Promise<unknown>,
     successKey?: MarketplaceSuccessKey,
     landingOverride?: Parameters<typeof showSuccess>[1],
+    comment?: string,
   ) => {
     setBusy(true);
     try {
-      await action();
+      await action(comment);
       if (successKey) {
         showSuccess(successKey, landingOverride);
         return;
@@ -465,7 +463,7 @@ export default function WorkRequestDetailScreen({
     (request.status === 'pending' ||
       request.status === 'changes_requested' ||
       request.status === 'changes_declined');
-  const awaitingPayment =
+  const isPendingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
       request.workEngagementStatus === null);
@@ -482,18 +480,12 @@ export default function WorkRequestDetailScreen({
     onPress: () => void;
   } | null = canAccept
     ? {
-        title:
-          request.status === 'changes_declined'
-            ? 'Accept Original Terms'
-            : 'Accept',
+        title: 'Accept',
         onPress: () =>
           setConfirm({
-            title:
-              request.status === 'changes_declined'
-                ? 'Accept Original Terms?'
-                : 'Accept Request?',
+            title: 'Accept?',
             message:
-              'This accepts the current terms and moves the request to awaiting payment.',
+              'This accepts the current terms and moves the request to Pending Payment.',
             confirmLabel: 'Accept',
             successKey: 'requestAccepted',
             landingOverride: { tab: 'received', section: 'pending-payment' },
@@ -507,7 +499,7 @@ export default function WorkRequestDetailScreen({
             setConfirm({
               title: 'Accept Changes?',
               message:
-                'You agree to the proposed terms. The request will move to awaiting payment.',
+                'You agree to the proposed terms. The request will move to Pending Payment.',
               confirmLabel: 'Accept Changes',
               successKey: 'changesAccepted',
               landingOverride: { tab: 'sent', section: 'pending-payment' },
@@ -516,13 +508,13 @@ export default function WorkRequestDetailScreen({
         }
       : canDeliver
         ? {
-            title: 'Mark as delivered',
+            title: 'Mark as Delivered',
             onPress: () =>
               setConfirm({
-                title: 'Mark as delivered?',
+                title: 'Mark as Delivered?',
                 message:
-                  'Confirm that you have delivered the work. The client will then be able to mark the job complete.',
-                confirmLabel: 'Confirm',
+                  'Confirm that you have delivered the work. The client can then Complete Job.',
+                confirmLabel: 'Mark as Delivered',
                 successKey: 'jobDelivered',
                 landingOverride: {
                   tab: jobsTab,
@@ -538,7 +530,7 @@ export default function WorkRequestDetailScreen({
                 setConfirm({
                   title: 'Complete Job?',
                   message:
-                    'Are you sure this work has been completed? This moves the job to History.',
+                    'Confirm this work is finished. The job will move to History.',
                   confirmLabel: 'Complete Job',
                   successKey: 'jobCompleted',
                   landingOverride: {
@@ -559,7 +551,7 @@ export default function WorkRequestDetailScreen({
   const hasFooterActions =
     !!primaryAction ||
     hasSecondaryActions ||
-    awaitingPayment ||
+    isPendingPayment ||
     isCompletedEngagement;
 
   const openChanges = () => {
@@ -802,13 +794,13 @@ export default function WorkRequestDetailScreen({
           </View>
         ) : null}
 
-        {awaitingPayment ? (
+        {isPendingPayment ? (
           <View style={styles.noticeCard}>
             <Ionicons name="time-outline" size={18} color="#2E6AC5" />
             <Text style={styles.noticeText}>
               {isClient
-                ? 'Awaiting payment — payments are coming in a later phase.'
-                : 'Waiting for payment from the client.'}
+                ? 'Pending Payment — payments are coming in a later phase.'
+                : 'Pending Payment — waiting for the client.'}
             </Text>
           </View>
         ) : null}
@@ -818,7 +810,7 @@ export default function WorkRequestDetailScreen({
             <Ionicons name="return-down-back-outline" size={18} color="#C2410C" />
             <Text style={[styles.noticeText, styles.declineNoticeText]}>
               {isRecipient
-                ? 'Proposed changes were declined. You can accept the original terms, request new changes, or reject the request.'
+                ? 'Proposed changes were declined. You can Accept, Request Changes, or Reject Request.'
                 : 'You declined the proposed changes. Waiting for the other party to respond.'}
               {(() => {
                 const last = [...request.events]
@@ -962,10 +954,17 @@ export default function WorkRequestDetailScreen({
                   textStyle={styles.requestChangesText}
                   numberOfLines={1}
                   disabled={busy}
-                  onPress={() => {
-                    setDeclineReason('');
-                    setDeclineOpen(true);
-                  }}
+                  onPress={() =>
+                    setConfirm({
+                      title: 'Decline Changes?',
+                      message:
+                        'The request stays open. The other party can Accept, Request Changes again, or Reject Request.',
+                      confirmLabel: 'Decline Changes',
+                      commentPlaceholder: 'Optional message…',
+                      successKey: 'changesDeclined',
+                      run: (comment) => declineChanges(request.id, comment),
+                    })
+                  }
                 />
               ) : null}
               {canCancelChanges ? (
@@ -981,7 +980,7 @@ export default function WorkRequestDetailScreen({
                       title: 'Cancel Change Request?',
                       message:
                         'Your proposed changes will be discarded and the request returns to its previous state. The other party will not need to review them.',
-                      confirmLabel: 'Cancel Changes',
+                      confirmLabel: 'Cancel Change Request',
                       successKey: 'changesCancelled',
                       run: () => cancelChanges(request.id),
                     })
@@ -1000,7 +999,7 @@ export default function WorkRequestDetailScreen({
                     setConfirm({
                       title: 'Cancel Request?',
                       message:
-                        'This withdraws your work request permanently. It is different from rejecting a proposal or cancelling a change request.',
+                        'This permanently cancels your work request and moves it to History. Different from Reject Request or Cancel Change Request.',
                       confirmLabel: 'Cancel Request',
                       danger: true,
                       successKey: 'requestCancelled',
@@ -1021,109 +1020,32 @@ export default function WorkRequestDetailScreen({
                   textStyle={styles.rejectBtnText}
                   numberOfLines={1}
                   disabled={busy}
-                  onPress={() => {
-                    setRejectReason('');
-                    setRejectOpen(true);
-                  }}
+                  onPress={() =>
+                    setConfirm({
+                      title: 'Reject Request?',
+                      message:
+                        'This permanently closes the work request and moves it to History. It cannot be undone.',
+                      confirmLabel: 'Reject Request',
+                      danger: true,
+                      commentPlaceholder: 'Optional reason…',
+                      successKey: 'requestRejected',
+                      landingOverride: {
+                        tab: jobsTab,
+                        section: 'completed',
+                      },
+                      run: (comment) => rejectRequest(request.id, comment),
+                    })
+                  }
                 />
               ) : null}
             </View>
           ) : null}
 
-          {awaitingPayment && isClient ? (
+          {isPendingPayment && isClient ? (
             <Text style={styles.footerHint}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
           ) : null}
         </View>
       ) : null}
-
-      <Modal
-        visible={rejectOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejectOpen(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setRejectOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Reject request</Text>
-            <Text style={styles.modalHint}>
-              This permanently closes the work request. It cannot be undone.
-            </Text>
-            <TextInput
-              placeholder="Optional reason…"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
-              multiline
-              value={rejectReason}
-              onChangeText={setRejectReason}
-            />
-            <Button
-              title="Confirm Reject"
-              fullWidth
-              style={styles.dangerBtn}
-              disabled={busy}
-              onPress={() => {
-                setRejectOpen(false);
-                void runAction(
-                  () =>
-                    rejectRequest(request.id, rejectReason.trim() || undefined),
-                  'requestRejected',
-                  {
-                    tab: jobsTab,
-                    section: 'completed',
-                  },
-                );
-              }}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={declineOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDeclineOpen(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setDeclineOpen(false)}
-        >
-          <Pressable
-            style={styles.modalSheet}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.modalTitle}>Decline changes</Text>
-            <Text style={styles.modalHint}>
-              The request stays open. The other party can accept the original
-              terms, propose again, or reject the request.
-            </Text>
-            <TextInput
-              placeholder="Optional message (e.g. I can do four days, not two)…"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
-              multiline
-              value={declineReason}
-              onChangeText={setDeclineReason}
-            />
-            <Button
-              title="Send Decline"
-              fullWidth
-              disabled={busy}
-              onPress={() => {
-                setDeclineOpen(false);
-                void runAction(
-                  () =>
-                    declineChanges(
-                      request.id,
-                      declineReason.trim() || undefined,
-                    ),
-                  'changesDeclined',
-                );
-              }}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal
         visible={changesOpen}
@@ -1331,9 +1253,10 @@ export default function WorkRequestDetailScreen({
         message={confirm?.message ?? ''}
         confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
         danger={confirm?.danger}
+        commentPlaceholder={confirm?.commentPlaceholder}
         busy={busy}
         onCancel={() => setConfirm(null)}
-        onConfirm={() => {
+        onConfirm={(comment) => {
           if (!confirm) return;
           const pending = confirm;
           setConfirm(null);
@@ -1341,6 +1264,7 @@ export default function WorkRequestDetailScreen({
             pending.run,
             pending.successKey,
             pending.landingOverride,
+            comment,
           );
         }}
       />

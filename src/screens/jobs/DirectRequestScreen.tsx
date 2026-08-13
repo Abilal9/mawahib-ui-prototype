@@ -17,6 +17,7 @@ import TextInput from '../../components/ui/TextInput';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import CalendarPicker from '../../components/ui/CalendarPicker';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
@@ -98,6 +99,7 @@ export default function DirectRequestScreen({
   const [amountText, setAmountText] = useState('');
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [confirmSend, setConfirmSend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>('flexible');
@@ -172,6 +174,11 @@ export default function DirectRequestScreen({
         setSubmitting(false);
       }
     })();
+  };
+
+  const queueSend = () => {
+    if (!canSubmit || submitting) return;
+    setConfirmSend(true);
   };
 
   return (
@@ -361,10 +368,23 @@ export default function DirectRequestScreen({
             title={submitting ? 'Sending…' : 'Send Request'}
             fullWidth
             disabled={!canSubmit}
-            onPress={submit}
+            onPress={queueSend}
           />
         </View>
       </KeyboardAvoidingView>
+
+      <ConfirmActionModal
+        visible={confirmSend}
+        title="Send Request?"
+        message="Your work request will be sent to this user."
+        confirmLabel="Send Request"
+        busy={submitting}
+        onCancel={() => setConfirmSend(false)}
+        onConfirm={() => {
+          setConfirmSend(false);
+          submit();
+        }}
+      />
 
       <ActionBusyOverlay visible={submitting} message="Sending request…" />
       <SuccessConfirmationModal

@@ -159,7 +159,7 @@ function mapStatus(request: ApiWorkRequest): {
     case 'pending_payment':
       return {
         status: 'pending-payment',
-        statusLabel: 'Awaiting Payment',
+        statusLabel: 'Pending Payment',
         section: 'pending-payment',
       };
     case 'changes_requested':
@@ -177,6 +177,7 @@ function mapStatus(request: ApiWorkRequest): {
     case 'rejected':
       return { status: 'rejected', statusLabel: 'Rejected', section: 'completed' };
     case 'withdrawn':
+      // API status remains `withdrawn`; users always see Cancelled.
       return { status: 'withdrawn', statusLabel: 'Cancelled', section: 'completed' };
     default:
       return { status: 'pending', statusLabel: 'Pending', section: 'requests' };

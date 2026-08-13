@@ -1,5 +1,12 @@
-import React from 'react';
-import { Modal, Pressable, Text, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Button from './Button';
 import { colors, spacing, typography } from '../../theme';
 
@@ -12,8 +19,10 @@ export interface ConfirmActionModalProps {
   /** Destructive confirm styling (reject / archive / close). */
   danger?: boolean;
   busy?: boolean;
+  /** When set, shows an optional comment field above the actions. */
+  commentPlaceholder?: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (comment?: string) => void;
 }
 
 /** Standard Mawahib confirm sheet used before marketplace mutations. */
@@ -25,9 +34,16 @@ export default function ConfirmActionModal({
   cancelLabel = 'Cancel',
   danger,
   busy,
+  commentPlaceholder,
   onCancel,
   onConfirm,
 }: ConfirmActionModalProps) {
+  const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    if (!visible) setComment('');
+  }, [visible]);
+
   return (
     <Modal
       visible={visible}
@@ -39,6 +55,17 @@ export default function ConfirmActionModal({
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
+          {commentPlaceholder ? (
+            <TextInput
+              placeholder={commentPlaceholder}
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              multiline
+              value={comment}
+              onChangeText={setComment}
+              editable={!busy}
+            />
+          ) : null}
           <View style={styles.actions}>
             <Button
               title={cancelLabel}
@@ -51,7 +78,9 @@ export default function ConfirmActionModal({
               title={confirmLabel}
               style={danger ? { ...styles.half, ...styles.danger } : styles.half}
               disabled={busy}
-              onPress={onConfirm}
+              onPress={() =>
+                onConfirm(commentPlaceholder ? comment.trim() || undefined : undefined)
+              }
             />
           </View>
         </Pressable>
@@ -80,6 +109,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: spacing.xs,
+  },
+  input: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    ...typography.bodySmall,
+    color: colors.text,
+    textAlignVertical: 'top',
   },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   half: { flex: 1, paddingHorizontal: spacing.md },

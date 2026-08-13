@@ -40,7 +40,7 @@ const STATUS_OPTIONS: { id: JobsFilters['status']; label: string }[] = [
   { id: 'delivered', label: 'Delivered' },
   { id: 'completed', label: 'Completed' },
   { id: 'rejected', label: 'Rejected' },
-  { id: 'withdrawn', label: 'Withdrawn' },
+  { id: 'withdrawn', label: 'Cancelled' },
 ];
 
 const SORT_OPTIONS: { id: JobsSort; label: string }[] = [

@@ -67,7 +67,7 @@ export interface NotificationRepository {
   markRead(id: string): void;
   markAllRead(): void;
   unreadCount(): number;
-  /** Clear Accept/Decline actions after handling */
+  /** Clear Accept / Reject Request actions after handling */
   clearActions(id: string): void;
   /** Hide rating prompt after navigating to review */
   clearRatingPrompt(id: string): void;

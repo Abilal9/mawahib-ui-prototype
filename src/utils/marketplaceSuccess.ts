@@ -17,8 +17,8 @@ export interface MarketplaceSuccessCopy {
 /** Canonical success copy + Jobs landing for each marketplace action. */
 export const MARKETPLACE_SUCCESS = {
   jobPosted: {
-    title: 'Job Posted',
-    message: 'Your job has been published successfully.',
+    title: 'Job Published',
+    message: 'Your job listing has been published successfully.',
     landing: { tab: 'sent', section: 'posted' },
   },
   applicationSent: {
@@ -39,12 +39,12 @@ export const MARKETPLACE_SUCCESS = {
   requestAccepted: {
     title: 'Request Accepted',
     message:
-      'The request has been accepted.\n\nWaiting for payment is now required before work can begin.',
+      'The request has been accepted.\n\nIt is now in Pending Payment. Payment is required before work can begin.',
     landing: { tab: 'received', section: 'pending-payment' },
   },
   requestRejected: {
     title: 'Request Rejected',
-    message: 'This work request has been closed.',
+    message: 'This work request has been closed and moved to History.',
     landing: { tab: 'received', section: 'completed' },
   },
   requestCancelled: {
@@ -60,35 +60,29 @@ export const MARKETPLACE_SUCCESS = {
   changesAccepted: {
     title: 'Changes Accepted',
     message:
-      'Both parties have now agreed to the request.\n\nWaiting for payment before work begins.',
+      'Both parties have agreed to the request.\n\nIt is now in Pending Payment.',
     landing: { tab: 'sent', section: 'pending-payment' },
   },
   changesDeclined: {
     title: 'Changes Declined',
     message:
-      'Your response was sent. The other party can accept the original terms, propose again, or reject the request.',
+      'Your response was sent. The other party can accept, request new changes, or reject the request.',
     landing: { tab: 'sent', section: 'requests' },
   },
   changesCancelled: {
     title: 'Change Request Cancelled',
     message:
-      'Your proposed changes were cancelled. The request is open again for accept, reject, or a new change request.',
+      'Your proposed changes were cancelled. The request is open again for Accept, Reject Request, or a new change request.',
     landing: { tab: 'received', section: 'requests' },
-  },
-  /** @deprecated Prefer requestCancelled — same landing/copy for withdraw API. */
-  requestWithdrawn: {
-    title: 'Request Cancelled',
-    message: 'You cancelled this work request. It is now in History.',
-    landing: { tab: 'sent', section: 'completed' },
   },
   jobDelivered: {
     title: 'Marked as Delivered',
-    message: 'The client can now confirm completion.',
+    message: 'The client can now complete the job.',
     landing: { tab: 'sent', section: 'in-progress' },
   },
   jobCompleted: {
     title: 'Job Completed',
-    message: 'This engagement has been completed successfully.',
+    message: 'This engagement is complete and is now in History.',
     landing: { tab: 'sent', section: 'completed' },
   },
   listingArchived: {

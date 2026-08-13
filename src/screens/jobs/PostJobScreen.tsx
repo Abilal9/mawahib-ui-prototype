@@ -6,6 +6,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
@@ -32,12 +33,9 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   const [salary, setSalary] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
 
-  const goNext = () => {
-    if (step < TOTAL_STEPS) {
-      navigation.navigate('PostJob', { step: step + 1 });
-      return;
-    }
+  const publish = () => {
     void (async () => {
       setSubmitting(true);
       try {
@@ -51,13 +49,21 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
         showSuccess('jobPosted');
       } catch (e) {
         Alert.alert(
-          'Could not post job',
+          'Could not publish job',
           e instanceof ApiError ? e.message : 'Please try again.',
         );
       } finally {
         setSubmitting(false);
       }
     })();
+  };
+
+  const goNext = () => {
+    if (step < TOTAL_STEPS) {
+      navigation.navigate('PostJob', { step: step + 1 });
+      return;
+    }
+    setConfirmPublish(true);
   };
 
   return (
@@ -126,9 +132,9 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
         <Button
           title={
             submitting
-              ? 'Posting…'
+              ? 'Publishing…'
               : step === TOTAL_STEPS
-                ? 'Post Job'
+                ? 'Publish'
                 : 'Continue'
           }
           onPress={goNext}
@@ -136,6 +142,19 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           disabled={submitting || (step === 1 && !title.trim())}
         />
       </View>
+
+      <ConfirmActionModal
+        visible={confirmPublish}
+        title="Publish?"
+        message="Your job listing will go live for applicants."
+        confirmLabel="Publish"
+        busy={submitting}
+        onCancel={() => setConfirmPublish(false)}
+        onConfirm={() => {
+          setConfirmPublish(false);
+          publish();
+        }}
+      />
 
       <ActionBusyOverlay visible={submitting} message="Publishing job…" />
       <SuccessConfirmationModal

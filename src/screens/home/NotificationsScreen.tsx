@@ -69,13 +69,13 @@ function NotificationItem({
   item,
   onPress,
   onAccept,
-  onDecline,
+  onReject,
   onRate,
 }: {
   item: Notification;
   onPress: () => void;
   onAccept?: () => void;
-  onDecline?: () => void;
+  onReject?: () => void;
   onRate?: (rating: number) => void;
 }) {
   return (
@@ -94,8 +94,8 @@ function NotificationItem({
             <TouchableOpacity style={styles.acceptBtn} onPress={onAccept} activeOpacity={0.85}>
               <Text style={styles.acceptText}>Accept</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.declineBtn} onPress={onDecline} activeOpacity={0.85}>
-              <Text style={styles.declineText}>Decline</Text>
+            <TouchableOpacity style={styles.rejectBtn} onPress={onReject} activeOpacity={0.85}>
+              <Text style={styles.rejectText}>Reject Request</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -222,7 +222,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     setActiveTab(tab);
   };
 
-  /** The inline Accept / Decline buttons act on the work request behind the row. */
+  /** Inline Accept / Reject Request act on the work request behind the row. */
   const respondToRequest = (
     item: Notification,
     respond: (requestId: string) => Promise<unknown>,
@@ -302,9 +302,9 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             onPress={() => openNotification(item)}
             onAccept={() =>
               setConfirm({
-                title: 'Accept Request?',
+                title: 'Accept?',
                 message:
-                  'This accepts the request and moves it to awaiting payment.',
+                  'This accepts the request and moves it to Pending Payment.',
                 confirmLabel: 'Accept',
                 run: () =>
                   respondToRequest(
@@ -315,11 +315,12 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
                   ),
               })
             }
-            onDecline={() =>
+            onReject={() =>
               setConfirm({
                 title: 'Reject Request?',
-                message: 'This permanently closes the work request.',
-                confirmLabel: 'Reject',
+                message:
+                  'This permanently closes the work request and moves it to History.',
+                confirmLabel: 'Reject Request',
                 danger: true,
                 run: () =>
                   respondToRequest(
@@ -480,7 +481,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   acceptText: { ...typography.caption, color: colors.white, fontWeight: '600' },
-  declineBtn: {
+  rejectBtn: {
     backgroundColor: colors.white,
     borderRadius: radius.button,
     borderWidth: 1,
@@ -488,7 +489,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  declineText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  rejectText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   starsRow: {
     flexDirection: 'row',
     gap: 4,
