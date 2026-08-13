@@ -47,6 +47,11 @@ export const MARKETPLACE_SUCCESS = {
     message: 'This work request has been closed.',
     landing: { tab: 'received', section: 'completed' },
   },
+  requestCancelled: {
+    title: 'Request Cancelled',
+    message: 'You cancelled this work request. It is now in History.',
+    landing: { tab: 'sent', section: 'completed' },
+  },
   changesRequested: {
     title: 'Changes Requested',
     message: 'Your requested changes have been sent.',
@@ -70,15 +75,16 @@ export const MARKETPLACE_SUCCESS = {
       'Your proposed changes were cancelled. The request is open again for accept, reject, or a new change request.',
     landing: { tab: 'received', section: 'requests' },
   },
+  /** @deprecated Prefer requestCancelled — same landing/copy for withdraw API. */
   requestWithdrawn: {
-    title: 'Request Withdrawn',
-    message: 'Your request has been withdrawn successfully.',
+    title: 'Request Cancelled',
+    message: 'You cancelled this work request. It is now in History.',
     landing: { tab: 'sent', section: 'completed' },
   },
   jobDelivered: {
     title: 'Marked as Delivered',
     message: 'The client can now confirm completion.',
-    landing: { tab: 'received', section: 'in-progress' },
+    landing: { tab: 'sent', section: 'in-progress' },
   },
   jobCompleted: {
     title: 'Job Completed',
@@ -87,17 +93,25 @@ export const MARKETPLACE_SUCCESS = {
   },
   listingArchived: {
     title: 'Listing Archived',
-    message: 'Your listing has been archived.',
+    message:
+      'Your listing has been archived. Open negotiations on it were closed.',
     landing: { tab: 'sent', section: 'posted' },
   },
   listingReopened: {
     title: 'Listing Reopened',
-    message: 'Your listing is live again.',
+    message: 'Your listing is live again for new applicants.',
     landing: { tab: 'sent', section: 'posted' },
   },
   listingClosed: {
     title: 'Listing Closed',
-    message: 'Your listing has been closed.',
+    message:
+      'Your listing has been closed. Open negotiations on it were closed.',
+    landing: { tab: 'sent', section: 'posted' },
+  },
+  listingDeleted: {
+    title: 'Listing Deleted',
+    message:
+      'Your listing was removed. Open negotiations on it were closed.',
     landing: { tab: 'sent', section: 'posted' },
   },
 } as const satisfies Record<string, MarketplaceSuccessCopy>;

@@ -83,7 +83,7 @@ interface UserJobsContextValue {
   declineChanges: (id: string, comment?: string) => Promise<void>;
   cancelChanges: (id: string) => Promise<void>;
   rejectRequest: (id: string, comment?: string) => Promise<void>;
-  /** Retained for API parity; negotiation UI uses cancelChanges instead. */
+  /** Sender Cancel Request (withdraw API) while the negotiation is still open. */
   withdrawRequest: (id: string, comment?: string) => Promise<void>;
   markDelivered: (engagementId: string) => Promise<void>;
   markCompleted: (engagementId: string) => Promise<void>;
@@ -92,6 +92,7 @@ interface UserJobsContextValue {
   archiveListing: (listingId: string) => Promise<void>;
   reopenListing: (listingId: string) => Promise<void>;
   closeListing: (listingId: string) => Promise<void>;
+  deleteListing: (listingId: string) => Promise<void>;
   submitReview: (
     id: string,
     payload: { rating: number; text?: string; images?: string[] },
@@ -176,7 +177,7 @@ function mapStatus(request: ApiWorkRequest): {
     case 'rejected':
       return { status: 'rejected', statusLabel: 'Rejected', section: 'completed' };
     case 'withdrawn':
-      return { status: 'withdrawn', statusLabel: 'Withdrawn', section: 'completed' };
+      return { status: 'withdrawn', statusLabel: 'Cancelled', section: 'completed' };
     default:
       return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
   }
@@ -460,8 +461,15 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         await marketplaceApi.transitionListing(listingId, 'closed');
         await refresh();
       },
+      deleteListing: async (listingId) => {
+        await marketplaceApi.deleteListing(listingId);
+        await refresh();
+      },
       submitReview: () => {
-        // Reviews are a later phase.
+        // Reviews are a later phase — callers must not treat this as success.
+        throw new Error(
+          'Reviews are not available yet. They will ship in a later phase.',
+        );
       },
     }),
     [jobs, loading, error, unread, refresh, refreshUnread, mappedUser],

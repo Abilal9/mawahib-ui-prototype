@@ -281,6 +281,12 @@ export const marketplaceApi = {
     });
   },
 
+  deleteListing(id: string): Promise<void> {
+    return apiRequest<void>(`/job-listings/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   apply(listingId: string, coverLetter?: string): Promise<ApplyToListingResult> {
     return apiRequest<ApplyToListingResult>(
       `/job-listings/${listingId}/applications`,

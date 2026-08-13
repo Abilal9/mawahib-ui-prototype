@@ -10,7 +10,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -78,7 +77,7 @@ const STATUS_LABEL: Record<ApiWorkRequest['status'], string> = {
   changes_declined: 'Changes Declined',
   pending_payment: 'Awaiting Payment',
   rejected: 'Rejected',
-  withdrawn: 'Withdrawn',
+  withdrawn: 'Cancelled',
 };
 
 const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
@@ -89,7 +88,7 @@ const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
   changes_cancelled: 'Change request cancelled',
   accepted: 'Accepted',
   rejected: 'Rejected',
-  withdrawn: 'Withdrawn',
+  withdrawn: 'Request cancelled',
   viewed: 'Viewed',
   listing_closed: 'Listing closed',
   note: 'Note',
@@ -301,6 +300,7 @@ export default function WorkRequestDetailScreen({
     declineChanges,
     cancelChanges,
     rejectRequest,
+    withdrawRequest,
     markDelivered,
     markCompleted,
     refresh,
@@ -323,7 +323,6 @@ export default function WorkRequestDetailScreen({
   const [rejectReason, setRejectReason] = useState('');
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
-  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [confirm, setConfirm] = useState<{
     title: string;
     message: string;
@@ -460,6 +459,12 @@ export default function WorkRequestDetailScreen({
   /** Recipient who proposed changes can retract them while still pending. */
   const canCancelChanges =
     isRecipient && request.status === 'changes_requested';
+  /** Sender may cancel the whole request while it is still open (not Reject). */
+  const canCancelRequest =
+    isSender &&
+    (request.status === 'pending' ||
+      request.status === 'changes_requested' ||
+      request.status === 'changes_declined');
   const awaitingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
@@ -469,6 +474,7 @@ export default function WorkRequestDetailScreen({
   const canComplete =
     isClient && request.workEngagementStatus === 'delivered';
   const isCompletedEngagement = request.workEngagementStatus === 'completed';
+  const jobsTab = isSender ? 'sent' : 'received';
 
   /** The one call to action; everything else lives in the secondary row. */
   const primaryAction: {
@@ -490,6 +496,7 @@ export default function WorkRequestDetailScreen({
               'This accepts the current terms and moves the request to awaiting payment.',
             confirmLabel: 'Accept',
             successKey: 'requestAccepted',
+            landingOverride: { tab: 'received', section: 'pending-payment' },
             run: () => acceptRequest(request.id),
           }),
       }
@@ -503,18 +510,43 @@ export default function WorkRequestDetailScreen({
                 'You agree to the proposed terms. The request will move to awaiting payment.',
               confirmLabel: 'Accept Changes',
               successKey: 'changesAccepted',
+              landingOverride: { tab: 'sent', section: 'pending-payment' },
               run: () => acceptChanges(request.id),
             }),
         }
       : canDeliver
         ? {
             title: 'Mark as delivered',
-            onPress: () => setCompleteConfirmOpen(true),
+            onPress: () =>
+              setConfirm({
+                title: 'Mark as delivered?',
+                message:
+                  'Confirm that you have delivered the work. The client will then be able to mark the job complete.',
+                confirmLabel: 'Confirm',
+                successKey: 'jobDelivered',
+                landingOverride: {
+                  tab: jobsTab,
+                  section: 'in-progress',
+                },
+                run: () => markDelivered(request.workEngagementId!),
+              }),
           }
         : canComplete
           ? {
               title: 'Complete Job',
-              onPress: () => setCompleteConfirmOpen(true),
+              onPress: () =>
+                setConfirm({
+                  title: 'Complete Job?',
+                  message:
+                    'Are you sure this work has been completed? This moves the job to History.',
+                  confirmLabel: 'Complete Job',
+                  successKey: 'jobCompleted',
+                  landingOverride: {
+                    tab: jobsTab,
+                    section: 'completed',
+                  },
+                  run: () => markCompleted(request.workEngagementId!),
+                }),
             }
           : null;
 
@@ -522,6 +554,7 @@ export default function WorkRequestDetailScreen({
     canRequestChanges ||
     canRespondToChanges ||
     canCancelChanges ||
+    canCancelRequest ||
     canReject;
   const hasFooterActions =
     !!primaryAction ||
@@ -851,7 +884,11 @@ export default function WorkRequestDetailScreen({
           if (unique.length === 0) return null;
           return (
             <>
-              <Text style={styles.sectionTitle}>Attachments</Text>
+              <Text style={styles.sectionTitle}>Supporting documents</Text>
+              <Text style={styles.reviewPlaceholder}>
+                Reference files attached to this request. Upload, preview, and
+                download arrive in a later phase — these are not deliverables.
+              </Text>
               {unique.map((file) => (
                 <View key={file.id} style={styles.attachmentRow}>
                   <Ionicons
@@ -865,23 +902,7 @@ export default function WorkRequestDetailScreen({
                       <Text style={styles.attachmentSize}>{file.size}</Text>
                     ) : null}
                   </View>
-                  <TouchableOpacity
-                    hitSlop={8}
-                    onPress={() => {
-                      if (file.url) {
-                        void Linking.openURL(file.url);
-                        return;
-                      }
-                      Alert.alert(
-                        file.name,
-                        'File preview and download will be available once uploads are connected in a later phase.',
-                      );
-                    }}
-                  >
-                    <Text style={styles.attachmentAction}>
-                      {file.url ? 'Open' : 'Preview'}
-                    </Text>
-                  </TouchableOpacity>
+                  <Text style={styles.attachmentLater}>Later</Text>
                 </View>
               ))}
             </>
@@ -892,34 +913,19 @@ export default function WorkRequestDetailScreen({
           <View style={styles.reviewCard}>
             <Text style={styles.sectionTitleInline}>Leave a review</Text>
             <Text style={styles.reviewPlaceholder}>
-              Reviews will be available in the next phase.
+              Reviews are coming in a later phase. Submission is disabled for
+              now.
             </Text>
             <View style={styles.starsRow}>
-              {Array.from({ length: 5 }).map((_, i) => {
-                const value = i + 1;
-                return (
-                  <TouchableOpacity
-                    key={value}
-                    hitSlop={8}
-                    onPress={() =>
-                      navigation.navigate('WriteReview', {
-                        jobId: request.id,
-                        initialRating: value,
-                      })
-                    }
-                  >
-                    <Ionicons
-                      name="star-outline"
-                      size={28}
-                      color={colors.border}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Ionicons
+                  key={i}
+                  name="star-outline"
+                  size={28}
+                  color={colors.border}
+                />
+              ))}
             </View>
-            <Text style={styles.reviewHint}>
-              Tap a star to open the review screen.
-            </Text>
           </View>
         ) : null}
       </ScrollView>
@@ -982,6 +988,31 @@ export default function WorkRequestDetailScreen({
                   }
                 />
               ) : null}
+              {canCancelRequest ? (
+                <Button
+                  title="Cancel Request"
+                  variant="secondary"
+                  style={styles.rejectHalfBtn}
+                  textStyle={styles.rejectBtnText}
+                  numberOfLines={1}
+                  disabled={busy}
+                  onPress={() =>
+                    setConfirm({
+                      title: 'Cancel Request?',
+                      message:
+                        'This withdraws your work request permanently. It is different from rejecting a proposal or cancelling a change request.',
+                      confirmLabel: 'Cancel Request',
+                      danger: true,
+                      successKey: 'requestCancelled',
+                      landingOverride: {
+                        tab: 'sent',
+                        section: 'completed',
+                      },
+                      run: () => withdrawRequest(request.id),
+                    })
+                  }
+                />
+              ) : null}
               {canReject ? (
                 <Button
                   title="Reject Request"
@@ -1037,8 +1068,8 @@ export default function WorkRequestDetailScreen({
                     rejectRequest(request.id, rejectReason.trim() || undefined),
                   'requestRejected',
                   {
-                    tab: isSender ? 'sent' : 'received',
-                    section: 'requests',
+                    tab: jobsTab,
+                    section: 'completed',
                   },
                 );
               }}
@@ -1090,70 +1121,6 @@ export default function WorkRequestDetailScreen({
                 );
               }}
             />
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={completeConfirmOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCompleteConfirmOpen(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setCompleteConfirmOpen(false)}
-        >
-          <Pressable
-            style={styles.modalSheet}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.modalTitle}>
-              {canComplete ? 'Complete Job?' : 'Mark as delivered?'}
-            </Text>
-            <Text style={styles.modalHint}>
-              {canComplete
-                ? 'Are you sure this work has been completed?\n\nThis action will move the job to your Completed section.'
-                : 'Confirm that you have delivered the work. The client will then be able to mark the job complete.'}
-            </Text>
-            <View style={styles.confirmActions}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={() => setCompleteConfirmOpen(false)}
-              />
-              <Button
-                title={canComplete ? 'Complete Job' : 'Confirm'}
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={() => {
-                  setCompleteConfirmOpen(false);
-                  if (canComplete) {
-                    void runAction(
-                      () => markCompleted(request.workEngagementId!),
-                      'jobCompleted',
-                      {
-                        tab: isSender ? 'sent' : 'received',
-                        section: 'completed',
-                      },
-                    );
-                    return;
-                  }
-                  if (canDeliver) {
-                    void runAction(
-                      () => markDelivered(request.workEngagementId!),
-                      'jobDelivered',
-                      {
-                        tab: isProvider ? 'received' : 'sent',
-                        section: 'in-progress',
-                      },
-                    );
-                  }
-                }}
-              />
-            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1605,6 +1572,11 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  attachmentLater: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   attachmentAction: {
     ...typography.caption,

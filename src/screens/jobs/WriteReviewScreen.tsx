@@ -33,7 +33,7 @@ const SAMPLE_IMAGES = [
 ];
 
 export default function WriteReviewScreen({ route, navigation }: ScreenProps<'WriteReview'>) {
-  const { getJobById, submitReview } = useUserJobs();
+  const { getJobById } = useUserJobs();
   const { user: me } = useMyProfile();
   const job = getJobById(route.params.jobId);
   const initial =
@@ -62,8 +62,6 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
       </ScreenContainer>
     );
   }
-
-  const canSubmit = rating >= 1;
 
   const addImage = () => {
     if (images.length >= MAX_IMAGES) return;
@@ -96,6 +94,14 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.deferredBanner}>
+            <Text style={styles.deferredTitle}>Coming in a later phase</Text>
+            <Text style={styles.deferredBody}>
+              Reviews are not available yet. You can preview this screen, but
+              nothing will be submitted.
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={styles.personCard}
             onPress={() => openUserProfile(navigation, job.counterpart.id, me.id)}
@@ -184,13 +190,10 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
 
         <View style={styles.footer}>
           <Button
-            title="Submit Review"
+            title="Reviews coming later"
             fullWidth
-            disabled={!canSubmit}
-            onPress={() => {
-              submitReview(job.id, { rating, text, images });
-              navigation.goBack();
-            }}
+            disabled
+            onPress={() => undefined}
           />
         </View>
       </KeyboardAvoidingView>
@@ -200,6 +203,23 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  deferredBanner: {
+    backgroundColor: '#FEF9C3',
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  deferredTitle: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: '#8A6A16',
+  },
+  deferredBody: {
+    ...typography.caption,
+    color: '#8A6A16',
+    lineHeight: 18,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

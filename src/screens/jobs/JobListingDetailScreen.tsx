@@ -40,6 +40,7 @@ export default function JobListingDetailScreen({
     archiveListing,
     reopenListing,
     closeListing,
+    deleteListing,
     refresh,
   } = useUserJobs();
   const { apiUser } = useAuth();
@@ -139,7 +140,10 @@ export default function JobListingDetailScreen({
     action: () => Promise<void>,
     successKey: Extract<
       MarketplaceSuccessKey,
-      'listingArchived' | 'listingReopened' | 'listingClosed'
+      | 'listingArchived'
+      | 'listingReopened'
+      | 'listingClosed'
+      | 'listingDeleted'
     >,
   ) => {
     void (async () => {
@@ -167,7 +171,10 @@ export default function JobListingDetailScreen({
     action: () => Promise<void>,
     successKey: Extract<
       MarketplaceSuccessKey,
-      'listingArchived' | 'listingReopened' | 'listingClosed'
+      | 'listingArchived'
+      | 'listingReopened'
+      | 'listingClosed'
+      | 'listingDeleted'
     >,
     danger?: boolean,
   ) => {
@@ -180,6 +187,19 @@ export default function JobListingDetailScreen({
     });
   };
 
+  const deleteAction = {
+    title: 'Delete',
+    onPress: () =>
+      askOwnerAction(
+        'Delete Listing?',
+        'This removes the listing and closes any open negotiations on it. Accepted work already in progress is not cancelled.',
+        'Delete Listing',
+        () => deleteListing(listingId),
+        'listingDeleted',
+        true,
+      ),
+  };
+
   const ownerActions: { title: string; onPress: () => void }[] = isOwner
     ? apiListing?.status === 'open'
       ? [
@@ -188,7 +208,7 @@ export default function JobListingDetailScreen({
             onPress: () =>
               askOwnerAction(
                 'Archive Listing?',
-                'The listing will be hidden from Explore. You can reopen it later.',
+                'The listing will be hidden from Explore and open negotiations will be closed. You can reopen later for new applicants.',
                 'Archive',
                 () => archiveListing(listingId),
                 'listingArchived',
@@ -199,13 +219,14 @@ export default function JobListingDetailScreen({
             onPress: () =>
               askOwnerAction(
                 'Close Listing?',
-                'Closing ends open applications on this listing. This cannot be undone easily.',
+                'Closing ends open applications and negotiations on this listing.',
                 'Close Listing',
                 () => closeListing(listingId),
                 'listingClosed',
                 true,
               ),
           },
+          deleteAction,
         ]
       : apiListing?.status === 'archived'
         ? [
@@ -225,13 +246,14 @@ export default function JobListingDetailScreen({
               onPress: () =>
                 askOwnerAction(
                   'Close Listing?',
-                  'Closing ends open applications on this listing.',
+                  'Closing ends open applications and negotiations on this listing.',
                   'Close Listing',
                   () => closeListing(listingId),
                   'listingClosed',
                   true,
                 ),
             },
+            deleteAction,
           ]
         : apiListing?.status === 'closed'
           ? [
@@ -246,8 +268,9 @@ export default function JobListingDetailScreen({
                     'listingReopened',
                   ),
               },
+              deleteAction,
             ]
-          : []
+          : [deleteAction]
     : [];
 
   return (

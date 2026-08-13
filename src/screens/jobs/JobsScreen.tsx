@@ -91,7 +91,7 @@ function getStatusTone(status: UserJob['status']) {
     case 'rejected':
       return { bg: '#FEE2E2', text: '#B91C1C' };
     case 'withdrawn':
-      return { bg: '#EEF2F6', text: colors.textSecondary };
+      return { bg: '#EEF2F6', text: colors.textSecondary }; // Cancelled
     case 'in-progress':
     case 'delivered':
       return { bg: '#DBEAFE', text: '#1D4ED8' };
@@ -421,10 +421,9 @@ export default function JobsScreen({
                       onCounterpartPress={() =>
                         openUserProfile(navigation, job.counterpart.id, me.id)
                       }
-                      onStarPress={(rating) =>
+                      onStarPress={() =>
                         navigation.navigate('WriteReview', {
                           jobId: job.id,
-                          initialRating: rating,
                         })
                       }
                     />
