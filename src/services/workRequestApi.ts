@@ -434,6 +434,7 @@ export const workRequestApi = {
     });
   },
 
+  /** @deprecated Turn-based negotiation: proposers may not retract. Endpoint returns 403. */
   cancelChanges(id: string): Promise<ApiWorkRequest> {
     return apiRequest<ApiWorkRequest>(`/work-requests/${id}/cancel-changes`, {
       method: 'POST',

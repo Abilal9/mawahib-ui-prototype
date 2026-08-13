@@ -36,6 +36,11 @@ import {
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
+import {
+  getNegotiationTurn,
+  negotiationActionLabel,
+  type NegotiationAction,
+} from '../../utils/workRequestNegotiation';
 import { ScreenProps } from '../../navigation/types';
 import {
   ApiWorkRequest,
@@ -298,7 +303,6 @@ export default function WorkRequestDetailScreen({
     requestChanges,
     acceptChanges,
     declineChanges,
-    cancelChanges,
     rejectRequest,
     withdrawRequest,
     markDelivered,
@@ -441,28 +445,7 @@ export default function WorkRequestDetailScreen({
   const isProvider = request.providerUserId === viewerId;
   const tone = STATUS_TONE[request.status];
 
-  const canAccept =
-    isRecipient &&
-    (request.status === 'pending' || request.status === 'changes_declined');
-  const canRequestChanges =
-    isRecipient &&
-    (request.status === 'pending' || request.status === 'changes_declined');
-  const canReject =
-    (isRecipient &&
-      (request.status === 'pending' ||
-        request.status === 'changes_requested' ||
-        request.status === 'changes_declined')) ||
-    (isSender && request.status === 'changes_requested');
-  const canRespondToChanges = isSender && request.status === 'changes_requested';
-  /** Recipient who proposed changes can retract them while still pending. */
-  const canCancelChanges =
-    isRecipient && request.status === 'changes_requested';
-  /** Sender may cancel the whole request while it is still open (not Reject). */
-  const canCancelRequest =
-    isSender &&
-    (request.status === 'pending' ||
-      request.status === 'changes_requested' ||
-      request.status === 'changes_declined');
+  const turn = getNegotiationTurn(request, viewerId);
   const isPendingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
@@ -473,86 +456,6 @@ export default function WorkRequestDetailScreen({
     isClient && request.workEngagementStatus === 'delivered';
   const isCompletedEngagement = request.workEngagementStatus === 'completed';
   const jobsTab = isSender ? 'sent' : 'received';
-
-  /** The one call to action; everything else lives in the secondary row. */
-  const primaryAction: {
-    title: string;
-    onPress: () => void;
-  } | null = canAccept
-    ? {
-        title: 'Accept',
-        onPress: () =>
-          setConfirm({
-            title: 'Accept?',
-            message:
-              'This accepts the current terms and moves the request to Pending Payment.',
-            confirmLabel: 'Accept',
-            successKey: 'requestAccepted',
-            landingOverride: { tab: 'received', section: 'pending-payment' },
-            run: () => acceptRequest(request.id),
-          }),
-      }
-    : canRespondToChanges
-      ? {
-          title: 'Accept Changes',
-          onPress: () =>
-            setConfirm({
-              title: 'Accept Changes?',
-              message:
-                'You agree to the proposed terms. The request will move to Pending Payment.',
-              confirmLabel: 'Accept Changes',
-              successKey: 'changesAccepted',
-              landingOverride: { tab: 'sent', section: 'pending-payment' },
-              run: () => acceptChanges(request.id),
-            }),
-        }
-      : canDeliver
-        ? {
-            title: 'Mark as Delivered',
-            onPress: () =>
-              setConfirm({
-                title: 'Mark as Delivered?',
-                message:
-                  'Confirm that you have delivered the work. The client can then Complete Job.',
-                confirmLabel: 'Mark as Delivered',
-                successKey: 'jobDelivered',
-                landingOverride: {
-                  tab: jobsTab,
-                  section: 'in-progress',
-                },
-                run: () => markDelivered(request.workEngagementId!),
-              }),
-          }
-        : canComplete
-          ? {
-              title: 'Complete Job',
-              onPress: () =>
-                setConfirm({
-                  title: 'Complete Job?',
-                  message:
-                    'Confirm this work is finished. The job will move to History.',
-                  confirmLabel: 'Complete Job',
-                  successKey: 'jobCompleted',
-                  landingOverride: {
-                    tab: jobsTab,
-                    section: 'completed',
-                  },
-                  run: () => markCompleted(request.workEngagementId!),
-                }),
-            }
-          : null;
-
-  const hasSecondaryActions =
-    canRequestChanges ||
-    canRespondToChanges ||
-    canCancelChanges ||
-    canCancelRequest ||
-    canReject;
-  const hasFooterActions =
-    !!primaryAction ||
-    hasSecondaryActions ||
-    isPendingPayment ||
-    isCompletedEngagement;
 
   const openChanges = () => {
     const money = terms.money;
@@ -587,6 +490,139 @@ export default function WorkRequestDetailScreen({
     setProposalComment('');
     setChangesOpen(true);
   };
+
+  const queueNegotiationAction = (action: NegotiationAction) => {
+    switch (action) {
+      case 'accept':
+      case 'accept_original_terms':
+        setConfirm({
+          title: `${negotiationActionLabel(action)}?`,
+          message:
+            'This accepts the current terms and moves the request to Pending Payment.',
+          confirmLabel: negotiationActionLabel(action),
+          successKey: 'requestAccepted',
+          landingOverride: { tab: 'received', section: 'pending-payment' },
+          run: () => acceptRequest(request.id),
+        });
+        return;
+      case 'accept_changes':
+        setConfirm({
+          title: 'Accept Changes?',
+          message:
+            'You agree to the proposed terms. The request will move to Pending Payment.',
+          confirmLabel: 'Accept Changes',
+          successKey: 'changesAccepted',
+          landingOverride: { tab: 'sent', section: 'pending-payment' },
+          run: () => acceptChanges(request.id),
+        });
+        return;
+      case 'request_changes':
+      case 'request_changes_again':
+        openChanges();
+        return;
+      case 'decline_changes':
+        setConfirm({
+          title: 'Decline Changes?',
+          message:
+            'The request stays open. The other party can Accept Original Terms, Request Changes Again, or Reject Request.',
+          confirmLabel: 'Decline Changes',
+          commentPlaceholder: 'Optional message…',
+          successKey: 'changesDeclined',
+          run: (comment) => declineChanges(request.id, comment),
+        });
+        return;
+      case 'reject_request':
+        setConfirm({
+          title: 'Reject Request?',
+          message:
+            'This permanently closes the work request and moves it to History. It cannot be undone.',
+          confirmLabel: 'Reject Request',
+          danger: true,
+          commentPlaceholder: 'Optional reason…',
+          successKey: 'requestRejected',
+          landingOverride: {
+            tab: jobsTab,
+            section: 'completed',
+          },
+          run: (comment) => rejectRequest(request.id, comment),
+        });
+        return;
+      case 'cancel_request':
+        setConfirm({
+          title: 'Cancel Request?',
+          message:
+            'This permanently cancels your work request and moves it to History.',
+          confirmLabel: 'Cancel Request',
+          danger: true,
+          successKey: 'requestCancelled',
+          landingOverride: {
+            tab: 'sent',
+            section: 'completed',
+          },
+          run: () => withdrawRequest(request.id),
+        });
+        return;
+      default:
+        return;
+    }
+  };
+
+  const primaryNegotiation = turn.actions[0] ?? null;
+  const secondaryNegotiation = turn.actions.slice(1);
+
+  /** The one call to action; everything else lives in the secondary row. */
+  const primaryAction: {
+    title: string;
+    onPress: () => void;
+  } | null = primaryNegotiation
+    ? {
+        title: negotiationActionLabel(primaryNegotiation),
+        onPress: () => queueNegotiationAction(primaryNegotiation),
+      }
+    : canDeliver
+      ? {
+          title: 'Mark as Delivered',
+          onPress: () =>
+            setConfirm({
+              title: 'Mark as Delivered?',
+              message:
+                'Confirm that you have delivered the work. The client can then Complete Job.',
+              confirmLabel: 'Mark as Delivered',
+              successKey: 'jobDelivered',
+              landingOverride: {
+                tab: jobsTab,
+                section: 'in-progress',
+              },
+              run: () => markDelivered(request.workEngagementId!),
+            }),
+        }
+      : canComplete
+        ? {
+            title: 'Complete Job',
+            onPress: () =>
+              setConfirm({
+                title: 'Complete Job?',
+                message:
+                  'Confirm this work is finished. The job will move to History.',
+                confirmLabel: 'Complete Job',
+                successKey: 'jobCompleted',
+                landingOverride: {
+                  tab: jobsTab,
+                  section: 'completed',
+                },
+                run: () => markCompleted(request.workEngagementId!),
+              }),
+          }
+        : null;
+
+  const hasSecondaryActions =
+    secondaryNegotiation.length > 0 || turn.canCancelRequest;
+  const hasFooterActions =
+    !!primaryAction ||
+    hasSecondaryActions ||
+    !!turn.waitingMessage ||
+    isPendingPayment ||
+    isCompletedEngagement;
 
   /**
    * Exact mode picks a single day. Range mode fills `from` then `to`; tapping an
@@ -924,6 +960,17 @@ export default function WorkRequestDetailScreen({
 
       {hasFooterActions ? (
         <View style={styles.footer}>
+          {turn.waitingMessage ? (
+            <View style={styles.waitingCard}>
+              <Ionicons
+                name="hourglass-outline"
+                size={18}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.waitingText}>{turn.waitingMessage}</Text>
+            </View>
+          ) : null}
+
           {primaryAction ? (
             <Button
               title={primaryAction.title}
@@ -935,59 +982,26 @@ export default function WorkRequestDetailScreen({
 
           {hasSecondaryActions ? (
             <View style={styles.secondaryActions}>
-              {canRequestChanges ? (
-                <Button
-                  title="Request Changes"
-                  variant="secondary"
-                  style={styles.halfBtn}
-                  textStyle={styles.requestChangesText}
-                  numberOfLines={1}
-                  disabled={busy}
-                  onPress={openChanges}
-                />
-              ) : null}
-              {canRespondToChanges ? (
-                <Button
-                  title="Decline Changes"
-                  variant="secondary"
-                  style={styles.halfBtn}
-                  textStyle={styles.requestChangesText}
-                  numberOfLines={1}
-                  disabled={busy}
-                  onPress={() =>
-                    setConfirm({
-                      title: 'Decline Changes?',
-                      message:
-                        'The request stays open. The other party can Accept, Request Changes again, or Reject Request.',
-                      confirmLabel: 'Decline Changes',
-                      commentPlaceholder: 'Optional message…',
-                      successKey: 'changesDeclined',
-                      run: (comment) => declineChanges(request.id, comment),
-                    })
-                  }
-                />
-              ) : null}
-              {canCancelChanges ? (
-                <Button
-                  title="Cancel Change Request"
-                  variant="secondary"
-                  style={styles.halfBtn}
-                  textStyle={styles.requestChangesText}
-                  numberOfLines={1}
-                  disabled={busy}
-                  onPress={() =>
-                    setConfirm({
-                      title: 'Cancel Change Request?',
-                      message:
-                        'Your proposed changes will be discarded and the request returns to its previous state. The other party will not need to review them.',
-                      confirmLabel: 'Cancel Change Request',
-                      successKey: 'changesCancelled',
-                      run: () => cancelChanges(request.id),
-                    })
-                  }
-                />
-              ) : null}
-              {canCancelRequest ? (
+              {secondaryNegotiation.map((action) => {
+                const label = negotiationActionLabel(action);
+                const danger =
+                  action === 'reject_request' || action === 'cancel_request';
+                return (
+                  <Button
+                    key={action}
+                    title={label}
+                    variant="secondary"
+                    style={danger ? styles.rejectHalfBtn : styles.halfBtn}
+                    textStyle={
+                      danger ? styles.rejectBtnText : styles.requestChangesText
+                    }
+                    numberOfLines={1}
+                    disabled={busy}
+                    onPress={() => queueNegotiationAction(action)}
+                  />
+                );
+              })}
+              {turn.canCancelRequest ? (
                 <Button
                   title="Cancel Request"
                   variant="secondary"
@@ -995,47 +1009,7 @@ export default function WorkRequestDetailScreen({
                   textStyle={styles.rejectBtnText}
                   numberOfLines={1}
                   disabled={busy}
-                  onPress={() =>
-                    setConfirm({
-                      title: 'Cancel Request?',
-                      message:
-                        'This permanently cancels your work request and moves it to History. Different from Reject Request or Cancel Change Request.',
-                      confirmLabel: 'Cancel Request',
-                      danger: true,
-                      successKey: 'requestCancelled',
-                      landingOverride: {
-                        tab: 'sent',
-                        section: 'completed',
-                      },
-                      run: () => withdrawRequest(request.id),
-                    })
-                  }
-                />
-              ) : null}
-              {canReject ? (
-                <Button
-                  title="Reject Request"
-                  variant="secondary"
-                  style={styles.rejectHalfBtn}
-                  textStyle={styles.rejectBtnText}
-                  numberOfLines={1}
-                  disabled={busy}
-                  onPress={() =>
-                    setConfirm({
-                      title: 'Reject Request?',
-                      message:
-                        'This permanently closes the work request and moves it to History. It cannot be undone.',
-                      confirmLabel: 'Reject Request',
-                      danger: true,
-                      commentPlaceholder: 'Optional reason…',
-                      successKey: 'requestRejected',
-                      landingOverride: {
-                        tab: jobsTab,
-                        section: 'completed',
-                      },
-                      run: (comment) => rejectRequest(request.id, comment),
-                    })
-                  }
+                  onPress={() => queueNegotiationAction('cancel_request')}
                 />
               ) : null}
             </View>
@@ -1529,7 +1503,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
   },
-  secondaryActions: { flexDirection: 'row', gap: spacing.sm },
+  waitingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+  },
+  waitingText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  secondaryActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   halfBtn: { flex: 1, paddingHorizontal: spacing.md },
   requestChangesText: {
     fontSize: 14,

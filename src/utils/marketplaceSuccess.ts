@@ -69,12 +69,6 @@ export const MARKETPLACE_SUCCESS = {
       'Your response was sent. The other party can accept, request new changes, or reject the request.',
     landing: { tab: 'sent', section: 'requests' },
   },
-  changesCancelled: {
-    title: 'Change Request Cancelled',
-    message:
-      'Your proposed changes were cancelled. The request is open again for Accept, Reject Request, or a new change request.',
-    landing: { tab: 'received', section: 'requests' },
-  },
   jobDelivered: {
     title: 'Marked as Delivered',
     message: 'The client can now complete the job.',

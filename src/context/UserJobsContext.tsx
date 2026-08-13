@@ -81,7 +81,6 @@ interface UserJobsContextValue {
   ) => Promise<void>;
   acceptChanges: (id: string) => Promise<string | undefined>;
   declineChanges: (id: string, comment?: string) => Promise<void>;
-  cancelChanges: (id: string) => Promise<void>;
   rejectRequest: (id: string, comment?: string) => Promise<void>;
   /** Sender Cancel Request (withdraw API) while the negotiation is still open. */
   withdrawRequest: (id: string, comment?: string) => Promise<void>;
@@ -427,10 +426,6 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       },
       declineChanges: async (id, comment) => {
         await workRequestApi.declineChanges(id, comment);
-        await refresh();
-      },
-      cancelChanges: async (id) => {
-        await workRequestApi.cancelChanges(id);
         await refresh();
       },
       rejectRequest: async (id, comment) => {
