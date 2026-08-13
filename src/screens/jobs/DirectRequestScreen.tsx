@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
+import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import CalendarPicker from '../../components/ui/CalendarPicker';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
@@ -33,10 +34,19 @@ import {
 
 type DeadlineMode = 'exact_date' | 'duration' | 'flexible';
 
+type Attachment = { id: string; name: string; size: string };
+
 const DEADLINE_MODES: { id: DeadlineMode; label: string }[] = [
   { id: 'exact_date', label: 'Exact date' },
   { id: 'duration', label: 'Duration' },
   { id: 'flexible', label: 'Flexible' },
+];
+
+/** Demo PDFs until file upload is wired to storage. */
+const MOCK_PDFS = [
+  { name: 'Brief.pdf', size: '1.2 MB' },
+  { name: 'Moodboard.pdf', size: '3.1 MB' },
+  { name: 'References.pdf', size: '2.4 MB' },
 ];
 
 /** Groups thousands while the user types, keeping at most two decimals. */
@@ -87,6 +97,7 @@ export default function DirectRequestScreen({
   const [scope, setScope] = useState('');
   const [amountText, setAmountText] = useState('');
   const [message, setMessage] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>('flexible');
@@ -116,8 +127,23 @@ export default function DirectRequestScreen({
   const canSubmit =
     !submitting && !!title.trim() && !amountInvalid && deadline !== null;
 
+  const addPdf = () => {
+    const next = MOCK_PDFS[attachments.length % MOCK_PDFS.length];
+    setAttachments((prev) => [
+      ...prev,
+      { id: `pdf-${Date.now()}-${prev.length}`, name: next.name, size: next.size },
+    ]);
+  };
+
   const submit = () => {
     if (!deadline) return;
+    const attachmentLine =
+      attachments.length > 0
+        ? `Attachments: ${attachments.map((a) => a.name).join(', ')}`
+        : '';
+    const combinedMessage = [message.trim(), attachmentLine]
+      .filter(Boolean)
+      .join('\n');
     void (async () => {
       setSubmitting(true);
       try {
@@ -130,7 +156,7 @@ export default function DirectRequestScreen({
               ? { amount, currency: DEFAULT_CURRENCY }
               : undefined,
           deadline,
-          message: message.trim() || undefined,
+          message: combinedMessage || undefined,
         });
         showSuccess('directRequestSent');
       } catch (e) {
@@ -191,13 +217,11 @@ export default function DirectRequestScreen({
             numberOfLines={5}
             style={styles.multiline}
           />
-          <TextInput
+          <MoneyAmountField
             label="Budget"
             placeholder="0"
             value={amountText}
             onChangeText={(text) => setAmountText(formatAmountInput(text))}
-            keyboardType="decimal-pad"
-            leftIcon={<Text style={styles.currencyText}>{DEFAULT_CURRENCY}</Text>}
             error={amountInvalid ? 'Enter an amount greater than zero.' : undefined}
           />
 
@@ -300,6 +324,34 @@ export default function DirectRequestScreen({
               style={styles.multiline}
             />
           </View>
+
+          <View style={styles.attachmentsHeader}>
+            <Text style={styles.fieldLabelInline}>Attachments (PDF)</Text>
+            <TouchableOpacity onPress={addPdf} hitSlop={8} accessibilityLabel="Attach PDF">
+              <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          {attachments.length === 0 ? (
+            <Text style={styles.hintText}>Tap + to attach a PDF brief or references.</Text>
+          ) : (
+            attachments.map((file) => (
+              <View key={file.id} style={styles.fileRow}>
+                <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+                <View style={styles.fileMeta}>
+                  <Text style={styles.fileName}>{file.name}</Text>
+                  <Text style={styles.fileSize}>{file.size}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() =>
+                    setAttachments((prev) => prev.filter((f) => f.id !== file.id))
+                  }
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
@@ -353,16 +405,38 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   multiline: { minHeight: 110, textAlignVertical: 'top' },
-  currencyText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
   fieldLabel: {
     ...typography.label,
     color: colors.text,
     marginBottom: spacing.sm,
   },
+  fieldLabelInline: {
+    ...typography.label,
+    color: colors.text,
+    marginBottom: 0,
+  },
+  attachmentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.button,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  fileMeta: { flex: 1 },
+  fileName: { ...typography.label, color: colors.text },
+  fileSize: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: colors.borderLight,

@@ -63,7 +63,7 @@ export default function ProfileSetupStep4({
       packages: [
         {
           name: 'Basic',
-          priceLabel: s.price.trim() ? `${s.price.trim()} AED` : '—',
+          priceLabel: s.price.trim() ? s.price.trim() : '—',
           delivery: '3 days',
           includes: ['As discussed'],
         },
@@ -101,7 +101,7 @@ export default function ProfileSetupStep4({
               containerStyle={styles.inputNoMargin}
             />
             <TextInput
-              placeholder="Price (AED)"
+              placeholder="Price"
               value={service.price}
               onChangeText={(v) => updateService(index, 'price', v)}
               keyboardType="numeric"

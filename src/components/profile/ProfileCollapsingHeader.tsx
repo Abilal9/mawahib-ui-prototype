@@ -110,9 +110,11 @@ export default function ProfileCollapsingHeader({
     extrapolate: 'clamp',
   });
 
+  // Visitor CTAs: Connect/Message row + Request Work (~130px). Keep headroom so
+  // the pink filled button isn't clipped mid-height by overflow:hidden.
   const childrenMaxHeight = scrollY.interpolate({
     inputRange: [0, PROFILE_COLLAPSE_DISTANCE],
-    outputRange: [72, 0],
+    outputRange: [160, 0],
     extrapolate: 'clamp',
   });
 

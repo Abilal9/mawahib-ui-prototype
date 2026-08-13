@@ -548,7 +548,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     gap: spacing.sm,
     marginTop: spacing.sm,
-    marginBottom: spacing.xs,
   },
   connectBtn: {
     flex: 1,
@@ -559,6 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: radius.button,
     paddingVertical: spacing.md,
+    minHeight: 48,
   },
   connectBtnDone: {
     backgroundColor: '#00A63E',
@@ -578,6 +578,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.primary,
     paddingVertical: spacing.md,
+    minHeight: 48,
   },
   messageBtnDisabled: {
     borderColor: colors.border,
@@ -587,7 +588,8 @@ const styles = StyleSheet.create({
   messageTextDisabled: { color: colors.textSecondary },
   hireRow: {
     paddingHorizontal: spacing.screen,
-    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   hireBtn: {
     flexDirection: 'row',
@@ -599,6 +601,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.primary,
     paddingVertical: spacing.md,
+    minHeight: 48,
   },
   hireText: { ...typography.button, color: colors.primary },
   modalBackdrop: {

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import { colors, spacing, radius, typography } from '../../theme';
 import { catalogService } from '../../services';
 import { PAYMENTS_UNAVAILABLE_MESSAGE } from '../../context/UserJobsContext';
@@ -57,7 +58,11 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalAmount}>AED {amount.toLocaleString()}</Text>
+            <MoneyAmount
+              amount={amount.toLocaleString()}
+              size={18}
+              textStyle={styles.totalAmount}
+            />
           </View>
         </View>
 
@@ -89,7 +94,7 @@ export default function ConfirmPaymentScreen({ route, navigation }: ScreenProps<
           <Text style={styles.blockedNotice}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
         ) : null}
         <Button
-          title={`Pay AED ${amount.toLocaleString()}`}
+          title={`Pay ${amount.toLocaleString()}`}
           onPress={completePayment}
           fullWidth
         />

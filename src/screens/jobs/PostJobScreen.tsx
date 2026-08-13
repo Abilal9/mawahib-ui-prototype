@@ -102,7 +102,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           <>
             <Text style={styles.title}>Location & Compensation</Text>
             <TextInput label="Location" placeholder="City, Country or Remote" value={location} onChangeText={setLocation} />
-            <TextInput label="Salary Range" placeholder="e.g. AED 15,000 - 20,000/mo" value={salary} onChangeText={setSalary} />
+            <TextInput label="Salary Range" placeholder="e.g. 15,000 - 20,000/mo" value={salary} onChangeText={setSalary} />
           </>
         )}
 

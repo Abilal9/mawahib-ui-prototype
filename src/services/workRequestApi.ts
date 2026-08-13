@@ -261,13 +261,16 @@ export function fromIsoDate(value: string | null | undefined): Date | null {
   return new Date(year, month - 1, day);
 }
 
-/** `SAR 3,500` — mirrors the backend label so both sides read the same. */
+/**
+ * Amount-only label (`3,500`). Screens pair this with the pink CurrencyIcon —
+ * never prefix with "SAR"/"AED" text codes.
+ */
 export function formatMoney(money: WorkRequestMoney | null | undefined): string {
   if (!money) return '';
-  return `${money.currency} ${money.amount.toLocaleString('en-US', {
+  return money.amount.toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  })}`;
+  });
 }
 
 function formatIsoDateLabel(value: string, withYear: boolean): string {
@@ -346,7 +349,7 @@ export function termsChangeFromPayload(
   };
 }
 
-/** `Price SAR 3,000 → SAR 3,500` — only the fields that actually moved. */
+/** `Price 3,000 → 3,500` — only the fields that actually moved. */
 export function summarizeTermsChange(change: WorkRequestTermsChange): string {
   const parts: string[] = [];
   const beforeMoney = formatMoney(change.previousTerms.money) || 'Negotiable';

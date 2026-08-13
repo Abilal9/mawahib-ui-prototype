@@ -16,8 +16,9 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
-import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import MoneyAmount from '../../components/ui/MoneyAmount';
+import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
@@ -173,9 +174,10 @@ function TermsBlock({
       ]}
     >
       <Row label="Title" value={terms.title || '—'} />
-      <Row
+      <MoneyRow
         label="Price"
-        value={formatMoney(terms.money) || 'Negotiable'}
+        money={terms.money}
+        fallback="Negotiable"
         struck={variant === 'original' && priceDiff}
         emphasized={variant === 'proposed' && priceDiff}
       />
@@ -192,13 +194,16 @@ function TermsBlock({
         />
       ) : null}
       {addons.map((addon) => (
-        <Row
+        <MoneyRow
           key={addon.id || addon.title}
           label={`Add-on · ${addon.title}`}
-          value={formatMoney(addon.money) || '—'}
+          money={addon.money}
+          fallback="—"
         />
       ))}
-      {showTotal ? <Row label="Total" value={formatMoney(total)} /> : null}
+      {showTotal ? (
+        <MoneyRow label="Total" money={total} fallback="—" />
+      ) : null}
       {terms.location ? <Row label="Location" value={terms.location} /> : null}
       {terms.scope ? <Block label="Scope" value={terms.scope} /> : null}
       {terms.notes ? <Block label="Notes" value={terms.notes} /> : null}
@@ -230,6 +235,36 @@ function Row({
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+function MoneyRow({
+  label,
+  money,
+  fallback,
+  struck,
+  emphasized,
+}: {
+  label: string;
+  money: WorkRequestTerms['money'];
+  fallback: string;
+  struck?: boolean;
+  emphasized?: boolean;
+}) {
+  const amount = formatMoney(money);
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      {amount ? (
+        <MoneyAmount
+          amount={amount}
+          struck={struck}
+          emphasized={emphasized}
+        />
+      ) : (
+        <Text style={styles.rowValue}>{fallback}</Text>
+      )}
     </View>
   );
 }
@@ -998,27 +1033,23 @@ export default function WorkRequestDetailScreen({
                 </Text>
               ) : null}
 
-              <Text style={styles.fieldLabel}>Price</Text>
-              <View style={styles.priceInputRow}>
-                <CurrencyIcon size={18} color={colors.primary} />
-                <TextInput
-                  placeholder="0"
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.priceInput}
-                  keyboardType="decimal-pad"
-                  value={amountText}
-                  onChangeText={(text) => setAmountText(formatAmountInput(text))}
-                />
-              </View>
-              {amountText.trim().length > 0 && proposedAmount === null ? (
-                <Text style={styles.errorHint}>
-                  Enter an amount greater than zero.
-                </Text>
-              ) : (
+              <MoneyAmountField
+                label="Price"
+                placeholder="0"
+                value={amountText}
+                onChangeText={(text) => setAmountText(formatAmountInput(text))}
+                containerStyle={styles.priceField}
+                error={
+                  amountText.trim().length > 0 && proposedAmount === null
+                    ? 'Enter an amount greater than zero.'
+                    : undefined
+                }
+              />
+              {!(amountText.trim().length > 0 && proposedAmount === null) ? (
                 <Text style={styles.hintText}>
                   Leave blank to keep the current price.
                 </Text>
-              )}
+              ) : null}
 
               <Text style={styles.fieldLabel}>Comment (optional)</Text>
               <TextInput
@@ -1296,7 +1327,7 @@ const styles = StyleSheet.create({
   modalTitle: { ...typography.h3, color: colors.text },
   fieldLabel: { ...typography.caption, color: colors.textSecondary },
   hintText: { ...typography.caption, color: colors.textTertiary },
-  errorHint: { ...typography.caption, color: colors.error },
+  priceField: { marginBottom: spacing.sm },
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: colors.borderLight,
@@ -1350,22 +1381,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
     borderRadius: radius.button,
     padding: 2,
-  },
-  priceInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.button,
-    paddingHorizontal: spacing.md,
-    minHeight: 42,
-    gap: spacing.xs,
-  },
-  priceInput: {
-    flex: 1,
-    ...typography.bodySmall,
-    color: colors.text,
-    paddingVertical: spacing.sm,
   },
   singleLineInput: {
     borderWidth: 1.5,

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import { colors, spacing, radius, typography } from '../../theme';
 import { PAYMENTS_UNAVAILABLE_MESSAGE } from '../../context/UserJobsContext';
 import { ScreenProps } from '../../navigation/types';
@@ -36,7 +37,12 @@ export default function ApplePayScreen({ route, navigation }: ScreenProps<'Apple
           </View>
         </View>
 
-        <Text style={styles.amount}>AED {amount.toLocaleString()}</Text>
+        <MoneyAmount
+          amount={amount.toLocaleString()}
+          size={28}
+          style={styles.amountRow}
+          textStyle={styles.amount}
+        />
 
         <View style={styles.cardRow}>
           <Ionicons name="card-outline" size={20} color={colors.textSecondary} />
@@ -73,7 +79,12 @@ const styles = StyleSheet.create({
   merchantInitial: { ...typography.h3, color: colors.white },
   merchantName: { ...typography.label, color: colors.text },
   merchantDesc: { ...typography.caption, color: colors.textSecondary },
-  amount: { ...typography.h1, color: colors.text, textAlign: 'center', marginBottom: spacing.xl },
+  amountRow: {
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  amount: { ...typography.h1, color: colors.text, fontWeight: '700' },
   cardRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     padding: spacing.lg, backgroundColor: colors.background,

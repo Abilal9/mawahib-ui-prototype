@@ -453,7 +453,7 @@ export default function AddProfileServiceScreen({
 
               <Text style={styles.label}>Price</Text>
               <View style={styles.priceRow}>
-                <CurrencyIcon size={18} color={colors.text} style={styles.currencyIcon} />
+                <CurrencyIcon size={18} color={colors.primary} style={styles.currencyIcon} />
                 <TextInput
                   style={styles.priceInput}
                   value={currentPkg.price}
@@ -534,7 +534,7 @@ export default function AddProfileServiceScreen({
                 />
                 <Text style={styles.label}>Add-On Price</Text>
                 <View style={styles.priceRow}>
-                  <CurrencyIcon size={18} color={colors.text} style={styles.currencyIcon} />
+                  <CurrencyIcon size={18} color={colors.primary} style={styles.currencyIcon} />
                   <TextInput
                     style={styles.priceInput}
                     value={addonPrice}
@@ -618,7 +618,7 @@ export default function AddProfileServiceScreen({
                 {packageSummary.map((line) => (
                   <View key={line.key} style={styles.reviewLineRow}>
                     <Text style={styles.reviewLine}>{line.key} : • </Text>
-                    <CurrencyIcon size={13} color={colors.textTertiary} />
+                    <CurrencyIcon size={13} color={colors.primary} />
                     <Text style={styles.reviewLine}>
                       {' '}
                       {line.price} • {line.delivery} • {line.featureCount} Feature
@@ -641,7 +641,7 @@ export default function AddProfileServiceScreen({
                   addons.map((a) => (
                     <View key={a.id} style={styles.reviewLineRow}>
                       <Text style={styles.reviewLine}>• {a.title} </Text>
-                      <CurrencyIcon size={13} color={colors.textTertiary} />
+                      <CurrencyIcon size={13} color={colors.primary} />
                       <Text style={styles.reviewLine}> {a.priceLabel}</Text>
                     </View>
                   ))
@@ -824,13 +824,15 @@ const styles = StyleSheet.create({
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.button,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.white,
+    gap: spacing.sm,
   },
-  currencyIcon: { marginRight: spacing.xs },
+  currencyIcon: {},
   priceInline: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -843,10 +845,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   priceInput: {
-    flex: 1,
     ...typography.body,
     color: colors.text,
     paddingVertical: spacing.md,
+    minWidth: 96,
+    textAlign: 'center',
   },
   featuresHeader: {
     flexDirection: 'row',

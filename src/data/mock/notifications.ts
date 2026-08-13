@@ -84,7 +84,7 @@ export const notifications: Notification[] = [
     id: 'n5',
     type: 'job',
     title: 'Payment processed',
-    message: 'Your payment of SAR 100 was processed!',
+    message: 'Your payment of 100 was processed!',
     createdAt: '2026-07-14T09:42:00Z',
     read: true,
   },

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
@@ -11,7 +12,7 @@ const PLANS = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'Free',
+    price: null as string | null,
     period: '',
     features: ['Profile & Portfolio', '5 job applications/mo', 'Basic search'],
     popular: false,
@@ -19,7 +20,7 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'AED 49',
+    price: '49',
     period: '/month',
     features: ['Unlimited applications', 'Priority in search', 'Analytics dashboard', 'Verified badge'],
     popular: true,
@@ -27,7 +28,7 @@ const PLANS = [
   {
     id: 'business',
     name: 'Business',
-    price: 'AED 149',
+    price: '149',
     period: '/month',
     features: ['Everything in Pro', 'Team accounts', 'Job posting', 'Dedicated support', 'API access'],
     popular: false,
@@ -72,8 +73,18 @@ export default function PremiumScreen({ navigation }: ScreenProps<'Premium'>) {
             <View style={styles.planHeader}>
               <Text style={styles.planName}>{plan.name}</Text>
               <View style={styles.priceRow}>
-                <Text style={styles.planPrice}>{plan.price}</Text>
-                {plan.period && <Text style={styles.planPeriod}>{plan.period}</Text>}
+                {plan.price ? (
+                  <MoneyAmount
+                    amount={plan.price}
+                    size={22}
+                    textStyle={styles.planPrice}
+                  />
+                ) : (
+                  <Text style={styles.planPrice}>Free</Text>
+                )}
+                {plan.period ? (
+                  <Text style={styles.planPeriod}>{plan.period}</Text>
+                ) : null}
               </View>
             </View>
             {plan.features.map((feature) => (

@@ -758,7 +758,7 @@ export default function RequestServiceScreen({
                 <View style={styles.reviewPackageRow}>
                   <Text style={styles.reviewValue}>{selectedPackage ?? '—'}</Text>
                   <View style={styles.priceInline}>
-                    <CurrencyIcon size={14} color={colors.text} location={currencyLocation} />
+                    <CurrencyIcon size={14} color={colors.primary} location={currencyLocation} />
                     <Text style={styles.reviewValue}>{formatMoney(packagePrice)}</Text>
                   </View>
                 </View>

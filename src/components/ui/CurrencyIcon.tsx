@@ -24,7 +24,7 @@ type Props = {
 /** Location-aware currency logo: Dirham for UAE locations, Riyal otherwise. */
 export default function CurrencyIcon({
   size = 16,
-  color = colors.text,
+  color = colors.primary,
   style,
   location,
 }: Props) {
