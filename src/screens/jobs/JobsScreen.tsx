@@ -162,7 +162,7 @@ function JobFlowCard({
       </View>
       <View style={styles.metaSeparator} />
       <View style={styles.metaLine}>
-        <Text style={styles.metaLabel}>Date</Text>
+        <Text style={styles.metaLabel}>Requested</Text>
         <View style={styles.userInline}>
           <Ionicons name="time-outline" size={14} color="#3F78B7" />
           <Text style={styles.dateValue}>{job.date}</Text>

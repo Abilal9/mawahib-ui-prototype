@@ -14,15 +14,57 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
-import { colors, spacing, typography } from '../../theme';
+import CalendarPicker from '../../components/ui/CalendarPicker';
+import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { ScreenProps } from '../../navigation/types';
+import {
+  DEFAULT_CURRENCY,
+  DURATION_UNITS,
+  DurationUnit,
+  WorkRequestDeadlineInput,
+  toIsoDate,
+} from '../../services/workRequestApi';
+
+type DeadlineMode = 'exact_date' | 'duration' | 'flexible';
+
+const DEADLINE_MODES: { id: DeadlineMode; label: string }[] = [
+  { id: 'exact_date', label: 'Exact date' },
+  { id: 'duration', label: 'Duration' },
+  { id: 'flexible', label: 'Flexible' },
+];
+
+/** Groups thousands while the user types, keeping at most two decimals. */
+function formatAmountInput(text: string): string {
+  const cleaned = text.replace(/[^\d.]/g, '');
+  const [whole = '', ...rest] = cleaned.split('.');
+  const grouped = whole
+    .replace(/^0+(?=\d)/, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (!cleaned.includes('.')) return grouped;
+  return `${grouped || '0'}.${rest.join('').slice(0, 2)}`;
+}
+
+/** A positive amount, or null when the field is blank or not a real price. */
+function parseAmountInput(text: string): number | null {
+  const amount = Number(text.replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return Math.round(amount * 100) / 100;
+}
+
+function formatPickedDate(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 
 /**
- * Cold "hire me" request — no listing, no service offering. Prices stay
- * free-text labels until payments ship.
+ * Cold "hire me" request — no listing, no service offering. Budget and deadline
+ * are structured so the recipient negotiates against real values.
  */
 export default function DirectRequestScreen({
   route,
@@ -33,12 +75,39 @@ export default function DirectRequestScreen({
 
   const [title, setTitle] = useState('');
   const [scope, setScope] = useState('');
-  const [price, setPrice] = useState('');
-  const [deadline, setDeadline] = useState('');
+  const [amountText, setAmountText] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>('flexible');
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [exactDate, setExactDate] = useState<Date | null>(null);
+  const [durationValue, setDurationValue] = useState('2');
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>('weeks');
+
+  const amount = parseAmountInput(amountText);
+  const amountInvalid = amountText.trim().length > 0 && amount === null;
+
+  const buildDeadline = (): WorkRequestDeadlineInput | null => {
+    if (deadlineMode === 'exact_date') {
+      return exactDate
+        ? { type: 'exact_date', startDate: toIsoDate(exactDate) }
+        : null;
+    }
+    if (deadlineMode === 'duration') {
+      const value = Number(durationValue);
+      if (!Number.isInteger(value) || value < 1) return null;
+      return { type: 'duration', durationValue: value, durationUnit };
+    }
+    return { type: 'flexible' };
+  };
+
+  const deadline = buildDeadline();
+  const canSubmit =
+    !submitting && !!title.trim() && !amountInvalid && deadline !== null;
+
   const submit = () => {
+    if (!deadline) return;
     void (async () => {
       setSubmitting(true);
       try {
@@ -46,8 +115,11 @@ export default function DirectRequestScreen({
           recipientUserId: route.params.userId,
           title: title.trim(),
           scope: scope.trim() || undefined,
-          price: price.trim() || undefined,
-          deadlineLabel: deadline.trim() || undefined,
+          money:
+            amount !== null
+              ? { amount, currency: DEFAULT_CURRENCY }
+              : undefined,
+          deadline,
           message: message.trim() || undefined,
         });
         navigation.replace('WorkRequestDetail', { requestId });
@@ -111,32 +183,120 @@ export default function DirectRequestScreen({
           />
           <TextInput
             label="Budget"
-            placeholder="e.g. SAR 8,000 project"
-            value={price}
-            onChangeText={setPrice}
+            placeholder="0"
+            value={amountText}
+            onChangeText={(text) => setAmountText(formatAmountInput(text))}
+            keyboardType="decimal-pad"
+            leftIcon={<Text style={styles.currencyText}>{DEFAULT_CURRENCY}</Text>}
+            error={amountInvalid ? 'Enter an amount greater than zero.' : undefined}
           />
-          <TextInput
-            label="Deadline"
-            placeholder="e.g. 3 weeks, or 05/14/2026"
-            value={deadline}
-            onChangeText={setDeadline}
-          />
-          <TextInput
-            label="Message"
-            placeholder="Anything else they should know?"
-            value={message}
-            onChangeText={setMessage}
-            multiline
-            numberOfLines={4}
-            style={styles.multiline}
-          />
+
+          <Text style={styles.fieldLabel}>Deadline</Text>
+          <View style={styles.modeToggle}>
+            {DEADLINE_MODES.map((mode) => {
+              const active = deadlineMode === mode.id;
+              return (
+                <TouchableOpacity
+                  key={mode.id}
+                  style={[styles.modeBtn, active && styles.modeBtnActive]}
+                  onPress={() => setDeadlineMode(mode.id)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.modeBtnText,
+                      active && styles.modeBtnTextActive,
+                    ]}
+                  >
+                    {mode.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {deadlineMode === 'exact_date' ? (
+            <View style={styles.deadlineBlock}>
+              <View style={[styles.dateField, styles.dateFieldActive]}>
+                <Text style={styles.dateFieldValue}>
+                  {exactDate ? formatPickedDate(exactDate) : 'Select date'}
+                </Text>
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+              </View>
+              <CalendarPicker
+                month={visibleMonth}
+                onMonthChange={setVisibleMonth}
+                onPickDay={setExactDate}
+                selected={exactDate}
+              />
+            </View>
+          ) : null}
+
+          {deadlineMode === 'duration' ? (
+            <View style={styles.durationRow}>
+              <TextInput
+                containerStyle={styles.durationValueField}
+                placeholder="2"
+                value={durationValue}
+                onChangeText={(text) =>
+                  setDurationValue(text.replace(/[^\d]/g, '').slice(0, 4))
+                }
+                keyboardType="number-pad"
+                style={styles.durationValueInput}
+              />
+              <View style={styles.unitToggle}>
+                {DURATION_UNITS.map((unit) => {
+                  const active = durationUnit === unit;
+                  return (
+                    <TouchableOpacity
+                      key={unit}
+                      style={[styles.modeBtn, active && styles.modeBtnActive]}
+                      onPress={() => setDurationUnit(unit)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.modeBtnText,
+                          active && styles.modeBtnTextActive,
+                        ]}
+                      >
+                        {unit}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          {deadlineMode === 'flexible' ? (
+            <Text style={styles.hintText}>
+              No fixed deadline — you agree on timing together.
+            </Text>
+          ) : null}
+
+          <View style={styles.messageField}>
+            <TextInput
+              label="Message"
+              placeholder="Anything else they should know?"
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              numberOfLines={4}
+              style={styles.multiline}
+            />
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
           <Button
             title={submitting ? 'Sending…' : 'Send Request'}
             fullWidth
-            disabled={submitting || !title.trim()}
+            disabled={!canSubmit}
             onPress={submit}
           />
         </View>
@@ -175,6 +335,76 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   multiline: { minHeight: 110, textAlignVertical: 'top' },
+  currencyText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  fieldLabel: {
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.button,
+    padding: 2,
+  },
+  modeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 2,
+    borderRadius: radius.button - 2,
+  },
+  modeBtnActive: { backgroundColor: colors.primary },
+  modeBtnText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modeBtnTextActive: { color: colors.white },
+  deadlineBlock: { gap: spacing.sm, marginTop: spacing.sm },
+  dateField: {
+    minHeight: 42,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+  },
+  dateFieldActive: { borderColor: colors.primary },
+  dateFieldValue: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  durationValueField: { width: 84, marginBottom: 0 },
+  durationValueInput: { textAlign: 'center' },
+  unitToggle: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.button,
+    padding: 2,
+  },
+  hintText: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.sm,
+  },
+  messageField: { marginTop: spacing.lg },
   footer: {
     paddingHorizontal: spacing.screen,
     paddingVertical: spacing.md,

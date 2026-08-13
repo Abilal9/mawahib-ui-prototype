@@ -26,6 +26,10 @@ import {
   useUserJobs,
 } from '../../context/UserJobsContext';
 import { ApiError } from '../../lib/apiClient';
+import {
+  WorkRequestDeadlineInput,
+  toIsoDate,
+} from '../../services/workRequestApi';
 import { ScreenProps } from '../../navigation/types';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
@@ -176,6 +180,21 @@ export default function RequestServiceScreen({
     return '';
   }, [scheduleMode, deadlineDate, rangeFrom, rangeTo]);
 
+  /** Undefined keeps whatever delivery time the package already carries. */
+  const deadlineInput = useMemo((): WorkRequestDeadlineInput | undefined => {
+    if (scheduleMode === 'deadline' && deadlineDate) {
+      return { type: 'exact_date', startDate: toIsoDate(deadlineDate) };
+    }
+    if (scheduleMode === 'duration' && rangeFrom && rangeTo) {
+      return {
+        type: 'date_range',
+        startDate: toIsoDate(rangeFrom),
+        endDate: toIsoDate(rangeTo),
+      };
+    }
+    return undefined;
+  }, [scheduleMode, deadlineDate, rangeFrom, rangeTo]);
+
   const goBack = () => {
     if (step > 1) {
       setStep((s) => s - 1);
@@ -285,7 +304,7 @@ export default function RequestServiceScreen({
           packageTier: PACKAGE_TIER_BY_NAME[selectedPackage],
           addonIds: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
           notes: notesLines.join('\n') || undefined,
-          deadlineLabel: dateSummary || undefined,
+          deadline: deadlineInput,
         });
         setCreatedRequestId(requestId);
         setSent(true);

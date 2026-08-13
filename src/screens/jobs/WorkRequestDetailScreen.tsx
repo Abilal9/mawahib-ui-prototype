@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import CalendarPicker from '../../components/ui/CalendarPicker';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -27,10 +28,23 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 import {
   ApiWorkRequest,
+  DEFAULT_CURRENCY,
+  DURATION_UNITS,
+  DeadlineType,
+  DurationUnit,
+  ProposedTermsInput,
   SOURCE_BADGE_LABEL,
+  WorkRequestDeadlineInput,
   WorkRequestEvent,
   WorkRequestTerms,
   effectiveTerms,
+  formatDeadline,
+  formatMoney,
+  fromIsoDate,
+  summarizeTermsChange,
+  termsChangeFromPayload,
+  termsTotal,
+  toIsoDate,
   workRequestApi,
 } from '../../services/workRequestApi';
 
@@ -66,6 +80,13 @@ const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
   note: 'Note',
 };
 
+const DEADLINE_MODES: { id: DeadlineType; label: string }[] = [
+  { id: 'exact_date', label: 'Exact' },
+  { id: 'date_range', label: 'Range' },
+  { id: 'duration', label: 'Duration' },
+  { id: 'flexible', label: 'Flexible' },
+];
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-US', {
     day: 'numeric',
@@ -76,28 +97,58 @@ function formatDateTime(iso: string) {
   });
 }
 
-function priceText(terms: WorkRequestTerms) {
-  if (!terms.price) return 'Negotiable';
-  return terms.currency && !terms.price.includes(terms.currency)
-    ? `${terms.currency} ${terms.price}`
-    : terms.price;
+function formatPickedDate(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/** Groups thousands while the user types, keeping at most two decimals. */
+function formatAmountInput(text: string): string {
+  const cleaned = text.replace(/[^\d.]/g, '');
+  const [whole = '', ...rest] = cleaned.split('.');
+  const grouped = whole
+    .replace(/^0+(?=\d)/, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (!cleaned.includes('.')) return grouped;
+  return `${grouped || '0'}.${rest.join('').slice(0, 2)}`;
+}
+
+/** A positive amount, or null when the field is blank or not a real price. */
+function parseAmountInput(text: string): number | null {
+  const amount = Number(text.replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return Math.round(amount * 100) / 100;
 }
 
 function TermsBlock({ terms }: { terms: WorkRequestTerms }) {
+  const addons = terms.addons ?? [];
+  const total = termsTotal(terms);
+  const showTotal =
+    addons.length > 0 && !!total && total.amount !== terms.money?.amount;
+
   return (
     <View style={styles.termsCard}>
       <Row label="Title" value={terms.title || '—'} />
-      <Row label="Price" value={priceText(terms)} />
-      <Row label="Deadline" value={terms.deadlineLabel || 'Flexible'} />
+      <Row label="Price" value={formatMoney(terms.money) || 'Negotiable'} />
+      <Row label="Deadline" value={formatDeadline(terms.deadline)} />
       {terms.packageName || terms.packageTier ? (
-        <Row label="Package" value={terms.packageName || terms.packageTier || ''} />
-      ) : null}
-      {terms.addons && terms.addons.length > 0 ? (
         <Row
-          label="Add-ons"
-          value={terms.addons.map((a) => a.title).join(', ')}
+          label="Package"
+          value={terms.packageName || terms.packageTier || ''}
         />
       ) : null}
+      {addons.map((addon) => (
+        <Row
+          key={addon.id || addon.title}
+          label={`Add-on · ${addon.title}`}
+          value={formatMoney(addon.money) || '—'}
+        />
+      ))}
+      {showTotal ? <Row label="Total" value={formatMoney(total)} /> : null}
+      {terms.location ? <Row label="Location" value={terms.location} /> : null}
       {terms.scope ? <Block label="Scope" value={terms.scope} /> : null}
       {terms.notes ? <Block label="Notes" value={terms.notes} /> : null}
     </View>
@@ -150,9 +201,20 @@ export default function WorkRequestDetailScreen({
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
   const [changesOpen, setChangesOpen] = useState(false);
-  const [proposedPrice, setProposedPrice] = useState('');
-  const [proposedDeadline, setProposedDeadline] = useState('');
+  const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [exactDate, setExactDate] = useState<Date | null>(null);
+  const [rangeFrom, setRangeFrom] = useState<Date | null>(null);
+  const [rangeTo, setRangeTo] = useState<Date | null>(null);
+  const [activeRangeField, setActiveRangeField] = useState<'from' | 'to'>(
+    'from',
+  );
+  const [durationValue, setDurationValue] = useState('1');
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>('weeks');
+  const [amountText, setAmountText] = useState('');
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [proposalComment, setProposalComment] = useState('');
 
   const load = useCallback(async () => {
@@ -256,21 +318,126 @@ export default function WorkRequestDetailScreen({
   const canComplete =
     isClient && request.workEngagementStatus === 'delivered';
 
+  /** The one call to action; everything else lives in the secondary row. */
+  const primaryAction = canAccept
+    ? { title: 'Accept', run: () => acceptRequest(request.id) }
+    : canRespondToChanges
+      ? { title: 'Accept Changes', run: () => acceptChanges(request.id) }
+      : canDeliver
+        ? {
+            title: 'Mark as delivered',
+            run: () => markDelivered(request.workEngagementId!),
+          }
+        : canComplete
+          ? {
+              title: 'Mark as completed',
+              run: () => markCompleted(request.workEngagementId!),
+            }
+          : null;
+
+  const hasSecondaryActions =
+    canRequestChanges || canRespondToChanges || canReject || canWithdraw;
+  const hasFooterActions =
+    !!primaryAction || hasSecondaryActions || awaitingPayment;
+
   const openChanges = () => {
-    setProposedPrice(terms.price);
-    setProposedDeadline(terms.deadlineLabel);
+    const money = terms.money;
+    setAmountText(money ? formatAmountInput(String(money.amount)) : '');
+    setCurrency(money?.currency || DEFAULT_CURRENCY);
+
+    const deadline = terms.deadline;
+    const start =
+      deadline?.type === 'exact_date' || deadline?.type === 'date_range'
+        ? fromIsoDate(deadline.startDate)
+        : null;
+    const end =
+      deadline?.type === 'date_range' ? fromIsoDate(deadline.endDate) : null;
+
+    setDeadlineMode(deadline?.type ?? 'exact_date');
+    setExactDate(deadline?.type === 'exact_date' ? start : null);
+    setRangeFrom(deadline?.type === 'date_range' ? start : null);
+    setRangeTo(end);
+    setActiveRangeField('from');
+    setDurationValue(
+      deadline?.type === 'duration' && deadline.durationValue
+        ? String(deadline.durationValue)
+        : '1',
+    );
+    setDurationUnit(
+      deadline?.type === 'duration' && deadline.durationUnit
+        ? deadline.durationUnit
+        : 'weeks',
+    );
+    const anchor = start ?? new Date();
+    setVisibleMonth(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
     setProposalComment('');
     setChangesOpen(true);
   };
 
-  const hasFooterActions =
-    canAccept ||
-    canReject ||
-    canRespondToChanges ||
-    canWithdraw ||
-    canDeliver ||
-    canComplete ||
-    awaitingPayment;
+  /**
+   * Exact mode picks a single day. Range mode fills `from` then `to`; tapping an
+   * earlier day restarts the range so `from ≤ to` always holds.
+   */
+  const onPickDay = (picked: Date) => {
+    if (deadlineMode === 'exact_date') {
+      setExactDate(picked);
+      return;
+    }
+    if (activeRangeField === 'from' || !rangeFrom) {
+      setRangeFrom(picked);
+      setRangeTo(null);
+      setActiveRangeField('to');
+      return;
+    }
+    if (picked < rangeFrom) {
+      setRangeFrom(picked);
+      setRangeTo(null);
+      setActiveRangeField('to');
+      return;
+    }
+    setRangeTo(picked);
+  };
+
+  const proposedDeadline = (): WorkRequestDeadlineInput | null => {
+    if (deadlineMode === 'exact_date') {
+      return exactDate ? { type: 'exact_date', startDate: toIsoDate(exactDate) } : null;
+    }
+    if (deadlineMode === 'date_range') {
+      if (!rangeFrom || !rangeTo || rangeTo < rangeFrom) return null;
+      return {
+        type: 'date_range',
+        startDate: toIsoDate(rangeFrom),
+        endDate: toIsoDate(rangeTo),
+      };
+    }
+    if (deadlineMode === 'duration') {
+      const value = Number(durationValue);
+      if (!Number.isInteger(value) || value < 1) return null;
+      return { type: 'duration', durationValue: value, durationUnit };
+    }
+    return { type: 'flexible' };
+  };
+
+  const proposedAmount = parseAmountInput(amountText);
+  const amountReady = amountText.trim().length === 0 || proposedAmount !== null;
+  const deadlineReady = proposedDeadline() !== null;
+
+  const submitChanges = () => {
+    const deadline = proposedDeadline();
+    if (!deadline || !amountReady) return;
+    const proposedTerms: ProposedTermsInput = { deadline };
+    if (proposedAmount !== null) {
+      proposedTerms.money = { amount: proposedAmount, currency };
+    }
+    setChangesOpen(false);
+    void runAction(() =>
+      requestChanges(
+        request.id,
+        proposedTerms,
+        proposalComment.trim() || undefined,
+      ),
+    );
+  };
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.white}>
@@ -365,14 +532,12 @@ export default function WorkRequestDetailScreen({
           </TouchableOpacity>
         ) : null}
 
-        <Text style={styles.sectionTitle}>
-          {request.agreedTerms ? 'Agreed terms' : 'Terms'}
-        </Text>
-        <TermsBlock terms={request.agreedTerms ?? request.terms} />
+        <Text style={styles.sectionTitle}>Original terms</Text>
+        <TermsBlock terms={request.terms} />
 
         {request.status === 'changes_requested' && request.proposedTerms ? (
           <>
-            <Text style={styles.sectionTitle}>Proposed changes</Text>
+            <Text style={styles.sectionTitle}>Proposed terms</Text>
             <TermsBlock terms={request.proposedTerms} />
             {request.proposalComment ? (
               <View style={styles.commentCard}>
@@ -380,6 +545,13 @@ export default function WorkRequestDetailScreen({
                 <Text style={styles.blockValue}>{request.proposalComment}</Text>
               </View>
             ) : null}
+          </>
+        ) : null}
+
+        {request.agreedTerms ? (
+          <>
+            <Text style={styles.sectionTitle}>Accepted terms</Text>
+            <TermsBlock terms={request.agreedTerms} />
           </>
         ) : null}
 
@@ -406,108 +578,90 @@ export default function WorkRequestDetailScreen({
           {request.events.length === 0 ? (
             <Text style={styles.rowValue}>No activity yet.</Text>
           ) : (
-            request.events.map((event) => (
-              <View key={event.id} style={styles.eventRow}>
-                <View style={styles.eventDot} />
-                <View style={styles.eventBody}>
-                  <Text style={styles.eventTitle}>
-                    {EVENT_LABEL[event.type] ?? event.type}
-                  </Text>
-                  {event.note ? (
-                    <Text style={styles.eventNote}>{event.note}</Text>
-                  ) : null}
-                  <Text style={styles.eventTime}>
-                    {formatDateTime(event.createdAt)}
-                  </Text>
+            request.events.map((event) => {
+              const change =
+                event.type === 'changes_requested'
+                  ? termsChangeFromPayload(event.payload)
+                  : null;
+              const summary = change ? summarizeTermsChange(change) : '';
+              return (
+                <View key={event.id} style={styles.eventRow}>
+                  <View style={styles.eventDot} />
+                  <View style={styles.eventBody}>
+                    <Text style={styles.eventTitle}>
+                      {EVENT_LABEL[event.type] ?? event.type}
+                    </Text>
+                    {summary ? (
+                      <Text style={styles.eventSummary}>{summary}</Text>
+                    ) : null}
+                    {event.note ? (
+                      <Text style={styles.eventNote}>{event.note}</Text>
+                    ) : null}
+                    <Text style={styles.eventTime}>
+                      {formatDateTime(event.createdAt)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
 
       {hasFooterActions ? (
         <View style={styles.footer}>
-          {canAccept ? (
+          {primaryAction ? (
             <Button
-              title="Accept"
+              title={primaryAction.title}
               fullWidth
               disabled={busy}
-              onPress={() => void runAction(() => acceptRequest(request.id))}
-            />
-          ) : null}
-          {canRespondToChanges ? (
-            <Button
-              title="Accept Changes"
-              fullWidth
-              disabled={busy}
-              onPress={() => void runAction(() => acceptChanges(request.id))}
-            />
-          ) : null}
-          {canDeliver ? (
-            <Button
-              title="Mark as delivered"
-              fullWidth
-              disabled={busy}
-              onPress={() =>
-                void runAction(() => markDelivered(request.workEngagementId!))
-              }
-            />
-          ) : null}
-          {canComplete ? (
-            <Button
-              title="Mark as completed"
-              fullWidth
-              disabled={busy}
-              onPress={() =>
-                void runAction(() => markCompleted(request.workEngagementId!))
-              }
+              onPress={() => void runAction(primaryAction.run)}
             />
           ) : null}
 
-          <View style={styles.secondaryRow}>
-            {canRequestChanges ? (
-              <Button
-                title="Request Changes"
-                variant="secondary"
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={openChanges}
-              />
-            ) : null}
-            {canRespondToChanges ? (
-              <Button
-                title="Decline Changes"
-                variant="secondary"
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={() =>
-                  void runAction(() => declineChanges(request.id))
-                }
-              />
-            ) : null}
-            {canReject ? (
-              <Button
-                title="Reject"
-                variant="secondary"
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={() => {
-                  setRejectReason('');
-                  setRejectOpen(true);
-                }}
-              />
-            ) : null}
-            {canWithdraw ? (
-              <Button
-                title="Withdraw"
-                variant="secondary"
-                style={styles.halfBtn}
-                disabled={busy}
-                onPress={() => void runAction(() => withdrawRequest(request.id))}
-              />
-            ) : null}
-          </View>
+          {hasSecondaryActions ? (
+            <View style={styles.secondaryActions}>
+              {canRequestChanges ? (
+                <Button
+                  title="Request Changes"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  disabled={busy}
+                  onPress={openChanges}
+                />
+              ) : null}
+              {canRespondToChanges ? (
+                <Button
+                  title="Decline Changes"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  disabled={busy}
+                  onPress={() => void runAction(() => declineChanges(request.id))}
+                />
+              ) : null}
+              {canReject ? (
+                <Button
+                  title="Reject"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  disabled={busy}
+                  onPress={() => {
+                    setRejectReason('');
+                    setRejectOpen(true);
+                  }}
+                />
+              ) : null}
+              {canWithdraw ? (
+                <Button
+                  title="Withdraw"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  disabled={busy}
+                  onPress={() => void runAction(() => withdrawRequest(request.id))}
+                />
+              ) : null}
+            </View>
+          ) : null}
 
           {awaitingPayment && isClient ? (
             <Text style={styles.footerHint}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
@@ -554,55 +708,200 @@ export default function WorkRequestDetailScreen({
         animationType="slide"
         onRequestClose={() => setChangesOpen(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setChangesOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Propose changes</Text>
-            <Text style={styles.fieldLabel}>Price</Text>
-            <TextInput
-              placeholder="e.g. SAR 9,000 project"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.singleLineInput}
-              value={proposedPrice}
-              onChangeText={setProposedPrice}
-            />
-            <Text style={styles.fieldLabel}>Deadline</Text>
-            <TextInput
-              placeholder="e.g. 3 weeks, or 05/14/2026"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.singleLineInput}
-              value={proposedDeadline}
-              onChangeText={setProposedDeadline}
-            />
-            <Text style={styles.fieldLabel}>Comment (optional)</Text>
-            <TextInput
-              placeholder="Explain what you changed…"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
-              multiline
-              value={proposalComment}
-              onChangeText={setProposalComment}
-            />
-            <Button
-              title="Send Changes"
-              fullWidth
-              disabled={
-                busy ||
-                (!proposedPrice.trim() && !proposedDeadline.trim())
-              }
-              onPress={() => {
-                setChangesOpen(false);
-                void runAction(() =>
-                  requestChanges(
-                    request.id,
-                    {
-                      price: proposedPrice.trim() || undefined,
-                      deadlineLabel: proposedDeadline.trim() || undefined,
-                    },
-                    proposalComment.trim() || undefined,
-                  ),
-                );
-              }}
-            />
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setChangesOpen(false)}
+        >
+          <Pressable
+            style={styles.changesSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <ScrollView
+              contentContainerStyle={styles.changesContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.modalTitle}>Propose changes</Text>
+
+              <Text style={styles.fieldLabel}>Deadline</Text>
+              <View style={styles.modeToggle}>
+                {DEADLINE_MODES.map((mode) => {
+                  const active = deadlineMode === mode.id;
+                  return (
+                    <TouchableOpacity
+                      key={mode.id}
+                      style={[styles.modeBtn, active && styles.modeBtnActive]}
+                      onPress={() => setDeadlineMode(mode.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.modeBtnText,
+                          active && styles.modeBtnTextActive,
+                        ]}
+                      >
+                        {mode.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {deadlineMode === 'exact_date' ? (
+                <View style={[styles.dateField, styles.dateFieldActive]}>
+                  <Text style={styles.dateFieldValue}>
+                    {exactDate ? formatPickedDate(exactDate) : 'Select date'}
+                  </Text>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                </View>
+              ) : null}
+
+              {deadlineMode === 'date_range' ? (
+                <View style={styles.durationRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.dateField,
+                      styles.durationField,
+                      activeRangeField === 'from' && styles.dateFieldActive,
+                    ]}
+                    onPress={() => setActiveRangeField('from')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.durationFieldInner}>
+                      <Text style={styles.durationLabel}>From</Text>
+                      <Text style={styles.dateFieldValue}>
+                        {rangeFrom ? formatPickedDate(rangeFrom) : 'Select'}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.dateField,
+                      styles.durationField,
+                      activeRangeField === 'to' && styles.dateFieldActive,
+                    ]}
+                    onPress={() => setActiveRangeField('to')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.durationFieldInner}>
+                      <Text style={styles.durationLabel}>To</Text>
+                      <Text style={styles.dateFieldValue}>
+                        {rangeTo ? formatPickedDate(rangeTo) : 'Select'}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {deadlineMode === 'exact_date' || deadlineMode === 'date_range' ? (
+                <CalendarPicker
+                  month={visibleMonth}
+                  onMonthChange={setVisibleMonth}
+                  onPickDay={onPickDay}
+                  mode={deadlineMode === 'date_range' ? 'range' : 'single'}
+                  selected={exactDate}
+                  rangeStart={rangeFrom}
+                  rangeEnd={rangeTo}
+                />
+              ) : null}
+
+              {deadlineMode === 'duration' ? (
+                <View style={styles.durationRow}>
+                  <TextInput
+                    placeholder="1"
+                    placeholderTextColor={colors.textSecondary}
+                    style={[styles.singleLineInput, styles.durationValueInput]}
+                    keyboardType="number-pad"
+                    value={durationValue}
+                    onChangeText={(text) =>
+                      setDurationValue(text.replace(/[^\d]/g, '').slice(0, 4))
+                    }
+                  />
+                  <View style={styles.unitToggle}>
+                    {DURATION_UNITS.map((unit) => {
+                      const active = durationUnit === unit;
+                      return (
+                        <TouchableOpacity
+                          key={unit}
+                          style={[styles.modeBtn, active && styles.modeBtnActive]}
+                          onPress={() => setDurationUnit(unit)}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={[
+                              styles.modeBtnText,
+                              active && styles.modeBtnTextActive,
+                            ]}
+                          >
+                            {unit}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+
+              {deadlineMode === 'flexible' ? (
+                <Text style={styles.hintText}>
+                  No fixed deadline — you agree on timing later.
+                </Text>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>Price</Text>
+              <View style={styles.priceInputRow}>
+                <Text style={styles.currencyText}>{currency}</Text>
+                <TextInput
+                  placeholder="0"
+                  placeholderTextColor={colors.textSecondary}
+                  style={styles.priceInput}
+                  keyboardType="decimal-pad"
+                  value={amountText}
+                  onChangeText={(text) => setAmountText(formatAmountInput(text))}
+                />
+              </View>
+              {amountText.trim().length > 0 && proposedAmount === null ? (
+                <Text style={styles.errorHint}>
+                  Enter an amount greater than zero.
+                </Text>
+              ) : (
+                <Text style={styles.hintText}>
+                  Leave blank to keep the current price.
+                </Text>
+              )}
+
+              <Text style={styles.fieldLabel}>Comment (optional)</Text>
+              <TextInput
+                placeholder="Explain what you changed…"
+                placeholderTextColor={colors.textSecondary}
+                style={styles.input}
+                multiline
+                value={proposalComment}
+                onChangeText={setProposalComment}
+              />
+
+              <Button
+                title="Send Changes"
+                fullWidth
+                disabled={busy || !deadlineReady || !amountReady}
+                onPress={submitChanges}
+              />
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -738,7 +1037,12 @@ const styles = StyleSheet.create({
     minHeight: 26,
   },
   rowLabel: { ...typography.caption, color: colors.textSecondary },
-  rowValue: { ...typography.bodySmall, color: colors.text, flexShrink: 1, textAlign: 'right' },
+  rowValue: {
+    ...typography.bodySmall,
+    color: colors.text,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
   partyValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   block: { gap: 2, paddingTop: spacing.xs },
   blockValue: { ...typography.bodySmall, color: colors.text, lineHeight: 20 },
@@ -771,6 +1075,7 @@ const styles = StyleSheet.create({
   },
   eventBody: { flex: 1, gap: 1 },
   eventTitle: { ...typography.bodySmall, color: colors.text, fontWeight: '600' },
+  eventSummary: { ...typography.caption, color: colors.text },
   eventNote: { ...typography.caption, color: colors.textSecondary },
   eventTime: { ...typography.caption, color: colors.textSecondary },
   footer: {
@@ -782,7 +1087,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
   },
-  secondaryRow: { flexDirection: 'row', gap: spacing.sm },
+  secondaryActions: { flexDirection: 'row', gap: spacing.sm },
   halfBtn: { flex: 1 },
   footerHint: { ...typography.caption, color: colors.textSecondary },
   modalBackdrop: {
@@ -798,14 +1103,112 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
   },
+  changesSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: spacing.sm,
+    maxHeight: '88%',
+  },
+  changesContent: {
+    paddingHorizontal: spacing.screen,
+    paddingBottom: spacing.xxl,
+    gap: spacing.sm,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.sm,
+  },
   modalTitle: { ...typography.h3, color: colors.text },
   fieldLabel: { ...typography.caption, color: colors.textSecondary },
+  hintText: { ...typography.caption, color: colors.textTertiary },
+  errorHint: { ...typography.caption, color: colors.error },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.button,
+    padding: 2,
+  },
+  modeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 2,
+    borderRadius: radius.button - 2,
+  },
+  modeBtnActive: { backgroundColor: colors.primary },
+  modeBtnText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modeBtnTextActive: { color: colors.white },
+  dateField: {
+    minHeight: 42,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+  },
+  dateFieldActive: { borderColor: colors.primary },
+  dateFieldValue: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  durationRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  durationField: { flex: 1 },
+  durationFieldInner: { flex: 1, gap: 1 },
+  durationLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 10,
+  },
+  durationValueInput: { width: 72, textAlign: 'center' },
+  unitToggle: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.button,
+    padding: 2,
+  },
+  priceInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.md,
+    minHeight: 42,
+    gap: spacing.xs,
+  },
+  currencyText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  priceInput: {
+    flex: 1,
+    ...typography.bodySmall,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+  },
   singleLineInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radius.button,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    minHeight: 42,
     ...typography.bodySmall,
     color: colors.text,
   },

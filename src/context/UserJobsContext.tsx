@@ -31,6 +31,7 @@ import {
   SOURCE_BADGE_LABEL,
   WorkRequestTerms,
   effectiveTerms,
+  formatDeadline,
   workRequestApi,
 } from '../services/workRequestApi';
 
@@ -186,11 +187,15 @@ function activityCopy(
   return direction === 'sent' ? 'Direct request sent' : 'Direct request received';
 }
 
-function priceLabel(terms: WorkRequestTerms): string {
-  if (!terms.price) return 'Negotiable';
-  return terms.currency && !terms.price.includes(terms.currency)
-    ? `${terms.currency} ${terms.price}`
-    : terms.price;
+/** `Aug 12, 2026` — the day the row was created, never a price or a deadline. */
+function formatCardDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function detailsFromTerms(
@@ -202,14 +207,14 @@ function detailsFromTerms(
     packageName: terms.packageName || terms.packageTier || '',
     addons: (terms.addons ?? []).map((addon) => ({
       name: addon.title,
-      price: Number(addon.price.replace(/[^\d.]/g, '')) || 0,
+      price: addon.money?.amount ?? 0,
     })),
-    deadline: terms.deadlineLabel || '',
+    deadline: formatDeadline(terms.deadline),
     notes: terms.notes || terms.scope || '',
     attachmentName: '',
     attachmentSize: '',
-    packagePrice: Number(terms.price.replace(/[^\d.]/g, '')) || 0,
-    currencySymbol: terms.currency || '',
+    packagePrice: terms.money?.amount ?? 0,
+    currencySymbol: terms.money?.currency ?? '',
     requestedAt: new Date(request.createdAt).toLocaleString('en-US', {
       day: 'numeric',
       month: 'short',
@@ -247,7 +252,7 @@ export function mapWorkRequestToUserJob(
     statusLabel: mapped.statusLabel,
     section: mapped.section,
     counterpart: partyToUser(counterparty),
-    date: terms.deadlineLabel || priceLabel(terms),
+    date: formatCardDate(request.createdAt),
     createdAt: request.createdAt,
     jobType: terms.employmentType ?? undefined,
     unread: request.unread,
@@ -273,7 +278,7 @@ export function mapListingToPostedUserJob(
     statusLabel: listing.status.replace(/_/g, ' '),
     section: 'posted',
     counterpart: me,
-    date: listing.salaryLabel || 'Negotiable',
+    date: formatCardDate(listing.createdAt),
     createdAt: listing.createdAt,
     jobType: employmentTypeToUi(listing.employmentType),
     activityLabel: 'Posted',
