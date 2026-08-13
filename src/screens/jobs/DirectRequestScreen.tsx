@@ -15,6 +15,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
@@ -311,6 +312,7 @@ export default function DirectRequestScreen({
         </View>
       </KeyboardAvoidingView>
 
+      <ActionBusyOverlay visible={submitting} message="Sending request…" />
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}

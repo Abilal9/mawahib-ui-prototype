@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
@@ -883,6 +884,7 @@ export default function RequestServiceScreen({
         </Pressable>
       </Modal>
 
+      <ActionBusyOverlay visible={submitting} message="Sending request…" />
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}

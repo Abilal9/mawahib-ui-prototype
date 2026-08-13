@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
@@ -142,6 +143,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     remove,
   } = useNotifications();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
+  const [responding, setResponding] = useState(false);
 
   const filtered = useMemo(
     () => filterNotifications(notifications, activeTab),
@@ -219,12 +221,14 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     successKey: 'requestAccepted' | 'requestRejected',
     onSuccess: () => void,
   ) => {
+    if (responding) return;
     const requestId = resolveRequestId(item);
     if (!requestId) {
       navigation.navigate('MainTabs', { screen: 'JobsTab' });
       return;
     }
     void (async () => {
+      setResponding(true);
       try {
         await respond(requestId);
         onSuccess();
@@ -236,6 +240,8 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             ? e.message
             : 'Please try again.',
         );
+      } finally {
+        setResponding(false);
       }
     })();
   };
@@ -316,6 +322,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
 
+      <ActionBusyOverlay visible={responding} message="Updating request…" />
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}

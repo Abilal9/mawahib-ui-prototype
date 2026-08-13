@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
@@ -136,6 +137,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
         />
       </View>
 
+      <ActionBusyOverlay visible={submitting} message="Publishing job…" />
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}

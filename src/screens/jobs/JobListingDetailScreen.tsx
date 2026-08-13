@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
@@ -306,6 +307,10 @@ export default function JobListingDetailScreen({
         )}
       </View>
 
+      <ActionBusyOverlay
+        visible={applying || ownerBusy}
+        message={applying ? 'Sending application…' : 'Updating listing…'}
+      />
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}

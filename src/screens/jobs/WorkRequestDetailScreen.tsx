@@ -17,6 +17,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
@@ -127,17 +128,63 @@ function parseAmountInput(text: string): number | null {
   return Math.round(amount * 100) / 100;
 }
 
-function TermsBlock({ terms }: { terms: WorkRequestTerms }) {
+function moneyChanged(
+  a: WorkRequestTerms['money'],
+  b: WorkRequestTerms['money'],
+): boolean {
+  if (!a && !b) return false;
+  if (!a || !b) return true;
+  return a.amount !== b.amount || a.currency !== b.currency;
+}
+
+function deadlineChanged(
+  a: WorkRequestTerms['deadline'],
+  b: WorkRequestTerms['deadline'],
+): boolean {
+  return formatDeadline(a) !== formatDeadline(b);
+}
+
+function TermsBlock({
+  terms,
+  compareWith,
+  variant = 'plain',
+}: {
+  terms: WorkRequestTerms;
+  /** When set, price/deadline diffs against this snapshot are highlighted. */
+  compareWith?: WorkRequestTerms | null;
+  variant?: 'plain' | 'original' | 'proposed';
+}) {
   const addons = terms.addons ?? [];
   const total = termsTotal(terms);
   const showTotal =
     addons.length > 0 && !!total && total.amount !== terms.money?.amount;
+  const priceDiff = compareWith
+    ? moneyChanged(terms.money, compareWith.money)
+    : false;
+  const deadlineDiff = compareWith
+    ? deadlineChanged(terms.deadline, compareWith.deadline)
+    : false;
 
   return (
-    <View style={styles.termsCard}>
+    <View
+      style={[
+        styles.termsCard,
+        variant === 'proposed' && styles.proposedTermsCard,
+      ]}
+    >
       <Row label="Title" value={terms.title || '—'} />
-      <Row label="Price" value={formatMoney(terms.money) || 'Negotiable'} />
-      <Row label="Deadline" value={formatDeadline(terms.deadline)} />
+      <Row
+        label="Price"
+        value={formatMoney(terms.money) || 'Negotiable'}
+        struck={variant === 'original' && priceDiff}
+        emphasized={variant === 'proposed' && priceDiff}
+      />
+      <Row
+        label="Deadline"
+        value={formatDeadline(terms.deadline)}
+        struck={variant === 'original' && deadlineDiff}
+        emphasized={variant === 'proposed' && deadlineDiff}
+      />
       {terms.packageName || terms.packageTier ? (
         <Row
           label="Package"
@@ -159,11 +206,28 @@ function TermsBlock({ terms }: { terms: WorkRequestTerms }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  struck,
+  emphasized,
+}: {
+  label: string;
+  value: string;
+  struck?: boolean;
+  emphasized?: boolean;
+}) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={2}>
+      <Text
+        style={[
+          styles.rowValue,
+          struck && styles.struckValue,
+          emphasized && styles.emphasizedValue,
+        ]}
+        numberOfLines={2}
+      >
         {value}
       </Text>
     </View>
@@ -570,12 +634,26 @@ export default function WorkRequestDetailScreen({
         ) : null}
 
         <Text style={styles.sectionTitle}>Original terms</Text>
-        <TermsBlock terms={request.terms} />
+        <TermsBlock
+          terms={request.terms}
+          compareWith={
+            request.status === 'changes_requested'
+              ? request.proposedTerms
+              : null
+          }
+          variant={
+            request.status === 'changes_requested' ? 'original' : 'plain'
+          }
+        />
 
         {request.status === 'changes_requested' && request.proposedTerms ? (
           <>
             <Text style={styles.sectionTitle}>Proposed terms</Text>
-            <TermsBlock terms={request.proposedTerms} />
+            <TermsBlock
+              terms={request.proposedTerms}
+              compareWith={request.terms}
+              variant="proposed"
+            />
             {request.proposalComment ? (
               <View style={styles.commentCard}>
                 <Text style={styles.rowLabel}>Comment</Text>
@@ -963,6 +1041,8 @@ export default function WorkRequestDetailScreen({
         </Pressable>
       </Modal>
 
+      <ActionBusyOverlay visible={busy} message="Updating request…" />
+
       <SuccessConfirmationModal
         visible={successVisible}
         title={successTitle}
@@ -1093,6 +1173,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
+  proposedTermsCard: {
+    borderColor: colors.primaryLight,
+    borderWidth: 1.5,
+    backgroundColor: colors.primary + '06',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1106,6 +1191,14 @@ const styles = StyleSheet.create({
     color: colors.text,
     flexShrink: 1,
     textAlign: 'right',
+  },
+  struckValue: {
+    textDecorationLine: 'line-through',
+    color: colors.textSecondary,
+  },
+  emphasizedValue: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   partyValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   block: { gap: 2, paddingTop: spacing.xs },

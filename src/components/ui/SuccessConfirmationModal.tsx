@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,9 +18,12 @@ export interface SuccessConfirmationModalProps {
   message: string;
   /** Primary button label */
   doneLabel?: string;
-  /** Called when the user taps Done or the auto-dismiss timer fires */
+  /** Called only when the user taps Done — never auto-navigate away. */
   onDone: () => void;
-  /** Auto-navigate after a short delay (default true) */
+  /**
+   * Optional auto-dismiss. Default false so the user must tap Done before
+   * leaving the screen (avoids racing redirects while they read the result).
+   */
   autoDismiss?: boolean;
 }
 
@@ -36,7 +38,7 @@ export default function SuccessConfirmationModal({
   message,
   doneLabel = 'Done',
   onDone,
-  autoDismiss = true,
+  autoDismiss = false,
 }: SuccessConfirmationModalProps) {
   const insets = useSafeAreaInsets();
   const doneRef = useRef(onDone);
@@ -70,13 +72,12 @@ export default function SuccessConfirmationModal({
       animationType="fade"
       onRequestClose={handleDone}
     >
-      <Pressable style={styles.backdrop} onPress={handleDone}>
-        <Pressable
+      <View style={styles.backdrop}>
+        <View
           style={[
             styles.sheet,
             { paddingBottom: Math.max(insets.bottom, spacing.lg) },
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           <View style={styles.graphic}>
             <View style={styles.circle}>
@@ -90,8 +91,8 @@ export default function SuccessConfirmationModal({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
           <Button title={doneLabel} fullWidth onPress={handleDone} />
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
