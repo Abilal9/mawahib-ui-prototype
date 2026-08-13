@@ -85,7 +85,6 @@ export const MARKETPLACE_SUCCESS = {
     message: 'This engagement has been completed successfully.',
     landing: { tab: 'sent', section: 'completed' },
   },
-  // History section uses the same `completed` Jobs landing key.
   listingArchived: {
     title: 'Listing Archived',
     message: 'Your listing has been archived.',
