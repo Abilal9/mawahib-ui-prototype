@@ -34,6 +34,7 @@ const STATUS_OPTIONS: { id: JobsFilters['status']; label: string }[] = [
   { id: 'all', label: 'All statuses' },
   { id: 'pending', label: 'Pending' },
   { id: 'changes-requested', label: 'Changes requested' },
+  { id: 'changes-declined', label: 'Changes declined' },
   { id: 'pending-payment', label: 'Pending payment' },
   { id: 'in-progress', label: 'In progress' },
   { id: 'delivered', label: 'Delivered' },

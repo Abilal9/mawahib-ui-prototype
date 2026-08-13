@@ -10,10 +10,12 @@ export type WorkRequestSource =
 /**
  * Negotiation status. `pending_payment` is the accepted terminal state —
  * the engagement it creates waits for money (Phase 5).
+ * `changes_declined` keeps negotiation open after the sender declines a proposal.
  */
 export type WorkRequestStatus =
   | 'pending'
   | 'changes_requested'
+  | 'changes_declined'
   | 'pending_payment'
   | 'rejected'
   | 'withdrawn';

@@ -165,6 +165,12 @@ function mapStatus(request: ApiWorkRequest): {
         statusLabel: 'Changes Requested',
         section: 'requests',
       };
+    case 'changes_declined':
+      return {
+        status: 'changes-declined',
+        statusLabel: 'Changes Declined',
+        section: 'requests',
+      };
     case 'rejected':
       return { status: 'rejected', statusLabel: 'Rejected', section: 'requests' };
     case 'withdrawn':

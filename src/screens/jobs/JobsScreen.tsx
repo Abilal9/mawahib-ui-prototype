@@ -84,6 +84,8 @@ function getStatusTone(status: UserJob['status']) {
       return { bg: '#FCE7F3', text: '#BE185D' };
     case 'changes-requested':
       return { bg: '#FEF9C3', text: '#8A6A16' };
+    case 'changes-declined':
+      return { bg: '#FFEDD5', text: '#C2410C' };
     case 'pending-payment':
       return { bg: '#E0ECFF', text: '#2E6AC5' };
     case 'rejected':

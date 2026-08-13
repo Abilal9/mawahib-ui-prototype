@@ -60,6 +60,7 @@ const STATUS_TONE: Record<
 > = {
   pending: { bg: '#FCE7F3', text: '#BE185D' },
   changes_requested: { bg: '#FEF9C3', text: '#8A6A16' },
+  changes_declined: { bg: '#FFEDD5', text: '#C2410C' },
   pending_payment: { bg: '#E0ECFF', text: '#2E6AC5' },
   rejected: { bg: '#FEE2E2', text: '#B91C1C' },
   withdrawn: { bg: '#EEF2F6', text: '#627D98' },
@@ -68,6 +69,7 @@ const STATUS_TONE: Record<
 const STATUS_LABEL: Record<ApiWorkRequest['status'], string> = {
   pending: 'Pending',
   changes_requested: 'Changes Requested',
+  changes_declined: 'Changes Declined',
   pending_payment: 'Awaiting Payment',
   rejected: 'Rejected',
   withdrawn: 'Withdrawn',
@@ -312,6 +314,9 @@ export default function WorkRequestDetailScreen({
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
@@ -360,18 +365,19 @@ export default function WorkRequestDetailScreen({
   );
 
   /**
-   * `successKey` marks the actions that end the negotiation for this viewer: they
+   * `successKey` marks the actions that leave this screen after Done: they
    * confirm and hand off to the Jobs inbox instead of refreshing this screen.
    */
   const runAction = async (
     action: () => Promise<unknown>,
     successKey?: MarketplaceSuccessKey,
+    landingOverride?: Parameters<typeof showSuccess>[1],
   ) => {
     setBusy(true);
     try {
       await action();
       if (successKey) {
-        showSuccess(successKey);
+        showSuccess(successKey, landingOverride);
         return;
       }
       const fresh = await workRequestApi.get(requestId);
@@ -422,15 +428,24 @@ export default function WorkRequestDetailScreen({
   const isProvider = request.providerUserId === viewerId;
   const tone = STATUS_TONE[request.status];
 
-  const canAccept = isRecipient && request.status === 'pending';
-  const canRequestChanges = isRecipient && request.status === 'pending';
-  const canReject =
+  const canAccept =
     isRecipient &&
-    (request.status === 'pending' || request.status === 'changes_requested');
+    (request.status === 'pending' || request.status === 'changes_declined');
+  const canRequestChanges =
+    isRecipient &&
+    (request.status === 'pending' || request.status === 'changes_declined');
+  const canReject =
+    (isRecipient &&
+      (request.status === 'pending' ||
+        request.status === 'changes_requested' ||
+        request.status === 'changes_declined')) ||
+    (isSender && request.status === 'changes_requested');
   const canRespondToChanges = isSender && request.status === 'changes_requested';
   const canWithdraw =
     isSender &&
-    (request.status === 'pending' || request.status === 'changes_requested');
+    (request.status === 'pending' ||
+      request.status === 'changes_requested' ||
+      request.status === 'changes_declined');
   const awaitingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
@@ -439,15 +454,20 @@ export default function WorkRequestDetailScreen({
     isProvider && request.workEngagementStatus === 'in_progress';
   const canComplete =
     isClient && request.workEngagementStatus === 'delivered';
+  const isCompletedEngagement = request.workEngagementStatus === 'completed';
 
   /** The one call to action; everything else lives in the secondary row. */
   const primaryAction: {
     title: string;
-    run: () => Promise<unknown>;
+    run?: () => Promise<unknown>;
     successKey?: MarketplaceSuccessKey;
+    onPress?: () => void;
   } | null = canAccept
     ? {
-        title: 'Accept',
+        title:
+          request.status === 'changes_declined'
+            ? 'Accept Original Terms'
+            : 'Accept',
         run: () => acceptRequest(request.id),
         successKey: 'requestAccepted',
       }
@@ -460,19 +480,22 @@ export default function WorkRequestDetailScreen({
       : canDeliver
         ? {
             title: 'Mark as delivered',
-            run: () => markDelivered(request.workEngagementId!),
+            onPress: () => setCompleteConfirmOpen(true),
           }
         : canComplete
           ? {
-              title: 'Mark as completed',
-              run: () => markCompleted(request.workEngagementId!),
+              title: 'Complete Job',
+              onPress: () => setCompleteConfirmOpen(true),
             }
           : null;
 
   const hasSecondaryActions =
     canRequestChanges || canRespondToChanges || canReject || canWithdraw;
   const hasFooterActions =
-    !!primaryAction || hasSecondaryActions || awaitingPayment;
+    !!primaryAction ||
+    hasSecondaryActions ||
+    awaitingPayment ||
+    isCompletedEngagement;
 
   const openChanges = () => {
     const money = terms.money;
@@ -723,6 +746,55 @@ export default function WorkRequestDetailScreen({
           </View>
         ) : null}
 
+        {request.status === 'changes_declined' ? (
+          <View style={[styles.noticeCard, styles.declineNotice]}>
+            <Ionicons name="return-down-back-outline" size={18} color="#C2410C" />
+            <Text style={[styles.noticeText, styles.declineNoticeText]}>
+              {isRecipient
+                ? 'Proposed changes were declined. You can accept the original terms, request new changes, or reject the request.'
+                : 'You declined the proposed changes. Waiting for the other party to respond.'}
+              {(() => {
+                const last = [...request.events]
+                  .reverse()
+                  .find((e) => e.type === 'changes_declined' && e.note);
+                return last?.note ? `\n\n“${last.note}”` : '';
+              })()}
+            </Text>
+          </View>
+        ) : null}
+
+        {isCompletedEngagement ? (
+          <View style={styles.reviewCard}>
+            <Text style={styles.sectionTitle}>Leave a review</Text>
+            <Text style={styles.reviewPlaceholder}>
+              Reviews will be available in the next phase.
+            </Text>
+            <View style={styles.starsRow}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Ionicons
+                  key={i}
+                  name="star-outline"
+                  size={28}
+                  color={colors.border}
+                />
+              ))}
+            </View>
+            <TextInput
+              editable={false}
+              placeholder="Share your experience…"
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.input, styles.reviewInputDisabled]}
+              multiline
+            />
+            <Button
+              title="Submit Review"
+              fullWidth
+              disabled
+              onPress={() => {}}
+            />
+          </View>
+        ) : null}
+
         <Text style={styles.sectionTitle}>History</Text>
         <View style={styles.termsCard}>
           {request.events.length === 0 ? (
@@ -730,7 +802,8 @@ export default function WorkRequestDetailScreen({
           ) : (
             request.events.map((event) => {
               const change =
-                event.type === 'changes_requested'
+                event.type === 'changes_requested' ||
+                event.type === 'changes_declined'
                   ? termsChangeFromPayload(event.payload)
                   : null;
               const summary = change ? summarizeTermsChange(change) : '';
@@ -765,9 +838,15 @@ export default function WorkRequestDetailScreen({
               title={primaryAction.title}
               fullWidth
               disabled={busy}
-              onPress={() =>
-                void runAction(primaryAction.run, primaryAction.successKey)
-              }
+              onPress={() => {
+                if (primaryAction.onPress) {
+                  primaryAction.onPress();
+                  return;
+                }
+                if (primaryAction.run) {
+                  void runAction(primaryAction.run, primaryAction.successKey);
+                }
+              }}
             />
           ) : null}
 
@@ -792,17 +871,15 @@ export default function WorkRequestDetailScreen({
                   textStyle={styles.requestChangesText}
                   numberOfLines={1}
                   disabled={busy}
-                  onPress={() =>
-                    void runAction(
-                      () => declineChanges(request.id),
-                      'changesDeclined',
-                    )
-                  }
+                  onPress={() => {
+                    setDeclineReason('');
+                    setDeclineOpen(true);
+                  }}
                 />
               ) : null}
               {canReject ? (
                 <Button
-                  title="Reject"
+                  title="Reject Request"
                   variant="secondary"
                   style={styles.rejectHalfBtn}
                   textStyle={styles.rejectBtnText}
@@ -846,6 +923,9 @@ export default function WorkRequestDetailScreen({
         <Pressable style={styles.modalBackdrop} onPress={() => setRejectOpen(false)}>
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Reject request</Text>
+            <Text style={styles.modalHint}>
+              This permanently closes the work request. It cannot be undone.
+            </Text>
             <TextInput
               placeholder="Optional reason…"
               placeholderTextColor={colors.textSecondary}
@@ -865,9 +945,124 @@ export default function WorkRequestDetailScreen({
                   () =>
                     rejectRequest(request.id, rejectReason.trim() || undefined),
                   'requestRejected',
+                  {
+                    tab: isSender ? 'sent' : 'received',
+                    section: 'requests',
+                  },
                 );
               }}
             />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={declineOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeclineOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setDeclineOpen(false)}
+        >
+          <Pressable
+            style={styles.modalSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>Decline changes</Text>
+            <Text style={styles.modalHint}>
+              The request stays open. The other party can accept the original
+              terms, propose again, or reject the request.
+            </Text>
+            <TextInput
+              placeholder="Optional message (e.g. I can do four days, not two)…"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              multiline
+              value={declineReason}
+              onChangeText={setDeclineReason}
+            />
+            <Button
+              title="Send Decline"
+              fullWidth
+              disabled={busy}
+              onPress={() => {
+                setDeclineOpen(false);
+                void runAction(
+                  () =>
+                    declineChanges(
+                      request.id,
+                      declineReason.trim() || undefined,
+                    ),
+                  'changesDeclined',
+                );
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={completeConfirmOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCompleteConfirmOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setCompleteConfirmOpen(false)}
+        >
+          <Pressable
+            style={styles.modalSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>
+              {canComplete ? 'Complete Job?' : 'Mark as delivered?'}
+            </Text>
+            <Text style={styles.modalHint}>
+              {canComplete
+                ? 'Are you sure this work has been completed?\n\nThis action will move the job to your Completed section.'
+                : 'Confirm that you have delivered the work. The client will then be able to mark the job complete.'}
+            </Text>
+            <View style={styles.confirmActions}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={styles.halfBtn}
+                disabled={busy}
+                onPress={() => setCompleteConfirmOpen(false)}
+              />
+              <Button
+                title={canComplete ? 'Complete Job' : 'Confirm'}
+                style={styles.halfBtn}
+                disabled={busy}
+                onPress={() => {
+                  setCompleteConfirmOpen(false);
+                  if (canComplete) {
+                    void runAction(
+                      () => markCompleted(request.workEngagementId!),
+                      'jobCompleted',
+                      {
+                        tab: isSender ? 'sent' : 'received',
+                        section: 'completed',
+                      },
+                    );
+                    return;
+                  }
+                  if (canDeliver) {
+                    void runAction(
+                      () => markDelivered(request.workEngagementId!),
+                      'jobDelivered',
+                      {
+                        tab: isProvider ? 'received' : 'sent',
+                        section: 'in-progress',
+                      },
+                    );
+                  }
+                }}
+              />
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1245,14 +1440,38 @@ const styles = StyleSheet.create({
   rejectionCard: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
   noticeCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     backgroundColor: '#E0ECFF',
     borderRadius: radius.card,
     padding: spacing.md,
     marginTop: spacing.md,
   },
-  noticeText: { ...typography.bodySmall, color: '#2E6AC5', flex: 1 },
+  declineNotice: { backgroundColor: '#FFEDD5' },
+  noticeText: { ...typography.bodySmall, color: '#2E6AC5', flex: 1, lineHeight: 20 },
+  declineNoticeText: { color: '#9A3412' },
+  reviewCard: {
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  reviewPlaceholder: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: -spacing.xs,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginVertical: spacing.xs,
+  },
+  reviewInputDisabled: {
+    backgroundColor: colors.background,
+    opacity: 0.85,
+  },
   eventRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.xs },
   eventDot: {
     width: 8,
@@ -1325,6 +1544,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   modalTitle: { ...typography.h3, color: colors.text },
+  modalHint: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.xs,
+  },
+  confirmActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   fieldLabel: { ...typography.caption, color: colors.textSecondary },
   hintText: { ...typography.caption, color: colors.textTertiary },
   priceField: { marginBottom: spacing.sm },

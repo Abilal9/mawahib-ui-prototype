@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { NavigationProp, ParamListBase } from '@react-navigation/native';
 import {
+  JobsLanding,
   MARKETPLACE_SUCCESS,
   MarketplaceSuccessKey,
   resetToJobs,
@@ -10,6 +11,7 @@ interface SuccessState {
   key: MarketplaceSuccessKey;
   title: string;
   message: string;
+  landing: JobsLanding;
 }
 
 /**
@@ -22,14 +24,22 @@ export function useMarketplaceSuccess(
 ) {
   const [success, setSuccess] = useState<SuccessState | null>(null);
 
-  const showSuccess = useCallback((key: MarketplaceSuccessKey) => {
-    const copy = MARKETPLACE_SUCCESS[key];
-    setSuccess({ key, title: copy.title, message: copy.message });
-  }, []);
+  const showSuccess = useCallback(
+    (key: MarketplaceSuccessKey, landingOverride?: Partial<JobsLanding>) => {
+      const copy = MARKETPLACE_SUCCESS[key];
+      setSuccess({
+        key,
+        title: copy.title,
+        message: copy.message,
+        landing: { ...copy.landing, ...landingOverride },
+      });
+    },
+    [],
+  );
 
   const completeSuccess = useCallback(async () => {
     if (!success) return;
-    const landing = MARKETPLACE_SUCCESS[success.key].landing;
+    const landing = success.landing;
     setSuccess(null);
     if (refresh) {
       try {

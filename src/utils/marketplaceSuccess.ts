@@ -44,7 +44,7 @@ export const MARKETPLACE_SUCCESS = {
   },
   requestRejected: {
     title: 'Request Rejected',
-    message: 'The requester has been notified.',
+    message: 'This work request has been closed.',
     landing: { tab: 'received', section: 'requests' },
   },
   changesRequested: {
@@ -60,13 +60,24 @@ export const MARKETPLACE_SUCCESS = {
   },
   changesDeclined: {
     title: 'Changes Declined',
-    message: 'The request has been closed.',
+    message:
+      'Your response was sent. The other party can accept the original terms, propose again, or reject the request.',
     landing: { tab: 'sent', section: 'requests' },
   },
   requestWithdrawn: {
     title: 'Request Withdrawn',
     message: 'Your request has been withdrawn successfully.',
     landing: { tab: 'sent', section: 'requests' },
+  },
+  jobDelivered: {
+    title: 'Marked as Delivered',
+    message: 'The client can now confirm completion.',
+    landing: { tab: 'received', section: 'in-progress' },
+  },
+  jobCompleted: {
+    title: 'Job Completed',
+    message: 'This engagement has been completed successfully.',
+    landing: { tab: 'sent', section: 'completed' },
   },
   listingArchived: {
     title: 'Listing Archived',
