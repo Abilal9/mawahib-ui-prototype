@@ -6,10 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
   NOTIFICATION_TABS,
@@ -21,7 +23,9 @@ import { Notification } from '../../data/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useNotifications } from '../../context/NotificationsContext';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { ApiError } from '../../lib/apiClient';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -120,8 +124,15 @@ function NotificationItem({
 }
 
 export default function NotificationsScreen({ navigation }: ScreenProps<'Notifications'>) {
-  const { getJobById, acceptRequest, rejectRequest } = useUserJobs();
+  const { getJobById, acceptRequest, rejectRequest, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
   const {
     notifications,
     markRead,
@@ -201,6 +212,34 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     setActiveTab(tab);
   };
 
+  /** The inline Accept / Decline buttons act on the work request behind the row. */
+  const respondToRequest = (
+    item: Notification,
+    respond: (requestId: string) => Promise<unknown>,
+    successKey: 'requestAccepted' | 'requestRejected',
+    onSuccess: () => void,
+  ) => {
+    const requestId = resolveRequestId(item);
+    if (!requestId) {
+      navigation.navigate('MainTabs', { screen: 'JobsTab' });
+      return;
+    }
+    void (async () => {
+      try {
+        await respond(requestId);
+        onSuccess();
+        showSuccess(successKey);
+      } catch (e) {
+        Alert.alert(
+          'Could not update request',
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Please try again.',
+        );
+      }
+    })();
+  };
+
   return (
     <ScreenContainer padded={false} backgroundColor={colors.white}>
       <StatusBar style="dark" />
@@ -247,25 +286,16 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
           <NotificationItem
             item={item}
             onPress={() => openNotification(item)}
-            onAccept={() => {
-              const requestId = resolveRequestId(item);
-              clearActions(item.id);
-              if (!requestId) {
-                navigation.navigate('MainTabs', { screen: 'JobsTab' });
-                return;
-              }
-              void (async () => {
-                await acceptRequest(requestId);
-                navigation.navigate('WorkRequestDetail', { requestId });
-              })();
-            }}
-            onDecline={() => {
-              const requestId = resolveRequestId(item);
-              if (requestId) {
-                void rejectRequest(requestId);
-              }
-              remove(item.id);
-            }}
+            onAccept={() =>
+              respondToRequest(item, acceptRequest, 'requestAccepted', () =>
+                clearActions(item.id),
+              )
+            }
+            onDecline={() =>
+              respondToRequest(item, rejectRequest, 'requestRejected', () =>
+                remove(item.id),
+              )
+            }
             onRate={(rating) => {
               clearRatingPrompt(item.id);
               const requestId = resolveRequestId(item);
@@ -284,6 +314,13 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
           <Text style={styles.empty}>No notifications in this category.</Text>
         }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
       />
     </ScreenContainer>
   );

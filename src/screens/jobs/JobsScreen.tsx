@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -181,7 +181,10 @@ function JobFlowCard({
   );
 }
 
-export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
+export default function JobsScreen({
+  navigation,
+  route,
+}: TabScreenProps<'JobsTab'>) {
   const { jobs: userJobs, loading, error, unread, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
   const { accountType } = useAuth();
@@ -201,14 +204,41 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
     completed: 'most-recent',
     posted: 'most-recent',
   });
+  const pagerRef = useRef<ScrollView>(null);
+  const pendingSection = useRef<UserJobSection | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       void refresh();
-    }, [refresh]),
+      const landing = route.params;
+      if (landing?.tab === 'sent' || landing?.tab === 'received') {
+        setActiveTab(landing.tab);
+      }
+      if (landing?.section) {
+        pendingSection.current = landing.section;
+      }
+      if (landing?.tab || landing?.section) {
+        navigation.setParams({ tab: undefined, section: undefined });
+      }
+    }, [refresh, route.params, navigation]),
   );
 
   const sections = activeTab === 'received' ? RECEIVED_SECTIONS : SENT_SECTIONS;
+
+  useEffect(() => {
+    const target = pendingSection.current;
+    if (!target) return;
+    const idx = sections.findIndex((s) => s.key === target);
+    if (idx < 0) return;
+    pendingSection.current = null;
+    setActivePage(idx);
+    requestAnimationFrame(() => {
+      pagerRef.current?.scrollTo({
+        x: idx * (PANEL_WIDTH + spacing.md),
+        animated: false,
+      });
+    });
+  }, [activeTab, sections, userJobs.length]);
 
   const sectioned = useMemo(() => {
     const scoped = userJobs.filter((j) => j.type === activeTab);
@@ -282,6 +312,7 @@ export default function JobsScreen({ navigation }: TabScreenProps<'JobsTab'>) {
       <ScrollView
         // Remount per tab so the pager starts on the first section again.
         key={activeTab}
+        ref={pagerRef}
         horizontal
         pagingEnabled
         snapToInterval={PANEL_WIDTH + spacing.md}

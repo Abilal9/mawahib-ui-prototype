@@ -87,6 +87,8 @@ interface UserJobsContextValue {
   markCompleted: (engagementId: string) => Promise<void>;
   /** Always rejects: money moves in a later phase. */
   markJobPaid: (id: string) => Promise<never>;
+  archiveListing: (listingId: string) => Promise<void>;
+  reopenListing: (listingId: string) => Promise<void>;
   closeListing: (listingId: string) => Promise<void>;
   submitReview: (
     id: string,
@@ -434,6 +436,14 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         await refresh();
       },
       markJobPaid: () => Promise.reject(new Error(PAYMENTS_UNAVAILABLE_MESSAGE)),
+      archiveListing: async (listingId) => {
+        await marketplaceApi.transitionListing(listingId, 'archived');
+        await refresh();
+      },
+      reopenListing: async (listingId) => {
+        await marketplaceApi.transitionListing(listingId, 'open');
+        await refresh();
+      },
       closeListing: async (listingId) => {
         await marketplaceApi.transitionListing(listingId, 'closed');
         await refresh();

@@ -15,9 +15,11 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { ScreenProps } from '../../navigation/types';
 import {
@@ -70,8 +72,15 @@ export default function DirectRequestScreen({
   route,
   navigation,
 }: ScreenProps<'DirectRequest'>) {
-  const { createDirectRequest } = useUserJobs();
+  const { createDirectRequest, refresh } = useUserJobs();
   const recipient = useVisitorUser(route.params.userId);
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
 
   const [title, setTitle] = useState('');
   const [scope, setScope] = useState('');
@@ -111,7 +120,7 @@ export default function DirectRequestScreen({
     void (async () => {
       setSubmitting(true);
       try {
-        const requestId = await createDirectRequest({
+        await createDirectRequest({
           recipientUserId: route.params.userId,
           title: title.trim(),
           scope: scope.trim() || undefined,
@@ -122,7 +131,7 @@ export default function DirectRequestScreen({
           deadline,
           message: message.trim() || undefined,
         });
-        navigation.replace('WorkRequestDetail', { requestId });
+        showSuccess('directRequestSent');
       } catch (e) {
         Alert.alert(
           'Could not send request',
@@ -301,6 +310,13 @@ export default function DirectRequestScreen({
           />
         </View>
       </KeyboardAvoidingView>
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
+      />
     </ScreenContainer>
   );
 }

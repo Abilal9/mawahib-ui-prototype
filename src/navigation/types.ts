@@ -5,6 +5,18 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 /** Explore tabs — aligns with SearchScreen / explore utils (no legacy all/posts). */
 export type SearchContentType = 'talents' | 'jobs' | 'services';
 
+export type JobsTabLanding = {
+  /** Sent vs Received top tab */
+  tab?: 'sent' | 'received';
+  /** Horizontal section carousel key inside that tab */
+  section?:
+    | 'requests'
+    | 'pending-payment'
+    | 'in-progress'
+    | 'completed'
+    | 'posted';
+};
+
 export type MainTabParamList = {
   HomeTab: undefined;
   SearchTab:
@@ -15,7 +27,7 @@ export type MainTabParamList = {
     | undefined;
   CreateTab: undefined;
   MessagesTab: undefined;
-  JobsTab: undefined;
+  JobsTab: JobsTabLanding | undefined;
 };
 
 export type RootStackParamList = {

@@ -5,16 +5,25 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ApiError } from '../../lib/apiClient';
 
 const JOB_TYPES = ['full-time', 'part-time', 'contract', 'freelance'] as const;
 const TOTAL_STEPS = 3;
 
 export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJob'>) {
-  const { createPostedJob } = useUserJobs();
+  const { createPostedJob, refresh } = useUserJobs();
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
   const step = route.params?.step ?? 1;
   const [title, setTitle] = useState('');
   const [type, setType] = useState<typeof JOB_TYPES[number]>('full-time');
@@ -38,7 +47,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           budget: salary,
           jobType: type,
         });
-        navigation.navigate('MainTabs', { screen: 'JobsTab' });
+        showSuccess('jobPosted');
       } catch (e) {
         Alert.alert(
           'Could not post job',
@@ -126,6 +135,13 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           disabled={submitting || (step === 1 && !title.trim())}
         />
       </View>
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
+      />
     </ScreenContainer>
   );
 }

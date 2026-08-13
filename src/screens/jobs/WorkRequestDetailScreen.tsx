@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ApiError } from '../../lib/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +25,9 @@ import {
   PAYMENTS_UNAVAILABLE_MESSAGE,
   useUserJobs,
 } from '../../context/UserJobsContext';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
 import { ScreenProps } from '../../navigation/types';
 import {
   ApiWorkRequest,
@@ -191,8 +194,16 @@ export default function WorkRequestDetailScreen({
     withdrawRequest,
     markDelivered,
     markCompleted,
+    refresh,
     refreshUnread,
   } = useUserJobs();
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
 
   const [request, setRequest] = useState<ApiWorkRequest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -248,10 +259,21 @@ export default function WorkRequestDetailScreen({
     [request],
   );
 
-  const runAction = async (action: () => Promise<unknown>) => {
+  /**
+   * `successKey` marks the actions that end the negotiation for this viewer: they
+   * confirm and hand off to the Jobs inbox instead of refreshing this screen.
+   */
+  const runAction = async (
+    action: () => Promise<unknown>,
+    successKey?: MarketplaceSuccessKey,
+  ) => {
     setBusy(true);
     try {
       await action();
+      if (successKey) {
+        showSuccess(successKey);
+        return;
+      }
       const fresh = await workRequestApi.get(requestId);
       setRequest(fresh);
       await refreshUnread();
@@ -319,10 +341,22 @@ export default function WorkRequestDetailScreen({
     isClient && request.workEngagementStatus === 'delivered';
 
   /** The one call to action; everything else lives in the secondary row. */
-  const primaryAction = canAccept
-    ? { title: 'Accept', run: () => acceptRequest(request.id) }
+  const primaryAction: {
+    title: string;
+    run: () => Promise<unknown>;
+    successKey?: MarketplaceSuccessKey;
+  } | null = canAccept
+    ? {
+        title: 'Accept',
+        run: () => acceptRequest(request.id),
+        successKey: 'requestAccepted',
+      }
     : canRespondToChanges
-      ? { title: 'Accept Changes', run: () => acceptChanges(request.id) }
+      ? {
+          title: 'Accept Changes',
+          run: () => acceptChanges(request.id),
+          successKey: 'changesAccepted',
+        }
       : canDeliver
         ? {
             title: 'Mark as delivered',
@@ -430,12 +464,14 @@ export default function WorkRequestDetailScreen({
       proposedTerms.money = { amount: proposedAmount, currency };
     }
     setChangesOpen(false);
-    void runAction(() =>
-      requestChanges(
-        request.id,
-        proposedTerms,
-        proposalComment.trim() || undefined,
-      ),
+    void runAction(
+      () =>
+        requestChanges(
+          request.id,
+          proposedTerms,
+          proposalComment.trim() || undefined,
+        ),
+      'changesRequested',
     );
   };
 
@@ -615,7 +651,9 @@ export default function WorkRequestDetailScreen({
               title={primaryAction.title}
               fullWidth
               disabled={busy}
-              onPress={() => void runAction(primaryAction.run)}
+              onPress={() =>
+                void runAction(primaryAction.run, primaryAction.successKey)
+              }
             />
           ) : null}
 
@@ -636,7 +674,12 @@ export default function WorkRequestDetailScreen({
                   variant="secondary"
                   style={styles.halfBtn}
                   disabled={busy}
-                  onPress={() => void runAction(() => declineChanges(request.id))}
+                  onPress={() =>
+                    void runAction(
+                      () => declineChanges(request.id),
+                      'changesDeclined',
+                    )
+                  }
                 />
               ) : null}
               {canReject ? (
@@ -657,7 +700,12 @@ export default function WorkRequestDetailScreen({
                   variant="secondary"
                   style={styles.halfBtn}
                   disabled={busy}
-                  onPress={() => void runAction(() => withdrawRequest(request.id))}
+                  onPress={() =>
+                    void runAction(
+                      () => withdrawRequest(request.id),
+                      'requestWithdrawn',
+                    )
+                  }
                 />
               ) : null}
             </View>
@@ -693,8 +741,10 @@ export default function WorkRequestDetailScreen({
               disabled={busy}
               onPress={() => {
                 setRejectOpen(false);
-                void runAction(() =>
-                  rejectRequest(request.id, rejectReason.trim() || undefined),
+                void runAction(
+                  () =>
+                    rejectRequest(request.id, rejectReason.trim() || undefined),
+                  'requestRejected',
                 );
               }}
             />
@@ -905,6 +955,13 @@ export default function WorkRequestDetailScreen({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
+      />
     </ScreenContainer>
   );
 }

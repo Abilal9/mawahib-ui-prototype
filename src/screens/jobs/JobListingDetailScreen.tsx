@@ -12,11 +12,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { jobService } from '../../services';
+import {
+  ApiJobListing,
+  mapApiListingToJob,
+  marketplaceApi,
+} from '../../services/marketplaceApi';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ScreenProps } from '../../navigation/types';
 import { JobListing } from '../../data/types';
 import { ApiError } from '../../lib/apiClient';
@@ -25,26 +32,48 @@ export default function JobListingDetailScreen({
   route,
   navigation,
 }: ScreenProps<'JobListingDetail'>) {
-  const { applyToListing } = useUserJobs();
+  const {
+    applyToListing,
+    archiveListing,
+    reopenListing,
+    closeListing,
+    refresh,
+  } = useUserJobs();
   const { apiUser } = useAuth();
   const { listingId } = route.params;
   const [job, setJob] = useState<JobListing | undefined>(() =>
     jobService.getByIdSync(listingId),
   );
+  const [apiListing, setApiListing] = useState<ApiJobListing | null>(null);
   const [loading, setLoading] = useState(!job);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [ownerActionError, setOwnerActionError] = useState<string | null>(null);
+  const [ownerBusy, setOwnerBusy] = useState(false);
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const next = await jobService.getById(listingId);
-      setJob(next);
-      if (!next) setError('Job not found');
+      // The API listing carries posterId + status, which owner actions depend on.
+      const next = await marketplaceApi.getListing(listingId);
+      setApiListing(next);
+      setJob(mapApiListingToJob(next));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to load job');
+      if (e instanceof ApiError && e.status === 404) {
+        setError('Job not found');
+      } else {
+        setError(e instanceof ApiError ? e.message : 'Failed to load job');
+      }
+      setApiListing(null);
       setJob(undefined);
     } finally {
       setLoading(false);
@@ -92,8 +121,78 @@ export default function JobListingDetailScreen({
             ? 'Gig'
             : 'Freelance';
 
+  const isOwner = Boolean(apiUser && apiListing && apiUser.id === apiListing.posterId);
   /** Any signed-in user may apply; the API rejects applying to your own listing. */
-  const canApply = Boolean(apiUser);
+  const canApply = Boolean(apiUser) && !isOwner;
+
+  const runOwnerAction = (
+    action: () => Promise<void>,
+    successKey: 'listingArchived' | 'listingReopened' | 'listingClosed',
+  ) => {
+    void (async () => {
+      setOwnerBusy(true);
+      setOwnerActionError(null);
+      try {
+        await action();
+        showSuccess(successKey);
+      } catch (e) {
+        setOwnerActionError(
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Could not update this listing',
+        );
+      } finally {
+        setOwnerBusy(false);
+      }
+    })();
+  };
+
+  const ownerActions: { title: string; onPress: () => void }[] = isOwner
+    ? apiListing?.status === 'open'
+      ? [
+          {
+            title: 'Archive',
+            onPress: () =>
+              runOwnerAction(
+                () => archiveListing(listingId),
+                'listingArchived',
+              ),
+          },
+          {
+            title: 'Close',
+            onPress: () =>
+              runOwnerAction(() => closeListing(listingId), 'listingClosed'),
+          },
+        ]
+      : apiListing?.status === 'archived'
+        ? [
+            {
+              title: 'Reopen',
+              onPress: () =>
+                runOwnerAction(
+                  () => reopenListing(listingId),
+                  'listingReopened',
+                ),
+            },
+            {
+              title: 'Close',
+              onPress: () =>
+                runOwnerAction(() => closeListing(listingId), 'listingClosed'),
+            },
+          ]
+        : apiListing?.status === 'closed'
+          ? [
+              {
+                title: 'Reopen',
+                onPress: () =>
+                  runOwnerAction(
+                    () => reopenListing(listingId),
+                    'listingReopened',
+                  ),
+              },
+            ]
+          : []
+    : [];
 
   return (
     <ScreenContainer padded={false}>
@@ -155,7 +254,30 @@ export default function JobListingDetailScreen({
         {applyError ? (
           <Text style={styles.applyError}>{applyError}</Text>
         ) : null}
-        {canApply ? (
+        {ownerActionError ? (
+          <Text style={styles.applyError}>{ownerActionError}</Text>
+        ) : null}
+        {isOwner ? (
+          <>
+            <Text style={styles.applyHint}>
+              You posted this listing · {apiListing?.status.replace(/_/g, ' ')}
+            </Text>
+            {ownerActions.length > 0 ? (
+              <View style={styles.ownerActions}>
+                {ownerActions.map((action) => (
+                  <Button
+                    key={action.title}
+                    title={action.title}
+                    variant="secondary"
+                    style={styles.ownerActionBtn}
+                    disabled={ownerBusy}
+                    onPress={action.onPress}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        ) : canApply ? (
           <Button
             title={applying ? 'Applying…' : 'Apply Now'}
             fullWidth
@@ -165,10 +287,8 @@ export default function JobListingDetailScreen({
                 setApplying(true);
                 setApplyError(null);
                 try {
-                  const requestId = await applyToListing(job.id);
-                  if (requestId) {
-                    navigation.navigate('WorkRequestDetail', { requestId });
-                  }
+                  await applyToListing(job.id);
+                  showSuccess('applicationSent');
                 } catch (e) {
                   setApplyError(
                     e instanceof ApiError ? e.message : 'Could not apply',
@@ -185,6 +305,13 @@ export default function JobListingDetailScreen({
           </Text>
         )}
       </View>
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
+      />
     </ScreenContainer>
   );
 }
@@ -259,6 +386,8 @@ const styles = StyleSheet.create({
   },
   applyError: { ...typography.caption, color: colors.error ?? '#DC2626', textAlign: 'center' },
   applyHint: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center' },
+  ownerActions: { flexDirection: 'row', gap: spacing.sm },
+  ownerActionBtn: { flex: 1 },
   missingWrap: {
     flex: 1,
     alignItems: 'center',

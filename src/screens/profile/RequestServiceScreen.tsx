@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
 import { stripCurrencyGlyphs } from '../../utils/currency';
@@ -31,6 +32,7 @@ import {
   toIsoDate,
 } from '../../services/workRequestApi';
 import { ScreenProps } from '../../navigation/types';
+import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 
@@ -39,7 +41,7 @@ import { useVisitorUser } from '../../hooks/useVisitorUser';
  *
  * Steps: service+package → add-ons → notes → attachments → schedule → location → review.
  * Optional steps (2–6) can be skipped; Apply creates a pending sent job via
- * `createServiceRequest`, then shows a success screen that resets navigation to Jobs.
+ * `createServiceRequest`, then confirms and resets navigation into Jobs.
  */
 const TOTAL_STEPS = 7;
 
@@ -92,7 +94,14 @@ export default function RequestServiceScreen({
   route,
 }: ScreenProps<'RequestService'>) {
   const insets = useSafeAreaInsets();
-  const { createServiceRequest } = useUserJobs();
+  const { createServiceRequest, refresh } = useUserJobs();
+  const {
+    successVisible,
+    successTitle,
+    successMessage,
+    showSuccess,
+    completeSuccess,
+  } = useMarketplaceSuccess(navigation, refresh);
 
   const providerUser = useVisitorUser(route.params.userId);
   const provider = providerUser.user;
@@ -105,9 +114,7 @@ export default function RequestServiceScreen({
     route.params.packageName ?? initialService?.packages[0]?.name;
 
   const [step, setStep] = useState(1);
-  const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
 
   // Step 1
   const [selectedServiceId, setSelectedServiceId] = useState(
@@ -299,15 +306,14 @@ export default function RequestServiceScreen({
     void (async () => {
       setSubmitting(true);
       try {
-        const requestId = await createServiceRequest({
+        await createServiceRequest({
           serviceOfferingId: selectedService.id,
           packageTier: PACKAGE_TIER_BY_NAME[selectedPackage],
           addonIds: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
           notes: notesLines.join('\n') || undefined,
           deadline: deadlineInput,
         });
-        setCreatedRequestId(requestId);
-        setSent(true);
+        showSuccess('serviceRequestSent');
       } catch (e) {
         Alert.alert(
           'Could not send request',
@@ -321,15 +327,6 @@ export default function RequestServiceScreen({
     })();
   };
 
-  /** Drop the request stack so Back from Jobs doesn't return into the wizard. */
-  const goToJobs = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs', params: { screen: 'JobsTab' } }],
-    });
-  };
-
-  // Success state replaces the wizard; Done / back both reset into JobsTab.
   if (providerUser.loading || visitor.loading) {
     return (
       <ScreenContainer>
@@ -354,48 +351,6 @@ export default function RequestServiceScreen({
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: spacing.lg }}>
             <Text style={{ ...typography.bodyMedium, color: colors.primary }}>Go back</Text>
           </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  if (sent) {
-    const name = provider?.name ?? 'The provider';
-    return (
-      <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.white}>
-        <StatusBar style="dark" />
-        <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-          <TouchableOpacity onPress={goToJobs} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <View style={styles.progressRow} />
-          <View style={styles.iconBtn} />
-        </View>
-        <View style={styles.successBody}>
-          <View style={styles.successGraphic}>
-            <Ionicons name="phone-portrait-outline" size={88} color={colors.text} />
-            <View style={styles.successBadge}>
-              <Ionicons name="checkmark" size={28} color={colors.white} />
-            </View>
-          </View>
-          <Text style={styles.successTitle}>Your request has been sent successfully</Text>
-          <Text style={styles.successSub}>
-            {name} will review your request shortly.
-          </Text>
-        </View>
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          {createdRequestId ? (
-            <Button
-              title="View Request"
-              fullWidth
-              onPress={() =>
-                navigation.replace('WorkRequestDetail', {
-                  requestId: createdRequestId,
-                })
-              }
-            />
-          ) : null}
-          <Button title="Go to Jobs" variant="outline" fullWidth onPress={goToJobs} />
         </View>
       </ScreenContainer>
     );
@@ -927,6 +882,13 @@ export default function RequestServiceScreen({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SuccessConfirmationModal
+        visible={successVisible}
+        title={successTitle}
+        message={successMessage}
+        onDone={() => void completeSuccess()}
+      />
     </ScreenContainer>
   );
 }
@@ -1411,41 +1373,5 @@ const styles = StyleSheet.create({
   serviceDesc: {
     ...typography.caption,
     color: colors.textSecondary,
-  },
-  successBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xxl,
-  },
-  successGraphic: {
-    width: 140,
-    height: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xxl,
-  },
-  successBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successTitle: {
-    ...typography.h2,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  successSub: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });
