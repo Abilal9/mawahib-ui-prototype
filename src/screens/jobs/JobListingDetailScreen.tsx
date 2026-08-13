@@ -13,9 +13,11 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
+import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
 import { jobService } from '../../services';
 import {
   ApiJobListing,
@@ -52,6 +54,13 @@ export default function JobListingDetailScreen({
   const [applyError, setApplyError] = useState<string | null>(null);
   const [ownerActionError, setOwnerActionError] = useState<string | null>(null);
   const [ownerBusy, setOwnerBusy] = useState(false);
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    run: () => void;
+  } | null>(null);
   const {
     successVisible,
     successTitle,
@@ -128,7 +137,10 @@ export default function JobListingDetailScreen({
 
   const runOwnerAction = (
     action: () => Promise<void>,
-    successKey: 'listingArchived' | 'listingReopened' | 'listingClosed',
+    successKey: Extract<
+      MarketplaceSuccessKey,
+      'listingArchived' | 'listingReopened' | 'listingClosed'
+    >,
   ) => {
     void (async () => {
       setOwnerBusy(true);
@@ -148,13 +160,36 @@ export default function JobListingDetailScreen({
     })();
   };
 
+  const askOwnerAction = (
+    title: string,
+    message: string,
+    confirmLabel: string,
+    action: () => Promise<void>,
+    successKey: Extract<
+      MarketplaceSuccessKey,
+      'listingArchived' | 'listingReopened' | 'listingClosed'
+    >,
+    danger?: boolean,
+  ) => {
+    setConfirm({
+      title,
+      message,
+      confirmLabel,
+      danger,
+      run: () => runOwnerAction(action, successKey),
+    });
+  };
+
   const ownerActions: { title: string; onPress: () => void }[] = isOwner
     ? apiListing?.status === 'open'
       ? [
           {
             title: 'Archive',
             onPress: () =>
-              runOwnerAction(
+              askOwnerAction(
+                'Archive Listing?',
+                'The listing will be hidden from Explore. You can reopen it later.',
+                'Archive',
                 () => archiveListing(listingId),
                 'listingArchived',
               ),
@@ -162,7 +197,14 @@ export default function JobListingDetailScreen({
           {
             title: 'Close',
             onPress: () =>
-              runOwnerAction(() => closeListing(listingId), 'listingClosed'),
+              askOwnerAction(
+                'Close Listing?',
+                'Closing ends open applications on this listing. This cannot be undone easily.',
+                'Close Listing',
+                () => closeListing(listingId),
+                'listingClosed',
+                true,
+              ),
           },
         ]
       : apiListing?.status === 'archived'
@@ -170,7 +212,10 @@ export default function JobListingDetailScreen({
             {
               title: 'Reopen',
               onPress: () =>
-                runOwnerAction(
+                askOwnerAction(
+                  'Reopen Listing?',
+                  'The listing will become visible again for new applicants.',
+                  'Reopen',
                   () => reopenListing(listingId),
                   'listingReopened',
                 ),
@@ -178,7 +223,14 @@ export default function JobListingDetailScreen({
             {
               title: 'Close',
               onPress: () =>
-                runOwnerAction(() => closeListing(listingId), 'listingClosed'),
+                askOwnerAction(
+                  'Close Listing?',
+                  'Closing ends open applications on this listing.',
+                  'Close Listing',
+                  () => closeListing(listingId),
+                  'listingClosed',
+                  true,
+                ),
             },
           ]
         : apiListing?.status === 'closed'
@@ -186,7 +238,10 @@ export default function JobListingDetailScreen({
               {
                 title: 'Reopen',
                 onPress: () =>
-                  runOwnerAction(
+                  askOwnerAction(
+                    'Reopen Listing?',
+                    'The listing will become visible again for new applicants.',
+                    'Reopen',
                     () => reopenListing(listingId),
                     'listingReopened',
                   ),
@@ -283,22 +338,30 @@ export default function JobListingDetailScreen({
             title={applying ? 'Applying…' : 'Apply Now'}
             fullWidth
             disabled={applying}
-            onPress={() => {
-              void (async () => {
-                setApplying(true);
-                setApplyError(null);
-                try {
-                  await applyToListing(job.id);
-                  showSuccess('applicationSent');
-                } catch (e) {
-                  setApplyError(
-                    e instanceof ApiError ? e.message : 'Could not apply',
-                  );
-                } finally {
-                  setApplying(false);
-                }
-              })();
-            }}
+            onPress={() =>
+              setConfirm({
+                title: 'Apply to Listing?',
+                message:
+                  'Your application will be sent to the listing owner as a work request.',
+                confirmLabel: 'Apply',
+                run: () => {
+                  void (async () => {
+                    setApplying(true);
+                    setApplyError(null);
+                    try {
+                      await applyToListing(job.id);
+                      showSuccess('applicationSent');
+                    } catch (e) {
+                      setApplyError(
+                        e instanceof ApiError ? e.message : 'Could not apply',
+                      );
+                    } finally {
+                      setApplying(false);
+                    }
+                  })();
+                },
+              })
+            }
           />
         ) : (
           <Text style={styles.applyHint}>
@@ -306,6 +369,22 @@ export default function JobListingDetailScreen({
           </Text>
         )}
       </View>
+
+      <ConfirmActionModal
+        visible={Boolean(confirm)}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
+        danger={confirm?.danger}
+        busy={applying || ownerBusy}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (!confirm) return;
+          const pending = confirm;
+          setConfirm(null);
+          pending.run();
+        }}
+      />
 
       <ActionBusyOverlay
         visible={applying || ownerBusy}

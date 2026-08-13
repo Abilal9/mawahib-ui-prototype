@@ -139,7 +139,9 @@ export default function DirectRequestScreen({
     if (!deadline) return;
     const attachmentLine =
       attachments.length > 0
-        ? `Attachments: ${attachments.map((a) => a.name).join(', ')}`
+        ? `Attachments: ${attachments
+            .map((a) => (a.size ? `${a.name} (${a.size})` : a.name))
+            .join(', ')}`
         : '';
     const combinedMessage = [message.trim(), attachmentLine]
       .filter(Boolean)

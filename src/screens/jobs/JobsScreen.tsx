@@ -45,7 +45,7 @@ const RECEIVED_SECTIONS: SectionSpec[] = [
     countColor: '#2E6AC5',
   },
   { key: 'in-progress', title: 'In Progress', dot: '#60A5FA', countColor: '#3B82F6' },
-  { key: 'completed', title: 'Completed', dot: '#22C55E', countColor: '#16A34A' },
+  { key: 'completed', title: 'History', dot: '#22C55E', countColor: '#16A34A' },
 ];
 
 const SENT_SECTIONS: SectionSpec[] = [
@@ -58,7 +58,7 @@ const SENT_SECTIONS: SectionSpec[] = [
   },
   { key: 'in-progress', title: 'In Progress', dot: '#60A5FA', countColor: '#3B82F6' },
   { key: 'posted', title: 'Posted Jobs', dot: '#F59E0B', countColor: '#B45309' },
-  { key: 'completed', title: 'Completed', dot: '#22C55E', countColor: '#16A34A' },
+  { key: 'completed', title: 'History', dot: '#22C55E', countColor: '#16A34A' },
 ];
 
 function sortJobs(items: UserJob[], sort: SectionSort) {
@@ -106,14 +106,37 @@ function JobFlowCard({
   job,
   onPress,
   onCounterpartPress,
+  onStarPress,
   hideStatus,
+  showReviewPrompt,
 }: {
   job: UserJob;
   onPress: () => void;
   onCounterpartPress: () => void;
+  onStarPress?: (rating: number) => void;
   hideStatus?: boolean;
+  showReviewPrompt?: boolean;
 }) {
   const tone = getStatusTone(job.status);
+  const showStars = showReviewPrompt || !!job.rating;
+  const [previewRating, setPreviewRating] = useState<number | null>(null);
+  const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimer.current) clearTimeout(navigateTimer.current);
+    };
+  }, []);
+
+  const displayedRating = previewRating ?? job.rating ?? 0;
+
+  const handleStarPress = (value: number) => {
+    setPreviewRating(value);
+    if (navigateTimer.current) clearTimeout(navigateTimer.current);
+    navigateTimer.current = setTimeout(() => {
+      onStarPress?.(value);
+    }, 220);
+  };
 
   return (
     <TouchableOpacity
@@ -176,6 +199,34 @@ function JobFlowCard({
           <View style={styles.metaLine}>
             <Text style={styles.metaLabel}>{job.activityLabel}</Text>
             <Text style={styles.activityValue}>{job.activityValue ?? ''}</Text>
+          </View>
+        </>
+      ) : null}
+      {showStars ? (
+        <>
+          <View style={styles.metaSeparator} />
+          <View style={styles.reviewStars}>
+            {Array.from({ length: 5 }).map((_, i) => {
+              const value = i + 1;
+              const filled = displayedRating >= value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  hitSlop={8}
+                  activeOpacity={0.75}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    handleStarPress(value);
+                  }}
+                >
+                  <Ionicons
+                    name="star"
+                    size={22}
+                    color={filled ? colors.warning : colors.border}
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </>
       ) : null}
@@ -363,9 +414,18 @@ export default function JobsScreen({
                       key={job.id}
                       job={job}
                       hideStatus={section.key === 'posted'}
+                      showReviewPrompt={
+                        section.key === 'completed' && job.status === 'completed'
+                      }
                       onPress={() => openJob(job)}
                       onCounterpartPress={() =>
                         openUserProfile(navigation, job.counterpart.id, me.id)
+                      }
+                      onStarPress={(rating) =>
+                        navigation.navigate('WriteReview', {
+                          jobId: job.id,
+                          initialRating: rating,
+                        })
                       }
                     />
                   ))
@@ -556,6 +616,13 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  reviewStars: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
   },
   badgeRow: {
     width: '100%',

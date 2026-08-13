@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
@@ -144,6 +145,13 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
   } = useNotifications();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
   const [responding, setResponding] = useState(false);
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    run: () => void;
+  } | null>(null);
 
   const filtered = useMemo(
     () => filterNotifications(notifications, activeTab),
@@ -293,14 +301,34 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
             item={item}
             onPress={() => openNotification(item)}
             onAccept={() =>
-              respondToRequest(item, acceptRequest, 'requestAccepted', () =>
-                clearActions(item.id),
-              )
+              setConfirm({
+                title: 'Accept Request?',
+                message:
+                  'This accepts the request and moves it to awaiting payment.',
+                confirmLabel: 'Accept',
+                run: () =>
+                  respondToRequest(
+                    item,
+                    acceptRequest,
+                    'requestAccepted',
+                    () => clearActions(item.id),
+                  ),
+              })
             }
             onDecline={() =>
-              respondToRequest(item, rejectRequest, 'requestRejected', () =>
-                remove(item.id),
-              )
+              setConfirm({
+                title: 'Reject Request?',
+                message: 'This permanently closes the work request.',
+                confirmLabel: 'Reject',
+                danger: true,
+                run: () =>
+                  respondToRequest(
+                    item,
+                    rejectRequest,
+                    'requestRejected',
+                    () => remove(item.id),
+                  ),
+              })
             }
             onRate={(rating) => {
               clearRatingPrompt(item.id);
@@ -322,6 +350,21 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
 
+      <ConfirmActionModal
+        visible={Boolean(confirm)}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
+        danger={confirm?.danger}
+        busy={responding}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (!confirm) return;
+          const pending = confirm;
+          setConfirm(null);
+          pending.run();
+        }}
+      />
       <ActionBusyOverlay visible={responding} message="Updating request…" />
       <SuccessConfirmationModal
         visible={successVisible}

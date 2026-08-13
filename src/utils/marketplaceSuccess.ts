@@ -45,7 +45,7 @@ export const MARKETPLACE_SUCCESS = {
   requestRejected: {
     title: 'Request Rejected',
     message: 'This work request has been closed.',
-    landing: { tab: 'received', section: 'requests' },
+    landing: { tab: 'received', section: 'completed' },
   },
   changesRequested: {
     title: 'Changes Requested',
@@ -64,10 +64,16 @@ export const MARKETPLACE_SUCCESS = {
       'Your response was sent. The other party can accept the original terms, propose again, or reject the request.',
     landing: { tab: 'sent', section: 'requests' },
   },
+  changesCancelled: {
+    title: 'Change Request Cancelled',
+    message:
+      'Your proposed changes were cancelled. The request is open again for accept, reject, or a new change request.',
+    landing: { tab: 'received', section: 'requests' },
+  },
   requestWithdrawn: {
     title: 'Request Withdrawn',
     message: 'Your request has been withdrawn successfully.',
-    landing: { tab: 'sent', section: 'requests' },
+    landing: { tab: 'sent', section: 'completed' },
   },
   jobDelivered: {
     title: 'Marked as Delivered',
@@ -79,6 +85,7 @@ export const MARKETPLACE_SUCCESS = {
     message: 'This engagement has been completed successfully.',
     landing: { tab: 'sent', section: 'completed' },
   },
+  // History section uses the same `completed` Jobs landing key.
   listingArchived: {
     title: 'Listing Archived',
     message: 'Your listing has been archived.',

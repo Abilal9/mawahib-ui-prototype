@@ -17,11 +17,15 @@ export type UserJobStatus =
   | 'withdrawn'
   | 'posted';
 
-/** Statuses that mean the engagement finished successfully */
-export const COMPLETED_USER_JOB_STATUSES: UserJobStatus[] = ['completed'];
+/** Statuses that belong in the History (archive) Jobs section. */
+export const COMPLETED_USER_JOB_STATUSES: UserJobStatus[] = [
+  'completed',
+  'rejected',
+  'withdrawn',
+];
 
 export function isCompletedStatus(status: UserJobStatus): boolean {
-  return status === 'completed';
+  return COMPLETED_USER_JOB_STATUSES.includes(status);
 }
 
 /** Where the row came from — drives the small uppercase badge on cards. */

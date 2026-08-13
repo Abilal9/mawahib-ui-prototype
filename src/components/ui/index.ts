@@ -7,4 +7,5 @@ export { default as RiyalSymbol } from './RiyalSymbol';
 export { default as CurrencyIcon } from './CurrencyIcon';
 export { default as MoneyAmount } from './MoneyAmount';
 export { default as MoneyAmountField } from './MoneyAmountField';
+export { default as ConfirmActionModal } from './ConfirmActionModal';
 export { default as ReorderableMediaGrid } from './ReorderableMediaGrid';

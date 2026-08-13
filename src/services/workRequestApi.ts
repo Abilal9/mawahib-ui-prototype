@@ -25,6 +25,7 @@ export type WorkRequestEventType =
   | 'changes_requested'
   | 'changes_accepted'
   | 'changes_declined'
+  | 'changes_cancelled'
   | 'accepted'
   | 'rejected'
   | 'withdrawn'
@@ -430,6 +431,12 @@ export const workRequestApi = {
     return apiRequest<ApiWorkRequest>(`/work-requests/${id}/decline-changes`, {
       method: 'POST',
       body: JSON.stringify({ comment }),
+    });
+  },
+
+  cancelChanges(id: string): Promise<ApiWorkRequest> {
+    return apiRequest<ApiWorkRequest>(`/work-requests/${id}/cancel-changes`, {
+      method: 'POST',
     });
   },
 

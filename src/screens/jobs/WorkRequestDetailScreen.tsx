@@ -10,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -17,10 +18,15 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  attachmentIcon,
+  parseAttachmentsFromNotes,
+} from '../../utils/workRequestAttachments';
 import { ApiError } from '../../lib/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -80,6 +86,7 @@ const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
   changes_requested: 'Changes requested',
   changes_accepted: 'Changes accepted',
   changes_declined: 'Changes declined',
+  changes_cancelled: 'Change request cancelled',
   accepted: 'Accepted',
   rejected: 'Rejected',
   withdrawn: 'Withdrawn',
@@ -292,8 +299,8 @@ export default function WorkRequestDetailScreen({
     requestChanges,
     acceptChanges,
     declineChanges,
+    cancelChanges,
     rejectRequest,
-    withdrawRequest,
     markDelivered,
     markCompleted,
     refresh,
@@ -317,6 +324,15 @@ export default function WorkRequestDetailScreen({
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    successKey?: MarketplaceSuccessKey;
+    landingOverride?: Parameters<typeof showSuccess>[1];
+    run: () => Promise<unknown>;
+  } | null>(null);
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
@@ -441,11 +457,9 @@ export default function WorkRequestDetailScreen({
         request.status === 'changes_declined')) ||
     (isSender && request.status === 'changes_requested');
   const canRespondToChanges = isSender && request.status === 'changes_requested';
-  const canWithdraw =
-    isSender &&
-    (request.status === 'pending' ||
-      request.status === 'changes_requested' ||
-      request.status === 'changes_declined');
+  /** Recipient who proposed changes can retract them while still pending. */
+  const canCancelChanges =
+    isRecipient && request.status === 'changes_requested';
   const awaitingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
@@ -459,23 +473,38 @@ export default function WorkRequestDetailScreen({
   /** The one call to action; everything else lives in the secondary row. */
   const primaryAction: {
     title: string;
-    run?: () => Promise<unknown>;
-    successKey?: MarketplaceSuccessKey;
-    onPress?: () => void;
+    onPress: () => void;
   } | null = canAccept
     ? {
         title:
           request.status === 'changes_declined'
             ? 'Accept Original Terms'
             : 'Accept',
-        run: () => acceptRequest(request.id),
-        successKey: 'requestAccepted',
+        onPress: () =>
+          setConfirm({
+            title:
+              request.status === 'changes_declined'
+                ? 'Accept Original Terms?'
+                : 'Accept Request?',
+            message:
+              'This accepts the current terms and moves the request to awaiting payment.',
+            confirmLabel: 'Accept',
+            successKey: 'requestAccepted',
+            run: () => acceptRequest(request.id),
+          }),
       }
     : canRespondToChanges
       ? {
           title: 'Accept Changes',
-          run: () => acceptChanges(request.id),
-          successKey: 'changesAccepted',
+          onPress: () =>
+            setConfirm({
+              title: 'Accept Changes?',
+              message:
+                'You agree to the proposed terms. The request will move to awaiting payment.',
+              confirmLabel: 'Accept Changes',
+              successKey: 'changesAccepted',
+              run: () => acceptChanges(request.id),
+            }),
         }
       : canDeliver
         ? {
@@ -490,7 +519,10 @@ export default function WorkRequestDetailScreen({
           : null;
 
   const hasSecondaryActions =
-    canRequestChanges || canRespondToChanges || canReject || canWithdraw;
+    canRequestChanges ||
+    canRespondToChanges ||
+    canCancelChanges ||
+    canReject;
   const hasFooterActions =
     !!primaryAction ||
     hasSecondaryActions ||
@@ -579,23 +611,25 @@ export default function WorkRequestDetailScreen({
   const amountReady = amountText.trim().length === 0 || proposedAmount !== null;
   const deadlineReady = proposedDeadline() !== null;
 
-  const submitChanges = () => {
+  const queueSubmitChanges = () => {
     const deadline = proposedDeadline();
     if (!deadline || !amountReady) return;
     const proposedTerms: ProposedTermsInput = { deadline };
     if (proposedAmount !== null) {
       proposedTerms.money = { amount: proposedAmount, currency };
     }
-    setChangesOpen(false);
-    void runAction(
-      () =>
-        requestChanges(
-          request.id,
-          proposedTerms,
-          proposalComment.trim() || undefined,
-        ),
-      'changesRequested',
-    );
+    const comment = proposalComment.trim() || undefined;
+    setConfirm({
+      title: 'Request Changes?',
+      message:
+        'Your proposed terms will be sent to the other party for review.',
+      confirmLabel: 'Send Changes',
+      successKey: 'changesRequested',
+      run: async () => {
+        setChangesOpen(false);
+        await requestChanges(request.id, proposedTerms, comment);
+      },
+    });
   };
 
   return (
@@ -763,39 +797,7 @@ export default function WorkRequestDetailScreen({
           </View>
         ) : null}
 
-        {isCompletedEngagement ? (
-          <View style={styles.reviewCard}>
-            <Text style={styles.sectionTitle}>Leave a review</Text>
-            <Text style={styles.reviewPlaceholder}>
-              Reviews will be available in the next phase.
-            </Text>
-            <View style={styles.starsRow}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Ionicons
-                  key={i}
-                  name="star-outline"
-                  size={28}
-                  color={colors.border}
-                />
-              ))}
-            </View>
-            <TextInput
-              editable={false}
-              placeholder="Share your experience…"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, styles.reviewInputDisabled]}
-              multiline
-            />
-            <Button
-              title="Submit Review"
-              fullWidth
-              disabled
-              onPress={() => {}}
-            />
-          </View>
-        ) : null}
-
-        <Text style={styles.sectionTitle}>History</Text>
+        <Text style={styles.sectionTitle}>Timeline</Text>
         <View style={styles.termsCard}>
           {request.events.length === 0 ? (
             <Text style={styles.rowValue}>No activity yet.</Text>
@@ -803,10 +805,16 @@ export default function WorkRequestDetailScreen({
             request.events.map((event) => {
               const change =
                 event.type === 'changes_requested' ||
-                event.type === 'changes_declined'
+                event.type === 'changes_declined' ||
+                event.type === 'changes_cancelled'
                   ? termsChangeFromPayload(event.payload)
                   : null;
-              const summary = change ? summarizeTermsChange(change) : '';
+              // Cancelled proposals: show the event, not the term diff, so the
+              // counterparty isn't asked to review discarded numbers.
+              const summary =
+                change && event.type !== 'changes_cancelled'
+                  ? summarizeTermsChange(change)
+                  : '';
               return (
                 <View key={event.id} style={styles.eventRow}>
                   <View style={styles.eventDot} />
@@ -829,6 +837,91 @@ export default function WorkRequestDetailScreen({
             })
           )}
         </View>
+
+        {(() => {
+          const files = [
+            ...parseAttachmentsFromNotes(request.terms.notes),
+            ...parseAttachmentsFromNotes(request.proposedTerms?.notes),
+            ...parseAttachmentsFromNotes(request.agreedTerms?.notes),
+          ];
+          const unique = files.filter(
+            (file, index, all) =>
+              all.findIndex((f) => f.name === file.name) === index,
+          );
+          if (unique.length === 0) return null;
+          return (
+            <>
+              <Text style={styles.sectionTitle}>Attachments</Text>
+              {unique.map((file) => (
+                <View key={file.id} style={styles.attachmentRow}>
+                  <Ionicons
+                    name={attachmentIcon(file.name)}
+                    size={22}
+                    color={colors.primary}
+                  />
+                  <View style={styles.attachmentMeta}>
+                    <Text style={styles.attachmentName}>{file.name}</Text>
+                    {file.size ? (
+                      <Text style={styles.attachmentSize}>{file.size}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    hitSlop={8}
+                    onPress={() => {
+                      if (file.url) {
+                        void Linking.openURL(file.url);
+                        return;
+                      }
+                      Alert.alert(
+                        file.name,
+                        'File preview and download will be available once uploads are connected in a later phase.',
+                      );
+                    }}
+                  >
+                    <Text style={styles.attachmentAction}>
+                      {file.url ? 'Open' : 'Preview'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          );
+        })()}
+
+        {isCompletedEngagement ? (
+          <View style={styles.reviewCard}>
+            <Text style={styles.sectionTitleInline}>Leave a review</Text>
+            <Text style={styles.reviewPlaceholder}>
+              Reviews will be available in the next phase.
+            </Text>
+            <View style={styles.starsRow}>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const value = i + 1;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    hitSlop={8}
+                    onPress={() =>
+                      navigation.navigate('WriteReview', {
+                        jobId: request.id,
+                        initialRating: value,
+                      })
+                    }
+                  >
+                    <Ionicons
+                      name="star-outline"
+                      size={28}
+                      color={colors.border}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.reviewHint}>
+              Tap a star to open the review screen.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       {hasFooterActions ? (
@@ -838,15 +931,7 @@ export default function WorkRequestDetailScreen({
               title={primaryAction.title}
               fullWidth
               disabled={busy}
-              onPress={() => {
-                if (primaryAction.onPress) {
-                  primaryAction.onPress();
-                  return;
-                }
-                if (primaryAction.run) {
-                  void runAction(primaryAction.run, primaryAction.successKey);
-                }
-              }}
+              onPress={primaryAction.onPress}
             />
           ) : null}
 
@@ -877,6 +962,26 @@ export default function WorkRequestDetailScreen({
                   }}
                 />
               ) : null}
+              {canCancelChanges ? (
+                <Button
+                  title="Cancel Change Request"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  textStyle={styles.requestChangesText}
+                  numberOfLines={1}
+                  disabled={busy}
+                  onPress={() =>
+                    setConfirm({
+                      title: 'Cancel Change Request?',
+                      message:
+                        'Your proposed changes will be discarded and the request returns to its previous state. The other party will not need to review them.',
+                      confirmLabel: 'Cancel Changes',
+                      successKey: 'changesCancelled',
+                      run: () => cancelChanges(request.id),
+                    })
+                  }
+                />
+              ) : null}
               {canReject ? (
                 <Button
                   title="Reject Request"
@@ -889,20 +994,6 @@ export default function WorkRequestDetailScreen({
                     setRejectReason('');
                     setRejectOpen(true);
                   }}
-                />
-              ) : null}
-              {canWithdraw ? (
-                <Button
-                  title="Withdraw"
-                  variant="secondary"
-                  style={styles.halfBtn}
-                  disabled={busy}
-                  onPress={() =>
-                    void runAction(
-                      () => withdrawRequest(request.id),
-                      'requestWithdrawn',
-                    )
-                  }
                 />
               ) : null}
             </View>
@@ -1260,12 +1351,32 @@ export default function WorkRequestDetailScreen({
                 title="Send Changes"
                 fullWidth
                 disabled={busy || !deadlineReady || !amountReady}
-                onPress={submitChanges}
+                onPress={queueSubmitChanges}
               />
             </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfirmActionModal
+        visible={Boolean(confirm)}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
+        danger={confirm?.danger}
+        busy={busy}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (!confirm) return;
+          const pending = confirm;
+          setConfirm(null);
+          void runAction(
+            pending.run,
+            pending.successKey,
+            pending.landingOverride,
+          );
+        }}
+      />
 
       <ActionBusyOverlay visible={busy} message="Updating request…" />
 
@@ -1458,19 +1569,47 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  sectionTitleInline: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: 0,
+  },
   reviewPlaceholder: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    marginTop: -spacing.xs,
+  },
+  reviewHint: {
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   starsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginVertical: spacing.xs,
   },
-  reviewInputDisabled: {
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.button,
     backgroundColor: colors.background,
-    opacity: 0.85,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  attachmentMeta: { flex: 1 },
+  attachmentName: { ...typography.label, color: colors.text },
+  attachmentSize: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  attachmentAction: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
   },
   eventRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.xs },
   eventDot: {

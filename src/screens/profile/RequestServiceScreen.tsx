@@ -300,7 +300,9 @@ export default function RequestServiceScreen({
       notes.trim(),
       locationLine ? `Location: ${locationLine}` : '',
       attachments.length > 0
-        ? `Attachments: ${attachments.map((a) => a.name).join(', ')}`
+        ? `Attachments: ${attachments
+            .map((a) => (a.size ? `${a.name} (${a.size})` : a.name))
+            .join(', ')}`
         : '',
     ].filter(Boolean);
 

@@ -81,7 +81,9 @@ interface UserJobsContextValue {
   ) => Promise<void>;
   acceptChanges: (id: string) => Promise<string | undefined>;
   declineChanges: (id: string, comment?: string) => Promise<void>;
+  cancelChanges: (id: string) => Promise<void>;
   rejectRequest: (id: string, comment?: string) => Promise<void>;
+  /** Retained for API parity; negotiation UI uses cancelChanges instead. */
   withdrawRequest: (id: string, comment?: string) => Promise<void>;
   markDelivered: (engagementId: string) => Promise<void>;
   markCompleted: (engagementId: string) => Promise<void>;
@@ -172,9 +174,9 @@ function mapStatus(request: ApiWorkRequest): {
         section: 'requests',
       };
     case 'rejected':
-      return { status: 'rejected', statusLabel: 'Rejected', section: 'requests' };
+      return { status: 'rejected', statusLabel: 'Rejected', section: 'completed' };
     case 'withdrawn':
-      return { status: 'withdrawn', statusLabel: 'Withdrawn', section: 'requests' };
+      return { status: 'withdrawn', statusLabel: 'Withdrawn', section: 'completed' };
     default:
       return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
   }
@@ -423,6 +425,10 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       },
       declineChanges: async (id, comment) => {
         await workRequestApi.declineChanges(id, comment);
+        await refresh();
+      },
+      cancelChanges: async (id) => {
+        await workRequestApi.cancelChanges(id);
         await refresh();
       },
       rejectRequest: async (id, comment) => {
