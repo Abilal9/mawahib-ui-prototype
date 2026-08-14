@@ -35,7 +35,10 @@ import {
 } from '../../context/UserJobsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
-import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
+import {
+  jobsTabForViewer,
+  MarketplaceSuccessKey,
+} from '../../utils/marketplaceSuccess';
 import {
   getNegotiationTurn,
   getWorkRequestOverflowMenu,
@@ -466,7 +469,7 @@ export default function WorkRequestDetailScreen({
   const canComplete =
     isClient && request.workEngagementStatus === 'delivered';
   const isCompletedEngagement = request.workEngagementStatus === 'completed';
-  const jobsTab = isSender ? 'sent' : 'received';
+  const jobsTab = jobsTabForViewer(isSender);
 
   const openChanges = () => {
     const money = terms.money;
@@ -512,7 +515,7 @@ export default function WorkRequestDetailScreen({
             'This accepts the current terms and moves the request to Pending Payment.',
           confirmLabel: negotiationActionLabel(action),
           successKey: 'requestAccepted',
-          landingOverride: { tab: 'received', section: 'pending-payment' },
+          landingOverride: { tab: jobsTab, section: 'pending-payment' },
           run: () => acceptRequest(request.id),
         });
         return;
@@ -523,7 +526,7 @@ export default function WorkRequestDetailScreen({
             'You agree to the proposed terms. The request will move to Pending Payment.',
           confirmLabel: 'Accept Changes',
           successKey: 'changesAccepted',
-          landingOverride: { tab: 'sent', section: 'pending-payment' },
+          landingOverride: { tab: jobsTab, section: 'pending-payment' },
           run: () => acceptChanges(request.id),
         });
         return;
@@ -539,6 +542,7 @@ export default function WorkRequestDetailScreen({
           confirmLabel: 'Decline Changes',
           commentPlaceholder: 'Optional message…',
           successKey: 'changesDeclined',
+          landingOverride: { tab: jobsTab, section: 'requests' },
           run: (comment) => declineChanges(request.id, comment),
         });
         return;
@@ -573,6 +577,8 @@ export default function WorkRequestDetailScreen({
             'This will withdraw your proposed changes and restore the previous negotiation state.',
           confirmLabel: 'Withdraw',
           cancelLabel: 'Cancel',
+          successKey: 'changesWithdrawn',
+          landingOverride: { tab: jobsTab, section: 'requests' },
           run: () => cancelChanges(request.id),
         });
         return;
@@ -737,6 +743,7 @@ export default function WorkRequestDetailScreen({
         'Your proposed terms will be sent to the other party for review.',
       confirmLabel: 'Send Changes',
       successKey: 'changesRequested',
+      landingOverride: { tab: jobsTab, section: 'requests' },
       run: () => requestChanges(request.id, proposedTerms, comment),
     });
   };

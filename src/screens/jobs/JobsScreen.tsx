@@ -294,7 +294,7 @@ export default function JobsScreen({
 }: TabScreenProps<'JobsTab'>) {
   const { jobs: userJobs, loading, error, unread, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
-  /** Canonical default: always open on Received unless a landing override is set. */
+  /** Canonical default on mount / tab-bar press: Received → Requests. */
   const [activeTab, setActiveTab] = useState<JobsTab>('received');
   const [activePage, setActivePage] = useState(0);
   const [sortOpen, setSortOpen] = useState(false);
@@ -310,24 +310,63 @@ export default function JobsScreen({
   });
   const pagerRef = useRef<ScrollView>(null);
   const pendingSection = useRef<UserJobSection | null>(null);
+  const [landingNonce, setLandingNonce] = useState(0);
+  const scrollOffsets = useRef<Record<string, number>>({});
+  const sectionScrollRefs = useRef<Record<string, ScrollView | null>>({});
+  const activePageRef = useRef(activePage);
+  activePageRef.current = activePage;
+
+  const applyLanding = useCallback(
+    (landing: { tab?: JobsTab; section?: UserJobSection }) => {
+      if (landing.tab === 'sent' || landing.tab === 'received') {
+        setActiveTab(landing.tab);
+      }
+      pendingSection.current = landing.section ?? 'requests';
+      setLandingNonce((n) => n + 1);
+    },
+    [],
+  );
+
+  /**
+   * Tab-bar press = fresh Jobs visit → canonical Received → Requests.
+   * Does not run when returning via Back from a detail screen.
+   */
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      applyLanding({ tab: 'received', section: 'requests' });
+    });
+    return unsubscribe;
+  }, [navigation, applyLanding]);
 
   useFocusEffect(
     useCallback(() => {
       void refresh();
       const landing = route.params;
-      if (landing?.tab === 'sent' || landing?.tab === 'received') {
-        setActiveTab(landing.tab);
-      } else {
-        setActiveTab('received');
-        setActivePage(0);
-      }
-      if (landing?.section) {
-        pendingSection.current = landing.section;
-      }
-      if (landing?.tab || landing?.section) {
+      const hasLanding =
+        landing?.tab === 'sent' ||
+        landing?.tab === 'received' ||
+        Boolean(landing?.section);
+
+      if (hasLanding) {
+        applyLanding({
+          tab: landing?.tab,
+          section: landing?.section,
+        });
         navigation.setParams({ tab: undefined, section: undefined });
+        return;
       }
-    }, [refresh, route.params, navigation]),
+
+      // Back / re-focus without override: restore scroll positions.
+      requestAnimationFrame(() => {
+        const x = activePageRef.current * (PANEL_WIDTH + spacing.md);
+        pagerRef.current?.scrollTo({ x, animated: false });
+        Object.entries(scrollOffsets.current).forEach(([key, y]) => {
+          if (y > 0) {
+            sectionScrollRefs.current[key]?.scrollTo({ y, animated: false });
+          }
+        });
+      });
+    }, [refresh, route.params, navigation, applyLanding]),
   );
 
   const sections = activeTab === 'received' ? RECEIVED_SECTIONS : SENT_SECTIONS;
@@ -345,7 +384,7 @@ export default function JobsScreen({
         animated: false,
       });
     });
-  }, [activeTab, sections, userJobs.length]);
+  }, [activeTab, sections, userJobs.length, landingNonce]);
 
   const sectioned = useMemo(() => {
     const scoped = userJobs.filter((j) => j.type === activeTab);
@@ -448,7 +487,17 @@ export default function JobsScreen({
                   />
                 </TouchableOpacity>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView
+                ref={(ref) => {
+                  sectionScrollRefs.current[`${activeTab}:${section.key}`] = ref;
+                }}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  scrollOffsets.current[`${activeTab}:${section.key}`] =
+                    e.nativeEvent.contentOffset.y;
+                }}
+              >
                 {showSectionLoading ? (
                   <SectionBodyState>
                     <ActivityIndicator color={colors.primary} size="large" />

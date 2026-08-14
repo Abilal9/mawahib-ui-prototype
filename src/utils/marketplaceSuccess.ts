@@ -69,6 +69,12 @@ export const MARKETPLACE_SUCCESS = {
       'Your response was sent. The other party can accept, request new changes, or reject the request.',
     landing: { tab: 'sent', section: 'requests' },
   },
+  changesWithdrawn: {
+    title: 'Change Request Withdrawn',
+    message:
+      'Your proposed changes were withdrawn. The request is open again for negotiation.',
+    landing: { tab: 'received', section: 'requests' },
+  },
   jobDelivered: {
     title: 'Marked as Delivered',
     message: 'The client can now complete the job.',
@@ -109,6 +115,9 @@ export type MarketplaceSuccessKey = keyof typeof MARKETPLACE_SUCCESS;
 /**
  * Reset the root stack onto Jobs with the target tab/section so Back
  * does not return into completed forms.
+ *
+ * Pass explicit `tab` / `section` route params — Jobs applies them on focus
+ * without treating the visit as a fresh tab-bar entry.
  */
 export function resetToJobs(
   navigation: NavigationProp<ParamListBase>,
@@ -131,4 +140,9 @@ export function resetToJobs(
       ],
     }),
   );
+}
+
+/** Jobs inbox direction for the current viewer of a work request. */
+export function jobsTabForViewer(isSender: boolean): JobsTabKey {
+  return isSender ? 'sent' : 'received';
 }

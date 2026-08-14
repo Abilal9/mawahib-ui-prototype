@@ -6,7 +6,11 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 export type SearchContentType = 'talents' | 'jobs' | 'services';
 
 export type JobsTabLanding = {
-  /** Sent vs Received top tab */
+  /**
+   * Explicit landing override (success redirect / deep link).
+   * When omitted on focus, Jobs preserves its current tab/section
+   * (e.g. Back from a detail screen).
+   */
   tab?: 'sent' | 'received';
   /** Horizontal section carousel key inside that tab */
   section?:
