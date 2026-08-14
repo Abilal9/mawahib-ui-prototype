@@ -728,16 +728,16 @@ export default function WorkRequestDetailScreen({
       proposedTerms.money = { amount: proposedAmount, currency };
     }
     const comment = proposalComment.trim() || undefined;
+    // Close the changes sheet before opening confirm — nested RN Modals drop
+    // the confirm action / payload on later renegotiation attempts.
+    setChangesOpen(false);
     setConfirm({
       title: 'Request Changes?',
       message:
         'Your proposed terms will be sent to the other party for review.',
       confirmLabel: 'Send Changes',
       successKey: 'changesRequested',
-      run: async () => {
-        setChangesOpen(false);
-        await requestChanges(request.id, proposedTerms, comment);
-      },
+      run: () => requestChanges(request.id, proposedTerms, comment),
     });
   };
 

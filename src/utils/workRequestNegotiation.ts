@@ -143,15 +143,25 @@ export function getWorkRequestOverflowMenu(
     return { visible: false, items: [] };
   }
 
-  const open =
+  const engagementStarted =
+    request.workEngagementStatus === 'in_progress' ||
+    request.workEngagementStatus === 'delivered' ||
+    request.workEngagementStatus === 'completed';
+
+  const openNegotiation =
     request.status === 'pending' ||
     request.status === 'changes_requested' ||
     request.status === 'changes_declined';
 
-  const beforePayment = open;
+  /** Cancel is allowed through Pending Payment; not after work starts. */
+  const canCancelRequest =
+    isSender &&
+    !engagementStarted &&
+    (openNegotiation || request.status === 'pending_payment');
+
   const items: OverflowMenuAction[] = [];
 
-  if (beforePayment) {
+  if (openNegotiation) {
     const isWaitingProposer =
       request.status === 'changes_requested' &&
       isRecipient &&
@@ -160,9 +170,10 @@ export function getWorkRequestOverflowMenu(
     if (isWaitingProposer) {
       items.push('withdraw_change_request');
     }
-    if (isSender) {
-      items.push('cancel_request');
-    }
+  }
+
+  if (canCancelRequest) {
+    items.push('cancel_request');
   }
 
   items.push('report');

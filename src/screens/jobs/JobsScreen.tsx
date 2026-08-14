@@ -8,6 +8,7 @@ import {
   Dimensions,
   Modal,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +21,6 @@ import { UserJob, UserJobSection } from '../../data/types/userJobs';
 import { TabScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { useAuth } from '../../context/AuthContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 
 type JobsTab = 'received' | 'sent';
@@ -28,37 +28,83 @@ type SectionSort = 'most-recent' | 'oldest' | 'due-date';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PANEL_WIDTH = SCREEN_WIDTH - spacing.screen * 2;
+const SECTION_BODY_MIN_HEIGHT = 220;
 
 interface SectionSpec {
   key: UserJobSection;
   title: string;
   dot: string;
   countColor: string;
+  emptyMessage: string;
 }
 
 const RECEIVED_SECTIONS: SectionSpec[] = [
-  { key: 'requests', title: 'Requests', dot: '#C084FC', countColor: '#8B5CF6' },
+  {
+    key: 'requests',
+    title: 'Requests',
+    dot: '#C084FC',
+    countColor: '#8B5CF6',
+    emptyMessage: 'No requests yet.',
+  },
   {
     key: 'pending-payment',
     title: 'Pending Payment',
     dot: '#60A5FA',
     countColor: '#2E6AC5',
+    emptyMessage: 'No pending payments.',
   },
-  { key: 'in-progress', title: 'In Progress', dot: '#60A5FA', countColor: '#3B82F6' },
-  { key: 'completed', title: 'History', dot: '#22C55E', countColor: '#16A34A' },
+  {
+    key: 'in-progress',
+    title: 'In Progress',
+    dot: '#60A5FA',
+    countColor: '#3B82F6',
+    emptyMessage: 'No jobs in progress.',
+  },
+  {
+    key: 'completed',
+    title: 'History',
+    dot: '#22C55E',
+    countColor: '#16A34A',
+    emptyMessage: 'No history yet.',
+  },
 ];
 
 const SENT_SECTIONS: SectionSpec[] = [
-  { key: 'requests', title: 'Requests', dot: '#C084FC', countColor: '#8B5CF6' },
+  {
+    key: 'requests',
+    title: 'Requests',
+    dot: '#C084FC',
+    countColor: '#8B5CF6',
+    emptyMessage: 'No requests yet.',
+  },
   {
     key: 'pending-payment',
     title: 'Pending Payment',
     dot: '#60A5FA',
     countColor: '#2E6AC5',
+    emptyMessage: 'No pending payments.',
   },
-  { key: 'in-progress', title: 'In Progress', dot: '#60A5FA', countColor: '#3B82F6' },
-  { key: 'posted', title: 'Posted Jobs', dot: '#F59E0B', countColor: '#B45309' },
-  { key: 'completed', title: 'History', dot: '#22C55E', countColor: '#16A34A' },
+  {
+    key: 'in-progress',
+    title: 'In Progress',
+    dot: '#60A5FA',
+    countColor: '#3B82F6',
+    emptyMessage: 'No jobs in progress.',
+  },
+  {
+    key: 'posted',
+    title: 'Posted Jobs',
+    dot: '#F59E0B',
+    countColor: '#B45309',
+    emptyMessage: 'No posted jobs.',
+  },
+  {
+    key: 'completed',
+    title: 'History',
+    dot: '#22C55E',
+    countColor: '#16A34A',
+    emptyMessage: 'No history yet.',
+  },
 ];
 
 function sortJobs(items: UserJob[], sort: SectionSort) {
@@ -91,7 +137,7 @@ function getStatusTone(status: UserJob['status']) {
     case 'rejected':
       return { bg: '#FEE2E2', text: '#B91C1C' };
     case 'withdrawn':
-      return { bg: '#EEF2F6', text: colors.textSecondary }; // Cancelled
+      return { bg: '#EEF2F6', text: colors.textSecondary };
     case 'in-progress':
     case 'delivered':
       return { bg: '#DBEAFE', text: '#1D4ED8' };
@@ -100,6 +146,14 @@ function getStatusTone(status: UserJob['status']) {
     default:
       return { bg: '#EEF2F6', text: colors.textSecondary };
   }
+}
+
+function SectionBodyState({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <View style={styles.sectionBody}>{children}</View>;
 }
 
 function JobFlowCard({
@@ -240,11 +294,8 @@ export default function JobsScreen({
 }: TabScreenProps<'JobsTab'>) {
   const { jobs: userJobs, loading, error, unread, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
-  const { accountType } = useAuth();
-  /** Business defaults to sent (post/request); talent to received (incoming work). */
-  const [activeTab, setActiveTab] = useState<JobsTab>(
-    accountType === 'business' ? 'sent' : 'received',
-  );
+  /** Canonical default: always open on Received unless a landing override is set. */
+  const [activeTab, setActiveTab] = useState<JobsTab>('received');
   const [activePage, setActivePage] = useState(0);
   const [sortOpen, setSortOpen] = useState(false);
   const [sortSection, setSortSection] = useState<UserJobSection>('requests');
@@ -266,6 +317,9 @@ export default function JobsScreen({
       const landing = route.params;
       if (landing?.tab === 'sent' || landing?.tab === 'received') {
         setActiveTab(landing.tab);
+      } else {
+        setActiveTab('received');
+        setActivePage(0);
       }
       if (landing?.section) {
         pendingSection.current = landing.section;
@@ -315,6 +369,9 @@ export default function JobsScreen({
     }
   };
 
+  const showSectionLoading = loading && userJobs.length === 0;
+  const showSectionError = Boolean(error) && !showSectionLoading;
+
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
@@ -322,20 +379,6 @@ export default function JobsScreen({
         <Text style={styles.headerTitle}>Jobs</Text>
         <View style={styles.headerSpacer} />
       </View>
-
-      {error ? (
-        <View style={styles.errorBlock}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => void refresh()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-      {loading && userJobs.length === 0 ? (
-        <View style={styles.loadingBlock}>
-          <Text style={styles.loadingText}>Loading jobs…</Text>
-        </View>
-      ) : null}
 
       <View style={styles.tabBar}>
         {(['received', 'sent'] as JobsTab[]).map((tab) => {
@@ -388,7 +431,7 @@ export default function JobsScreen({
                   <View style={[styles.panelDot, { backgroundColor: section.dot }]} />
                   <Text style={styles.panelTitle}>{section.title}</Text>
                   <Text style={[styles.panelCount, { color: section.countColor }]}>
-                    {items.length}
+                    {showSectionLoading || showSectionError ? '—' : items.length}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -406,8 +449,32 @@ export default function JobsScreen({
                 </TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
-                {items.length === 0 ? (
-                  <Text style={styles.emptyText}>Nothing here yet.</Text>
+                {showSectionLoading ? (
+                  <SectionBodyState>
+                    <ActivityIndicator color={colors.primary} size="large" />
+                  </SectionBodyState>
+                ) : showSectionError ? (
+                  <SectionBodyState>
+                    <Ionicons
+                      name="warning-outline"
+                      size={28}
+                      color={colors.error}
+                    />
+                    <Text style={styles.errorTitle}>
+                      Couldn&apos;t load your {section.title.toLowerCase()}.
+                    </Text>
+                    <Text style={styles.errorSubtitle}>Please try again.</Text>
+                    <TouchableOpacity
+                      style={styles.retryBtn}
+                      onPress={() => void refresh()}
+                    >
+                      <Text style={styles.retryText}>Retry</Text>
+                    </TouchableOpacity>
+                  </SectionBodyState>
+                ) : items.length === 0 ? (
+                  <SectionBodyState>
+                    <Text style={styles.emptyText}>{section.emptyMessage}</Text>
+                  </SectionBodyState>
                 ) : (
                   items.map((job) => (
                     <JobFlowCard
@@ -506,19 +573,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
-  errorBlock: {
-    paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  errorText: { ...typography.bodySmall, color: colors.error },
-  retryText: {
-    ...typography.bodySmall,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  loadingBlock: { padding: spacing.xl },
-  loadingText: { ...typography.body, color: colors.textSecondary },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -601,10 +655,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.white,
   },
+  sectionBody: {
+    minHeight: SECTION_BODY_MIN_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+  },
   emptyText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    paddingVertical: spacing.md,
+    textAlign: 'center',
+  },
+  errorTitle: {
+    ...typography.bodyMedium,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary + '14',
+  },
+  retryText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
   },
   receivedJobCard: {
     borderRadius: 14,
