@@ -8,22 +8,32 @@ export type NegotiationAction =
   | 'request_changes'
   | 'request_changes_again'
   | 'decline_changes'
-  | 'reject_request'
-  | 'cancel_request';
+  | 'reject_request';
 
 export type NegotiationDecisionMaker = 'sender' | 'recipient' | null;
+
+/** Secondary actions shown only in the header ⋯ overflow menu. */
+export type OverflowMenuAction =
+  | 'withdraw_change_request'
+  | 'cancel_request'
+  | 'report';
 
 export interface NegotiationTurn {
   /** Whose turn it is to negotiate (null when terminal / past negotiation). */
   decisionMaker: NegotiationDecisionMaker;
   /** Viewer is the negotiation decision maker. */
   isMyTurn: boolean;
-  /** Original sender may Cancel Request even when it is not their turn. */
-  canCancelRequest: boolean;
-  /** Ordered negotiation actions for the viewer (excludes cancel_request). */
+  /** Ordered primary negotiation actions for the footer (never Cancel Request). */
   actions: NegotiationAction[];
   /** Shown when the viewer has no negotiation actions and is waiting. */
   waitingMessage: string | null;
+}
+
+export interface WorkRequestOverflowMenu {
+  /** Header ⋯ is available for either party on this request. */
+  visible: boolean;
+  /** Ordered secondary / destructive actions for the overflow sheet. */
+  items: OverflowMenuAction[];
 }
 
 const ACTION_LABEL: Record<NegotiationAction, string> = {
@@ -34,16 +44,26 @@ const ACTION_LABEL: Record<NegotiationAction, string> = {
   request_changes_again: 'Request Changes Again',
   decline_changes: 'Decline Changes',
   reject_request: 'Reject Request',
+};
+
+const OVERFLOW_LABEL: Record<OverflowMenuAction, string> = {
+  withdraw_change_request: 'Withdraw Change Request',
   cancel_request: 'Cancel Request',
+  report: 'Report',
 };
 
 export function negotiationActionLabel(action: NegotiationAction): string {
   return ACTION_LABEL[action];
 }
 
+export function overflowMenuActionLabel(action: OverflowMenuAction): string {
+  return OVERFLOW_LABEL[action];
+}
+
 /**
- * Single source of truth for turn-based negotiation ownership and actions.
+ * Single source of truth for turn-based negotiation ownership and footer actions.
  * Derived from status + sender/recipient — no separate turn field required.
+ * Cancel Request / Withdraw / Report live in {@link getWorkRequestOverflowMenu}.
  */
 export function getNegotiationTurn(
   request: Pick<
@@ -58,8 +78,6 @@ export function getNegotiationTurn(
     request.status === 'pending' ||
     request.status === 'changes_requested' ||
     request.status === 'changes_declined';
-
-  const canCancelRequest = isSender && open;
 
   let decisionMaker: NegotiationDecisionMaker = null;
   if (request.status === 'pending' || request.status === 'changes_declined') {
@@ -99,8 +117,54 @@ export function getNegotiationTurn(
   return {
     decisionMaker,
     isMyTurn,
-    canCancelRequest,
     actions,
     waitingMessage,
   };
+}
+
+/**
+ * Secondary / destructive actions for the header ⋯ menu.
+ * Does not include primary negotiation buttons (those stay in the footer).
+ */
+export function getWorkRequestOverflowMenu(
+  request: Pick<
+    ApiWorkRequest,
+    | 'status'
+    | 'senderUserId'
+    | 'recipientUserId'
+    | 'proposedByUserId'
+    | 'workEngagementStatus'
+  >,
+  viewerId: string,
+): WorkRequestOverflowMenu {
+  const isSender = request.senderUserId === viewerId;
+  const isRecipient = request.recipientUserId === viewerId;
+  if (!isSender && !isRecipient) {
+    return { visible: false, items: [] };
+  }
+
+  const open =
+    request.status === 'pending' ||
+    request.status === 'changes_requested' ||
+    request.status === 'changes_declined';
+
+  const beforePayment = open;
+  const items: OverflowMenuAction[] = [];
+
+  if (beforePayment) {
+    const isWaitingProposer =
+      request.status === 'changes_requested' &&
+      isRecipient &&
+      (!request.proposedByUserId || request.proposedByUserId === viewerId);
+
+    if (isWaitingProposer) {
+      items.push('withdraw_change_request');
+    }
+    if (isSender) {
+      items.push('cancel_request');
+    }
+  }
+
+  items.push('report');
+  return { visible: true, items };
 }

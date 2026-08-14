@@ -434,7 +434,7 @@ export const workRequestApi = {
     });
   },
 
-  /** @deprecated Turn-based negotiation: proposers may not retract. Endpoint returns 403. */
+  /** Withdraw Change Request (overflow). Restores prior open negotiation status. */
   cancelChanges(id: string): Promise<ApiWorkRequest> {
     return apiRequest<ApiWorkRequest>(`/work-requests/${id}/cancel-changes`, {
       method: 'POST',

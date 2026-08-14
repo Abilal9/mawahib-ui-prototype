@@ -38,8 +38,11 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
 import {
   getNegotiationTurn,
+  getWorkRequestOverflowMenu,
   negotiationActionLabel,
+  overflowMenuActionLabel,
   type NegotiationAction,
+  type OverflowMenuAction,
 } from '../../utils/workRequestNegotiation';
 import { ScreenProps } from '../../navigation/types';
 import {
@@ -90,7 +93,7 @@ const EVENT_LABEL: Record<WorkRequestEvent['type'], string> = {
   changes_requested: 'Changes Requested',
   changes_accepted: 'Changes Accepted',
   changes_declined: 'Changes Declined',
-  changes_cancelled: 'Change Request Cancelled',
+  changes_cancelled: 'Change Request Withdrawn',
   accepted: 'Request Accepted',
   rejected: 'Request Rejected',
   withdrawn: 'Request Cancelled',
@@ -303,6 +306,7 @@ export default function WorkRequestDetailScreen({
     requestChanges,
     acceptChanges,
     declineChanges,
+    cancelChanges,
     rejectRequest,
     withdrawRequest,
     markDelivered,
@@ -327,12 +331,18 @@ export default function WorkRequestDetailScreen({
     title: string;
     message: string;
     confirmLabel: string;
+    cancelLabel?: string;
     danger?: boolean;
     commentPlaceholder?: string;
     successKey?: MarketplaceSuccessKey;
     landingOverride?: Parameters<typeof showSuccess>[1];
     run: (comment?: string) => Promise<unknown>;
   } | null>(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
@@ -446,6 +456,7 @@ export default function WorkRequestDetailScreen({
   const tone = STATUS_TONE[request.status];
 
   const turn = getNegotiationTurn(request, viewerId);
+  const overflow = getWorkRequestOverflowMenu(request, viewerId);
   const isPendingPayment =
     request.status === 'pending_payment' &&
     (request.workEngagementStatus === 'pending_payment' ||
@@ -547,12 +558,31 @@ export default function WorkRequestDetailScreen({
           run: (comment) => rejectRequest(request.id, comment),
         });
         return;
+      default:
+        return;
+    }
+  };
+
+  const queueOverflowAction = (action: OverflowMenuAction) => {
+    setMenuOpen(false);
+    switch (action) {
+      case 'withdraw_change_request':
+        setConfirm({
+          title: 'Withdraw Change Request?',
+          message:
+            'This will withdraw your proposed changes and restore the previous negotiation state.',
+          confirmLabel: 'Withdraw',
+          cancelLabel: 'Cancel',
+          run: () => cancelChanges(request.id),
+        });
+        return;
       case 'cancel_request':
         setConfirm({
           title: 'Cancel Request?',
           message:
-            'This permanently cancels your work request and moves it to History.',
+            'This will permanently cancel this request and move it to History.',
           confirmLabel: 'Cancel Request',
+          cancelLabel: 'Keep Request',
           danger: true,
           successKey: 'requestCancelled',
           landingOverride: {
@@ -562,8 +592,27 @@ export default function WorkRequestDetailScreen({
           run: () => withdrawRequest(request.id),
         });
         return;
+      case 'report':
+        setReportText('');
+        setReportOpen(true);
+        return;
       default:
         return;
+    }
+  };
+
+  const submitReport = async () => {
+    const description = reportText.trim();
+    if (description.length < 10) return;
+    setBusy(true);
+    try {
+      // Moderation phase will replace this stub with a real report API.
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setReportOpen(false);
+      setReportText('');
+      setReportSuccessOpen(true);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -615,8 +664,7 @@ export default function WorkRequestDetailScreen({
           }
         : null;
 
-  const hasSecondaryActions =
-    secondaryNegotiation.length > 0 || turn.canCancelRequest;
+  const hasSecondaryActions = secondaryNegotiation.length > 0;
   const hasFooterActions =
     !!primaryAction ||
     hasSecondaryActions ||
@@ -712,6 +760,22 @@ export default function WorkRequestDetailScreen({
             {STATUS_LABEL[request.status]}
           </Text>
         </View>
+        {overflow.visible ? (
+          <TouchableOpacity
+            onPress={() => setMenuOpen(true)}
+            style={styles.menuButton}
+            hitSlop={8}
+            accessibilityLabel="More actions"
+          >
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={22}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.menuButton} />
+        )}
       </View>
 
       <ScrollView
@@ -984,8 +1048,7 @@ export default function WorkRequestDetailScreen({
             <View style={styles.secondaryActions}>
               {secondaryNegotiation.map((action) => {
                 const label = negotiationActionLabel(action);
-                const danger =
-                  action === 'reject_request' || action === 'cancel_request';
+                const danger = action === 'reject_request';
                 return (
                   <Button
                     key={action}
@@ -1001,17 +1064,6 @@ export default function WorkRequestDetailScreen({
                   />
                 );
               })}
-              {turn.canCancelRequest ? (
-                <Button
-                  title="Cancel Request"
-                  variant="secondary"
-                  style={styles.rejectHalfBtn}
-                  textStyle={styles.rejectBtnText}
-                  numberOfLines={1}
-                  disabled={busy}
-                  onPress={() => queueNegotiationAction('cancel_request')}
-                />
-              ) : null}
             </View>
           ) : null}
 
@@ -1221,11 +1273,108 @@ export default function WorkRequestDetailScreen({
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
+          <Pressable
+            style={styles.menuSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.menuTitle}>Actions</Text>
+            {overflow.items.map((item) => {
+              const danger =
+                item === 'cancel_request' || item === 'withdraw_change_request';
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={styles.menuItem}
+                  disabled={busy}
+                  onPress={() => queueOverflowAction(item)}
+                >
+                  <Text
+                    style={[
+                      styles.menuItemText,
+                      danger ? styles.menuItemDanger : null,
+                    ]}
+                  >
+                    {overflowMenuActionLabel(item)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <Button
+              title="Close"
+              variant="secondary"
+              fullWidth
+              onPress={() => setMenuOpen(false)}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={reportOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReportOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setReportOpen(false)}
+        >
+          <Pressable
+            style={styles.reportSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.modalTitle}>Report Request</Text>
+            <Text style={styles.reportDescription}>
+              Please describe the issue you experienced.
+            </Text>
+            <TextInput
+              placeholder="Describe what happened..."
+              placeholderTextColor={colors.textSecondary}
+              style={styles.reportInput}
+              multiline
+              value={reportText}
+              onChangeText={setReportText}
+              editable={!busy}
+            />
+            {reportText.trim().length > 0 && reportText.trim().length < 10 ? (
+              <Text style={styles.reportHint}>
+                Please enter at least 10 characters.
+              </Text>
+            ) : null}
+            <View style={styles.reportActions}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={styles.halfBtn}
+                disabled={busy}
+                onPress={() => setReportOpen(false)}
+              />
+              <Button
+                title="Send Report"
+                style={styles.halfBtn}
+                disabled={busy || reportText.trim().length < 10}
+                onPress={() => void submitReport()}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ConfirmActionModal
         visible={Boolean(confirm)}
         title={confirm?.title ?? ''}
         message={confirm?.message ?? ''}
         confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
+        cancelLabel={confirm?.cancelLabel}
         danger={confirm?.danger}
         commentPlaceholder={confirm?.commentPlaceholder}
         busy={busy}
@@ -1250,6 +1399,15 @@ export default function WorkRequestDetailScreen({
         title={successTitle}
         message={successMessage}
         onDone={() => void completeSuccess()}
+      />
+
+      <SuccessConfirmationModal
+        visible={reportSuccessOpen}
+        title="Report Submitted"
+        message={
+          'Thank you for your report.\n\nOur team has received it and will review it as soon as possible. If additional information is needed, someone from our team will contact you.'
+        }
+        onDone={() => setReportSuccessOpen(false)}
       />
     </ScreenContainer>
   );
@@ -1298,6 +1456,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  menuButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { ...typography.h3, color: colors.text, flex: 1 },
   statusPill: {
     paddingHorizontal: spacing.sm + 2,
@@ -1305,6 +1469,53 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   statusPillText: { ...typography.caption, fontWeight: '500' },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.screen,
+    paddingBottom: spacing.xxl,
+    gap: spacing.sm,
+  },
+  menuTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.xs },
+  menuItem: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  menuItemText: { ...typography.body, color: colors.text, fontWeight: '600' },
+  menuItemDanger: { color: colors.error },
+  reportSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.screen,
+    paddingBottom: spacing.xxl,
+    gap: spacing.sm,
+    maxHeight: '88%',
+  },
+  reportDescription: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  reportInput: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    ...typography.bodySmall,
+    color: colors.text,
+    textAlignVertical: 'top',
+  },
+  reportHint: { ...typography.caption, color: colors.error },
+  reportActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   scroll: { flex: 1 },
   content: {
     paddingHorizontal: spacing.screen,
