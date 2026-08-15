@@ -36,9 +36,12 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:local": "EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1 expo start",
+    "start:railway": "EXPO_PUBLIC_API_URL=https://mawahib-backend-production.up.railway.app/api/v1 expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

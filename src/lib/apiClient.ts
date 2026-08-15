@@ -42,7 +42,9 @@ export async function apiRequest<T>(
   const auth = await authHeader(accessToken);
   Object.entries(auth).forEach(([k, v]) => headers.set(k, v));
 
-  const res = await fetch(`${appEnv.apiBaseUrl}${path}`, {
+  // Paths must be root-relative (e.g. `/users/me`). Base already includes `/api/v1`.
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const res = await fetch(`${appEnv.apiBaseUrl}${normalizedPath}`, {
     ...rest,
     headers,
   });

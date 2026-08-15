@@ -12,11 +12,25 @@ React Native (Expo) mobile app prototype for **Mawahib** — a creative talent p
 ## Getting started
 
 ```bash
+cp .env.example .env
+# fill EXPO_PUBLIC_SUPABASE_* in .env
+
 npm install
 npm start
 ```
 
 Then press `i` for iOS simulator or `a` for Android emulator, or scan the QR code with Expo Go.
+
+### Nest API (local vs Railway)
+
+All Nest calls use `EXPO_PUBLIC_API_URL` (see `docs/API_ENV.md`):
+
+```bash
+npm run start:local     # http://localhost:3000/api/v1
+npm run start:railway   # Railway hosted API
+```
+
+After changing env vars: `npx expo start -c`.
 
 ## Project structure
 
