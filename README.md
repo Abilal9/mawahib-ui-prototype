@@ -23,14 +23,13 @@ Then press `i` for iOS simulator or `a` for Android emulator, or scan the QR cod
 
 ### Nest API (local vs Railway)
 
-All Nest calls use `EXPO_PUBLIC_API_URL` (see `docs/API_ENV.md`):
-
 ```bash
 npm run start:local     # http://localhost:3000/api/v1
 npm run start:railway   # Railway hosted API
 ```
 
-After changing env vars: `npx expo start -c`.
+Switching is automatic via the npm script — no `.env.local` and no editing
+TypeScript. Details: `docs/API_ENV.md`. After changing Supabase keys: `npx expo start -c`.
 
 ## Project structure
 

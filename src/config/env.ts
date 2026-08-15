@@ -1,11 +1,15 @@
+import Constants from 'expo-constants';
+
 /**
  * Public Expo env — never put secret/service-role keys here.
  *
- * Canonical Nest API base URL (includes `/api/v1`, no trailing slash):
- *   EXPO_PUBLIC_API_URL
+ * Nest API base URL (single source of truth for HTTP clients):
+ *   1. `expo.extra.apiBaseUrl` from `app.config.js` (preferred — set by
+ *      `npm run start:local` / `start:railway` via EXPO_PUBLIC_API_URL)
+ *   2. Fallback default: local Nest
  *
- * Defaults to local Nest. Switch via `.env.development` / `.env.production`
- * or `npm run start:local` / `npm run start:railway` — see docs/API_ENV.md.
+ * Do not put EXPO_PUBLIC_API_URL in `.env` / `.env.development` for switching;
+ * Expo's client dotenv merge would override the npm script. See docs/API_ENV.md.
  */
 const DEFAULT_API_BASE_URL = 'http://localhost:3000/api/v1';
 
@@ -14,12 +18,18 @@ function normalizeApiBaseUrl(raw: string): string {
   return trimmed.length > 0 ? trimmed : DEFAULT_API_BASE_URL;
 }
 
+function resolveApiBaseUrl(): string {
+  const fromExtra = Constants.expoConfig?.extra?.apiBaseUrl;
+  if (typeof fromExtra === 'string' && fromExtra.trim().length > 0) {
+    return normalizeApiBaseUrl(fromExtra);
+  }
+  return DEFAULT_API_BASE_URL;
+}
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabasePublishableKey =
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
-const apiBaseUrl = normalizeApiBaseUrl(
-  process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL,
-);
+const apiBaseUrl = resolveApiBaseUrl();
 const phoneAuthEnabled =
   (process.env.EXPO_PUBLIC_PHONE_AUTH_ENABLED ?? 'false').toLowerCase() ===
   'true';

@@ -12,6 +12,7 @@
     "expo": "~57.0.4",
     "expo-auth-session": "~57.0.6",
     "expo-blur": "~57.0.0",
+    "expo-constants": "~57.0.11",
     "expo-file-system": "~57.0.2",
     "expo-font": "^57.0.0",
     "expo-image": "^57.0.0",
@@ -35,9 +36,9 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
-    "start:local": "EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1 expo start",
-    "start:railway": "EXPO_PUBLIC_API_URL=https://mawahib-backend-production.up.railway.app/api/v1 expo start",
+    "start": "MAWAHIB_API_TARGET=local EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1 expo start",
+    "start:local": "MAWAHIB_API_TARGET=local EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1 expo start",
+    "start:railway": "MAWAHIB_API_TARGET=railway EXPO_PUBLIC_API_URL=https://mawahib-backend-production.up.railway.app/api/v1 expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

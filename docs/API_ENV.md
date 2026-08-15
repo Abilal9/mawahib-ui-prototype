@@ -1,70 +1,76 @@
 # Mawahib frontend → Nest API environments
 
 All Nest HTTP calls go through `src/lib/apiClient.ts` → `appEnv.apiBaseUrl` from
-`src/config/env.ts`, which reads **`EXPO_PUBLIC_API_URL`** (must include `/api/v1`,
-no trailing slash).
+`src/config/env.ts`.
 
-| Mode | API base URL |
-|------|----------------|
-| Local Nest | `http://localhost:3000/api/v1` |
-| Railway (hosted) | `https://mawahib-backend-production.up.railway.app/api/v1` |
+## How backend selection works
 
-Supabase Auth stays on Supabase (`EXPO_PUBLIC_SUPABASE_*`). Only Nest routes use
-`EXPO_PUBLIC_API_URL`. Storage uploads still use Supabase Storage after Nest
-`/media/upload-sessions`.
+1. `npm run start:local` / `start:railway` set **`EXPO_PUBLIC_API_URL`** (and
+   `MAWAHIB_API_TARGET`) in the shell.
+2. Expo CLI loads `.env*` for Supabase keys but **does not overwrite** shell
+   values already set (`@expo/env`).
+3. **`app.config.js`** (Node) reads `EXPO_PUBLIC_API_URL` and writes
+   `expo.extra.apiBaseUrl`.
+4. The app reads **`Constants.expoConfig.extra.apiBaseUrl`** — not the Metro
+   client dotenv merge.
 
-## A. Run against local backend
+That avoids Expo’s client `expo/virtual/env` bug: it merges
+`.env` → `.env.development` → `.env.local` **on top of** `process.env`, so a
+localhost value in `.env.development` used to override `start:railway`.
 
-1. Start Nest locally on port 3000.
-2. Ensure `.env` has Supabase publishable URL/key (from `.env.example`).
-3. Start Expo:
+| Script | API base URL |
+|--------|----------------|
+| `npm run start:local` (or `npm start`) | `http://localhost:3000/api/v1` |
+| `npm run start:railway` | `https://mawahib-backend-production.up.railway.app/api/v1` |
+
+## Env files
+
+| File | Tracked? | Purpose |
+|------|----------|---------|
+| `.env` | No | Supabase publishable URL/key (and other local secrets) |
+| `.env.example` | Yes | Template — no Nest URL switching |
+| `.env.development` | Yes | Dev notes only — **no** `EXPO_PUBLIC_API_URL` |
+| `.env.production` | Yes | Default Railway URL for production/EAS builds |
+| `.env.local` | No | **Not required** for Local ↔ Railway switching |
+
+Do **not** put `EXPO_PUBLIC_API_URL` in `.env` / `.env.development` / `.env.local`
+just to switch backends. Use the npm scripts.
+
+## A. Run against local Nest
 
 ```bash
+# Nest on :3000
 npm run start:local
-# or: npm start   (uses .env.development → localhost)
 ```
 
-4. If you changed env vars, clear cache:
-
-```bash
-npx expo start -c
-```
-
-## B. Run against Railway (dev client / Expo Go)
-
-1. Railway health should be OK:  
-   `https://mawahib-backend-production.up.railway.app/api/v1/health`
-2. Start Expo with the hosted API:
+## B. Run against Railway
 
 ```bash
 npm run start:railway
 ```
 
-3. Confirm in Metro logs / React Native network inspector that requests go to  
-   `mawahib-backend-production.up.railway.app`, not `localhost:3000`.
+Confirm requests hit `mawahib-backend-production.up.railway.app` (network
+inspector). No `.env.local` create/delete needed.
 
-## C. Production / release build against Railway
+After changing Supabase keys in `.env`, restart with cache clear if needed:
 
-`.env.production` sets `EXPO_PUBLIC_API_URL` to the Railway base. Production
-Expo/EAS builds load that file when the build mode is `production`.
+```bash
+npx expo start -c
+```
 
-Also configure Supabase public vars for the build (EAS secrets or CI env):
+## C. Production / release build
 
-- `EXPO_PUBLIC_SUPABASE_URL`
-- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+`.env.production` supplies Railway when `EXPO_PUBLIC_API_URL` is unset. Also set
+Supabase `EXPO_PUBLIC_*` via EAS secrets / CI. Never ship server secrets.
 
-Do **not** inject `SUPABASE_SECRET_KEY` or `DATABASE_URL` into the app.
+## Staging later
 
-## Switching later (staging)
-
-Add another env file or npm script (e.g. `start:staging`) that sets
-`EXPO_PUBLIC_API_URL` to a staging Nest URL. No `apiClient` / screen changes needed.
+Add e.g. `start:staging` that sets `EXPO_PUBLIC_API_URL` to the staging Nest URL.
+No `apiClient` / screen changes.
 
 ## Smoke checklist (hosted)
 
-- [ ] `GET …/api/v1/health` → `ok` / connected / configured  
-- [ ] Login (Supabase) → `POST /auth/bootstrap` → `GET /users/me`  
-- [ ] Profile / visitor profile  
-- [ ] Portfolio / services / explore  
-- [ ] Jobs / work requests / negotiation  
-- [ ] `POST /media/upload-sessions` (Nest), then Storage upload to Supabase  
+- [ ] Health `…/api/v1/health` → ok / connected / configured  
+- [ ] Login → bootstrap → `/users/me`  
+- [ ] Profile / explore / jobs / work requests  
+- [ ] Media upload-sessions (Nest) + Supabase Storage  
