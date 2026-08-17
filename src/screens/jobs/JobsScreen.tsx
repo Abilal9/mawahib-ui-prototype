@@ -141,6 +141,8 @@ function getStatusTone(status: UserJob['status']) {
     case 'in-progress':
     case 'delivered':
       return { bg: '#DBEAFE', text: '#1D4ED8' };
+    case 'disputed':
+      return { bg: '#FFEDD5', text: '#C2410C' };
     case 'completed':
       return { bg: '#DCFCE7', text: '#15803D' };
     default:

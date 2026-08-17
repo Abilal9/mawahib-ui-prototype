@@ -56,6 +56,7 @@ const KNOWN_EVENT_SUMMARIES = new Set([
   'requested changes',
   'started the job',
   'marked the job as delivered',
+  'declined the delivery',
   'completed the job',
 ]);
 

@@ -316,6 +316,7 @@ export default function WorkRequestDetailScreen({
     withdrawRequest,
     markDelivered,
     markCompleted,
+    markDisputed,
     refresh,
     refreshUnread,
   } = useUserJobs();
@@ -352,6 +353,8 @@ export default function WorkRequestDetailScreen({
   const [reportOpen, setReportOpen] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declineText, setDeclineText] = useState('');
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
@@ -389,6 +392,7 @@ export default function WorkRequestDetailScreen({
         engagementId &&
         (engagementStatus === 'in_progress' ||
           engagementStatus === 'delivered' ||
+          engagementStatus === 'disputed' ||
           engagementStatus === 'completed');
       if (canOpenWorkChat) {
         const workChats = await messageService
@@ -495,14 +499,25 @@ export default function WorkRequestDetailScreen({
       request.workEngagementStatus === null);
   const canDeliver =
     isProvider && request.workEngagementStatus === 'in_progress';
-  const canComplete =
+  const canConfirmDelivery =
+    isClient &&
+    (request.workEngagementStatus === 'delivered' ||
+      request.workEngagementStatus === 'disputed');
+  const canDeclineDelivery =
     isClient && request.workEngagementStatus === 'delivered';
   const isCompletedEngagement = request.workEngagementStatus === 'completed';
   const canMessageWork =
     !!request.workEngagementId &&
     (request.workEngagementStatus === 'in_progress' ||
       request.workEngagementStatus === 'delivered' ||
+      request.workEngagementStatus === 'disputed' ||
       request.workEngagementStatus === 'completed');
+  const deliveryWaitingMessage =
+    isProvider && request.workEngagementStatus === 'delivered'
+      ? 'Waiting for the client to Confirm Delivery or Decline.'
+      : isProvider && request.workEngagementStatus === 'disputed'
+        ? 'Waiting for the client to confirm delivery.'
+        : null;
   const showDevStartWork =
     typeof __DEV__ !== 'undefined' &&
     __DEV__ &&
@@ -708,8 +723,37 @@ export default function WorkRequestDetailScreen({
     }
   };
 
+  const submitDecline = () => {
+    const explanation = declineText.trim();
+    if (!explanation) {
+      Alert.alert('Explanation required', 'Please describe the issue.');
+      return;
+    }
+    if (!request.workEngagementId || busy) return;
+    setDeclineOpen(false);
+    setDeclineText('');
+    void runAction(
+      () => markDisputed(request.workEngagementId!, explanation),
+      'jobDisputed',
+      { tab: jobsTab, section: 'in-progress' },
+    );
+  };
+
   const primaryNegotiation = turn.actions[0] ?? null;
   const secondaryNegotiation = turn.actions.slice(1);
+
+  const openConfirmDelivery = () =>
+    setConfirm({
+      title: 'Confirm Delivery?',
+      message: 'Are you sure the work has been delivered as agreed?',
+      confirmLabel: 'Confirm Delivery',
+      successKey: 'jobCompleted',
+      landingOverride: {
+        tab: jobsTab,
+        section: 'completed',
+      },
+      run: () => markCompleted(request.workEngagementId!),
+    });
 
   /** The one call to action; everything else lives in the secondary row. */
   const primaryAction: {
@@ -727,7 +771,7 @@ export default function WorkRequestDetailScreen({
             setConfirm({
               title: 'Mark as Delivered?',
               message:
-                'Confirm that you have delivered the work. The client can then Complete Job.',
+                'Confirm that you have delivered the work. The client can then Confirm Delivery or Decline.',
               confirmLabel: 'Mark as Delivered',
               successKey: 'jobDelivered',
               landingOverride: {
@@ -737,30 +781,20 @@ export default function WorkRequestDetailScreen({
               run: () => markDelivered(request.workEngagementId!),
             }),
         }
-      : canComplete
+      : canConfirmDelivery
         ? {
-            title: 'Complete Job',
-            onPress: () =>
-              setConfirm({
-                title: 'Complete Job?',
-                message:
-                  'Confirm this work is finished. The job will move to History.',
-                confirmLabel: 'Complete Job',
-                successKey: 'jobCompleted',
-                landingOverride: {
-                  tab: jobsTab,
-                  section: 'completed',
-                },
-                run: () => markCompleted(request.workEngagementId!),
-              }),
+            title: 'Confirm Delivery',
+            onPress: openConfirmDelivery,
           }
         : null;
 
-  const hasSecondaryActions = secondaryNegotiation.length > 0;
+  const hasSecondaryActions =
+    secondaryNegotiation.length > 0 || canDeclineDelivery;
+  const waitingMessage = turn.waitingMessage ?? deliveryWaitingMessage;
   const hasFooterActions =
     !!primaryAction ||
     hasSecondaryActions ||
-    !!turn.waitingMessage ||
+    !!waitingMessage ||
     isPendingPayment ||
     isCompletedEngagement ||
     canMessageWork ||
@@ -1119,14 +1153,14 @@ export default function WorkRequestDetailScreen({
 
       {hasFooterActions ? (
         <View style={styles.footer}>
-          {turn.waitingMessage ? (
+          {waitingMessage ? (
             <View style={styles.waitingCard}>
               <Ionicons
                 name="hourglass-outline"
                 size={18}
                 color={colors.textSecondary}
               />
-              <Text style={styles.waitingText}>{turn.waitingMessage}</Text>
+              <Text style={styles.waitingText}>{waitingMessage}</Text>
             </View>
           ) : null}
 
@@ -1159,6 +1193,19 @@ export default function WorkRequestDetailScreen({
                   />
                 );
               })}
+              {canDeclineDelivery ? (
+                <Button
+                  title="Decline"
+                  variant="secondary"
+                  style={styles.halfBtn}
+                  textStyle={styles.rejectBtnText}
+                  disabled={busy}
+                  onPress={() => {
+                    setDeclineText('');
+                    setDeclineOpen(true);
+                  }}
+                />
+              ) : null}
             </View>
           ) : null}
 
@@ -1484,6 +1531,55 @@ export default function WorkRequestDetailScreen({
                 style={styles.halfBtn}
                 disabled={busy || reportText.trim().length < 10}
                 onPress={() => void submitReport()}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={declineOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDeclineOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setDeclineOpen(false)}
+        >
+          <Pressable
+            style={styles.reportSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.modalTitle}>Decline Delivery</Text>
+            <Text style={styles.reportDescription}>
+              Explain what is wrong with the delivery so the provider can
+              address it.
+            </Text>
+            <TextInput
+              placeholder="Describe the issue..."
+              placeholderTextColor={colors.textSecondary}
+              style={styles.reportInput}
+              multiline
+              value={declineText}
+              onChangeText={setDeclineText}
+              editable={!busy}
+              maxLength={1000}
+            />
+            <View style={styles.reportActions}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={styles.halfBtn}
+                disabled={busy}
+                onPress={() => setDeclineOpen(false)}
+              />
+              <Button
+                title="Send"
+                style={styles.halfBtn}
+                disabled={busy}
+                onPress={submitDecline}
               />
             </View>
           </Pressable>

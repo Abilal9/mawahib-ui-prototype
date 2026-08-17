@@ -88,6 +88,7 @@ interface UserJobsContextValue {
   withdrawRequest: (id: string, comment?: string) => Promise<void>;
   markDelivered: (engagementId: string) => Promise<void>;
   markCompleted: (engagementId: string) => Promise<void>;
+  markDisputed: (engagementId: string, note: string) => Promise<void>;
   /** Always rejects: money moves in a later phase. */
   markJobPaid: (id: string) => Promise<never>;
   archiveListing: (listingId: string) => Promise<void>;
@@ -127,12 +128,14 @@ function partyToUser(party: ApiWorkRequest['sender']): User {
 /** Engagement stages that outrank the request status on the card. */
 function engagementStage(
   status: ApiEngagementStatus | null,
-): 'in-progress' | 'delivered' | 'completed' | null {
+): 'in-progress' | 'delivered' | 'disputed' | 'completed' | null {
   switch (status) {
     case 'in_progress':
       return 'in-progress';
     case 'delivered':
       return 'delivered';
+    case 'disputed':
+      return 'disputed';
     case 'completed':
       return 'completed';
     default:
@@ -151,6 +154,9 @@ function mapStatus(request: ApiWorkRequest): {
   }
   if (stage === 'delivered') {
     return { status: 'delivered', statusLabel: 'Delivered', section: 'in-progress' };
+  }
+  if (stage === 'disputed') {
+    return { status: 'disputed', statusLabel: 'Disputed', section: 'in-progress' };
   }
   if (stage === 'completed') {
     return { status: 'completed', statusLabel: 'Completed', section: 'completed' };
@@ -448,6 +454,10 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       },
       markCompleted: async (engagementId) => {
         await marketplaceApi.transitionEngagement(engagementId, 'completed');
+        await refresh();
+      },
+      markDisputed: async (engagementId, note) => {
+        await marketplaceApi.transitionEngagement(engagementId, 'disputed', note);
         await refresh();
       },
       markJobPaid: () => Promise.reject(new Error(PAYMENTS_UNAVAILABLE_MESSAGE)),

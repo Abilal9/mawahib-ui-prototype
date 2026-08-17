@@ -77,7 +77,14 @@ export const MARKETPLACE_SUCCESS = {
   },
   jobDelivered: {
     title: 'Marked as Delivered',
-    message: 'The client can now complete the job.',
+    message:
+      'The client can now Confirm Delivery or Decline.',
+    landing: { tab: 'sent', section: 'in-progress' },
+  },
+  jobDisputed: {
+    title: 'Delivery Declined',
+    message:
+      'Your explanation was sent. The job stays In Progress until delivery is confirmed.',
     landing: { tab: 'sent', section: 'in-progress' },
   },
   jobCompleted: {

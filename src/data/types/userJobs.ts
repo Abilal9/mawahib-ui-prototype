@@ -12,6 +12,7 @@ export type UserJobStatus =
   | 'pending-payment'
   | 'in-progress'
   | 'delivered'
+  | 'disputed'
   | 'completed'
   | 'rejected'
   | 'withdrawn'
