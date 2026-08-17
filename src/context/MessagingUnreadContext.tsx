@@ -25,8 +25,9 @@ const MessagingUnreadContext = createContext<
 
 /**
  * App-wide messaging unread badge source.
- * Count comes from Nest (`/users/me/conversations/unread-summary`), so it
- * survives restarts and stays aligned with server read markers.
+ * Nest `/users/me/conversations/unread-summary` returns the number of
+ * inbox conversations with unread messages (not total unread messages).
+ * Survives restarts; archived/deleted threads are excluded server-side.
  */
 export function MessagingUnreadProvider({ children }: { children: ReactNode }) {
   const { isSignedIn } = useAuth();

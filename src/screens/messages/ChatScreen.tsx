@@ -25,6 +25,7 @@ import AppToast from '../../components/ui/AppToast';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import ProfileOverviewSheet from '../../components/messaging/ProfileOverviewSheet';
 import JobOverviewSheet from '../../components/messaging/JobOverviewSheet';
+import ChatImageLightbox from '../../components/messaging/ChatImageLightbox';
 import { toImageSource } from '../../utils/image';
 import { coerceByteSize, formatBytes } from '../../utils/formatBytes';
 import { colors, spacing, radius, typography } from '../../theme';
@@ -51,6 +52,10 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 type PendingAttachment = LocalPickedFile & { id: string };
+
+type ChatRow =
+  | { kind: 'divider'; id: string }
+  | { kind: 'message'; id: string; message: ApiMessage };
 
 function mergeMessages(existing: ApiMessage[], incoming: ApiMessage[]): ApiMessage[] {
   const byId = new Map<string, ApiMessage>();
@@ -187,10 +192,15 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasNewBelow, setHasNewBelow] = useState(false);
+  const [unreadDividerBeforeId, setUnreadDividerBeforeId] = useState<
+    string | null
+  >(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  const listRef = useRef<FlatList<ApiMessage>>(null);
+  const listRef = useRef<FlatList<ChatRow>>(null);
   const nearBottomRef = useRef(true);
-  const pendingInitialScrollRef = useRef(true);
+  const pendingScrollTargetRef = useRef<'end' | 'divider' | null>(null);
   const loadingOlderRef = useRef(false);
 
   const scrollToLatest = useCallback((animated = true) => {
@@ -228,9 +238,19 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         });
         if (opts.initial) {
           setOlderCursor(page.nextCursor);
-          pendingInitialScrollRef.current = true;
           nearBottomRef.current = true;
           setHasNewBelow(false);
+
+          const lastReadAt = conv.lastReadAt;
+          const firstUnread = chronological.find(
+            (m) =>
+              m.kind === 'user' &&
+              m.senderId &&
+              m.senderId !== me.id &&
+              (!lastReadAt || new Date(m.createdAt) > new Date(lastReadAt)),
+          );
+          setUnreadDividerBeforeId(firstUnread?.id ?? null);
+          pendingScrollTargetRef.current = firstUnread ? 'divider' : 'end';
         }
         setMissing(false);
         await messageService.markRead(conversationId).catch(() => undefined);
@@ -245,7 +265,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         setLoading(false);
       }
     },
-    [conversationId, refreshUnread, scrollToLatest],
+    [conversationId, me.id, refreshUnread, scrollToLatest],
   );
 
   const loadOlder = useCallback(async () => {
@@ -274,11 +294,14 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       setLoading(true);
       setMessages([]);
       setOlderCursor(null);
-      pendingInitialScrollRef.current = true;
+      pendingScrollTargetRef.current = 'end';
       nearBottomRef.current = true;
       setHasNewBelow(false);
       void refreshLatest({ initial: true });
-      return () => setFocused(false);
+      return () => {
+        setFocused(false);
+        setUnreadDividerBeforeId(null);
+      };
     }, [refreshLatest]),
   );
 
@@ -306,6 +329,38 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const viewerArchived =
     conversation?.viewerArchived === true ||
     Boolean(conversation?.viewerArchivedAt);
+
+  const chatRows = useMemo<ChatRow[]>(() => {
+    const rows: ChatRow[] = [];
+    for (const message of messages) {
+      if (unreadDividerBeforeId === message.id) {
+        rows.push({ kind: 'divider', id: `divider-${message.id}` });
+      }
+      rows.push({ kind: 'message', id: message.id, message });
+    }
+    return rows;
+  }, [messages, unreadDividerBeforeId]);
+
+  const galleryUrls = useMemo(() => {
+    const urls: string[] = [];
+    for (const message of messages) {
+      for (const a of message.attachments ?? []) {
+        if (isImageMime(a.mimeType) && a.url) {
+          urls.push(a.url);
+        }
+      }
+    }
+    return urls;
+  }, [messages]);
+
+  const openImage = useCallback(
+    (url: string) => {
+      const index = galleryUrls.indexOf(url);
+      setLightboxIndex(index >= 0 ? index : 0);
+      setLightboxOpen(true);
+    },
+    [galleryUrls],
+  );
 
   const headerSubtitle = useMemo(() => {
     if (work) {
@@ -672,7 +727,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           <View style={styles.flex}>
             <FlatList
               ref={listRef}
-              data={messages}
+              data={chatRows}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.messageList}
               showsVerticalScrollIndicator={false}
@@ -681,12 +736,33 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
               maintainVisibleContentPosition={{
                 minIndexForVisible: 0,
               }}
+              onScrollToIndexFailed={(info) => {
+                listRef.current?.scrollToOffset({
+                  offset: Math.max(0, info.averageItemLength * info.index),
+                  animated: false,
+                });
+              }}
               onContentSizeChange={() => {
-                if (pendingInitialScrollRef.current && messages.length > 0) {
+                const target = pendingScrollTargetRef.current;
+                if (!target || chatRows.length === 0) return;
+                if (target === 'divider') {
+                  const index = chatRows.findIndex(
+                    (row) => row.kind === 'divider',
+                  );
+                  if (index >= 0) {
+                    listRef.current?.scrollToIndex({
+                      index,
+                      animated: false,
+                      viewPosition: 0.2,
+                    });
+                  } else {
+                    listRef.current?.scrollToEnd({ animated: false });
+                  }
+                } else {
                   listRef.current?.scrollToEnd({ animated: false });
-                  pendingInitialScrollRef.current = false;
-                  nearBottomRef.current = true;
                 }
+                pendingScrollTargetRef.current = null;
+                nearBottomRef.current = true;
               }}
               ListHeaderComponent={
                 loadingOlder ? (
@@ -696,16 +772,26 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                 ) : null
               }
               renderItem={({ item }) => {
-                if (item.kind === 'system') {
+                if (item.kind === 'divider') {
+                  return (
+                    <View style={styles.newMessagesDivider}>
+                      <View style={styles.newMessagesLine} />
+                      <Text style={styles.newMessagesLabel}>New Messages</Text>
+                      <View style={styles.newMessagesLine} />
+                    </View>
+                  );
+                }
+                const message = item.message;
+                if (message.kind === 'system') {
                   return (
                     <View style={styles.systemRow}>
                       <Text style={styles.systemText}>
-                        {item.body || 'System update'}
+                        {message.body || 'System update'}
                       </Text>
                     </View>
                   );
                 }
-                const isMe = item.senderId === me.id;
+                const isMe = message.senderId === me.id;
                 return (
                   <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
                     <View
@@ -715,30 +801,25 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                       ]}
                     >
                       <AttachmentBlocks
-                        attachments={item.attachments ?? []}
+                        attachments={message.attachments ?? []}
                         isMe={isMe}
-                        onOpenImage={(url) =>
-                          navigation.navigate('FullPhotoPreview', {
-                            images: [url],
-                            initialIndex: 0,
-                          })
-                        }
+                        onOpenImage={openImage}
                       />
-                      {item.body ? (
+                      {message.body ? (
                         <Text
                           style={[
                             styles.bubbleText,
                             isMe && styles.bubbleTextMe,
-                            item.attachments?.length
+                            message.attachments?.length
                               ? styles.captionAfterAttach
                               : null,
                           ]}
                         >
-                          {item.body}
+                          {message.body}
                         </Text>
                       ) : null}
-                      {isMe && item.receiptStatus ? (
-                        <ReceiptTicks status={item.receiptStatus} />
+                      {isMe && message.receiptStatus ? (
+                        <ReceiptTicks status={message.receiptStatus} />
                       ) : null}
                     </View>
                   </View>
@@ -882,11 +963,24 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       <ProfileOverviewSheet
         visible={profileSheetOpen}
         userId={profileSheetUserId}
+        conversationId={conversationId}
         onClose={() => {
           setProfileSheetOpen(false);
           setProfileSheetUserId(null);
         }}
         onOpenFullProfile={(id) => openUserProfile(navigation, id, me.id)}
+        onOpenMedia={() => {
+          setProfileSheetOpen(false);
+          setProfileSheetUserId(null);
+          navigation.navigate('ConversationMedia', { conversationId });
+        }}
+      />
+
+      <ChatImageLightbox
+        visible={lightboxOpen}
+        images={galleryUrls}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
       />
 
       <Modal
@@ -1035,6 +1129,22 @@ const styles = StyleSheet.create({
   olderLoading: {
     paddingVertical: spacing.sm,
     alignItems: 'center',
+  },
+  newMessagesDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.md,
+  },
+  newMessagesLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.borderLight,
+  },
+  newMessagesLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   newMessagesChip: {
     position: 'absolute',

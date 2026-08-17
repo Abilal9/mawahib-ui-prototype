@@ -45,11 +45,15 @@ export default function ProfileOverviewSheet({
   userId,
   onClose,
   onOpenFullProfile,
+  conversationId,
+  onOpenMedia,
 }: {
   visible: boolean;
   userId: string | null | undefined;
   onClose: () => void;
   onOpenFullProfile: (userId: string) => void;
+  conversationId?: string | null;
+  onOpenMedia?: () => void;
 }) {
   const { getRelation } = useConnections();
   const [user, setUser] = useState<ApiUser | null>(null);
@@ -188,6 +192,24 @@ export default function ProfileOverviewSheet({
                 </Text>
               ) : null}
 
+              {onOpenMedia && conversationId ? (
+                <TouchableOpacity
+                  style={styles.mediaBtn}
+                  onPress={() => {
+                    onOpenMedia();
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel="View shared media"
+                >
+                  <Ionicons
+                    name="images-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.mediaBtnText}>Media</Text>
+                </TouchableOpacity>
+              ) : null}
+
               <TouchableOpacity
                 style={styles.fullProfileBtn}
                 onPress={openFull}
@@ -280,6 +302,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   fullProfileBtnText: {
+    ...typography.label,
+    color: colors.primary,
+  },
+  mediaBtn: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radius.card,
+    backgroundColor: colors.background,
+  },
+  mediaBtnText: {
     ...typography.label,
     color: colors.primary,
   },

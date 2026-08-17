@@ -47,6 +47,7 @@ const KNOWN_EVENT_SUMMARIES = new Set([
   'started a chat with you',
   'started a conversation with you',
   'a work chat was started',
+  'a work chat has started',
   'wants to connect with you',
   'accepted your connection request',
   'sent you a work request',
@@ -81,9 +82,13 @@ function eventCopy(api: ApiNotification): {
     case 'message_received': {
       if (event === 'work_chat_started') {
         return {
-          title: actorName || api.title || 'Work chat',
-          message: 'A work chat was started',
-          context: jobTitle,
+          title: 'A work chat has started',
+          message: jobTitle
+            ? jobTitle
+            : actorName
+              ? `with ${actorName}`
+              : 'Work conversation is ready',
+          context: actorName && jobTitle ? `with ${actorName}` : undefined,
         };
       }
       const started =
@@ -94,7 +99,7 @@ function eventCopy(api: ApiNotification): {
       return {
         title: actorName || api.title || 'Messages',
         message: started
-          ? 'started a chat with you'
+          ? 'started a conversation with you'
           : 'sent you a message',
         context: jobTitle,
       };

@@ -76,7 +76,22 @@ export interface MessagesPage {
   nextCursor: string | null;
 }
 
+export interface ConversationMediaItem {
+  id: string;
+  mediaAssetId: string;
+  messageId: string;
+  url: string | null;
+  mimeType: string;
+  createdAt: string;
+}
+
+export interface ConversationMediaPage {
+  items: ConversationMediaItem[];
+  nextCursor: string | null;
+}
+
 export interface ConversationUnreadSummary {
+  /** Count of conversations with unread messages (not total unread messages). */
   unreadCount: number;
 }
 
@@ -112,6 +127,19 @@ export const messagingApi = {
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return apiRequest<MessagesPage>(
       `/conversations/${conversationId}/messages${suffix}`,
+    );
+  },
+
+  listConversationMedia(
+    conversationId: string,
+    params?: { cursor?: string; limit?: number },
+  ): Promise<ConversationMediaPage> {
+    const qs = new URLSearchParams();
+    if (params?.cursor) qs.set('cursor', params.cursor);
+    if (params?.limit != null) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest<ConversationMediaPage>(
+      `/conversations/${conversationId}/media${suffix}`,
     );
   },
 

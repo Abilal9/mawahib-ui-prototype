@@ -23,6 +23,7 @@ import {
   VideoEditScreen,
   VideoTrimScreen,
   ChatScreen,
+  ConversationMediaScreen,
   ArchivedConversationsScreen,
   ProfileScreen,
   UserProfileScreen,
@@ -158,6 +159,10 @@ export default function RootNavigator() {
       <Stack.Screen name="VideoEdit" component={VideoEditScreen} />
       <Stack.Screen name="VideoTrim" component={VideoTrimScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen
+        name="ConversationMedia"
+        component={ConversationMediaScreen}
+      />
       <Stack.Screen
         name="ArchivedConversations"
         component={ArchivedConversationsScreen}

@@ -67,6 +67,7 @@ export type RootStackParamList = {
   VideoEdit: { uri?: string };
   VideoTrim: { uri?: string };
   Chat: { conversationId: string };
+  ConversationMedia: { conversationId: string };
   ArchivedConversations: undefined;
   ServiceDetail: { serviceId: string; userId?: string };
   RequestService: {

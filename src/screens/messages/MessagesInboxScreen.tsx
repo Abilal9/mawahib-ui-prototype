@@ -6,12 +6,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
+import ConversationSwipeRow from '../../components/messaging/ConversationSwipeRow';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { INBOX_POLL_MS } from '../../config/messaging';
@@ -50,6 +53,10 @@ export default function MessagesInboxScreen({
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [focused, setFocused] = useState(false);
+  const [swipedId, setSwipedId] = useState<string | null>(null);
+  const [archiveTargetId, setArchiveTargetId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!isSignedIn) {
@@ -73,11 +80,54 @@ export default function MessagesInboxScreen({
       setFocused(true);
       setLoading(true);
       void load();
-      return () => setFocused(false);
+      return () => {
+        setFocused(false);
+        setSwipedId(null);
+      };
     }, [load]),
   );
 
   usePolling(load, INBOX_POLL_MS, focused && isSignedIn);
+
+  const confirmArchive = async () => {
+    if (!archiveTargetId) return;
+    setBusy(true);
+    try {
+      await messageService.archive(archiveTargetId);
+      setConversations((prev) =>
+        prev.filter((c) => c.id !== archiveTargetId),
+      );
+      void refreshUnread();
+      setSwipedId(null);
+      setArchiveTargetId(null);
+    } catch (e) {
+      Alert.alert(
+        'Could not archive',
+        e instanceof Error ? e.message : 'Please try again.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    setBusy(true);
+    try {
+      await messageService.softDelete(deleteTargetId);
+      setConversations((prev) => prev.filter((c) => c.id !== deleteTargetId));
+      void refreshUnread();
+      setSwipedId(null);
+      setDeleteTargetId(null);
+    } catch (e) {
+      Alert.alert(
+        'Could not delete',
+        e instanceof Error ? e.message : 'Please try again.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <ScreenContainer padded={false} safeBottom={false}>
@@ -104,6 +154,7 @@ export default function MessagesInboxScreen({
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={() => setSwipedId(null)}
           ListEmptyComponent={
             <Text style={styles.empty}>
               No conversations yet. Connect with someone or start a job to
@@ -121,51 +172,84 @@ export default function MessagesInboxScreen({
                 ? item.workContext.title
                 : item.lastMessagePreview || 'No messages yet';
             return (
-              <TouchableOpacity
-                style={styles.conversation}
+              <ConversationSwipeRow
+                open={swipedId === item.id}
+                onOpenChange={(next) =>
+                  setSwipedId(next ? item.id : null)
+                }
+                onPressArchive={() => {
+                  setSwipedId(item.id);
+                  setArchiveTargetId(item.id);
+                }}
+                onPressDelete={() => {
+                  setSwipedId(item.id);
+                  setDeleteTargetId(item.id);
+                }}
                 onPress={() =>
                   navigation.navigate('Chat', { conversationId: item.id })
                 }
-                activeOpacity={0.8}
               >
-                <Image
-                  source={toImageSource(item.peer?.avatarUrl ?? '')}
-                  style={styles.avatar}
-                  contentFit="cover"
-                />
-                <View style={styles.content}>
-                  <View style={styles.topRow}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {name}
-                      </Text>
-                      <View
-                        style={[
-                          styles.badgeType,
-                          item.type === 'work' && styles.badgeTypeWork,
-                        ]}
-                      >
-                        <Text style={styles.badgeTypeText}>
-                          {typeBadge(item.type)}
+                <View style={styles.conversation}>
+                  <Image
+                    source={toImageSource(item.peer?.avatarUrl ?? '')}
+                    style={styles.avatar}
+                    contentFit="cover"
+                  />
+                  <View style={styles.content}>
+                    <View style={styles.topRow}>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.name} numberOfLines={1}>
+                          {name}
                         </Text>
+                        <View
+                          style={[
+                            styles.badgeType,
+                            item.type === 'work' && styles.badgeTypeWork,
+                          ]}
+                        >
+                          <Text style={styles.badgeTypeText}>
+                            {typeBadge(item.type)}
+                          </Text>
+                        </View>
                       </View>
+                      <Text style={styles.time}>
+                        {formatTime(item.lastMessageAt)}
+                      </Text>
                     </View>
-                    <Text style={styles.time}>
-                      {formatTime(item.lastMessageAt)}
-                    </Text>
-                  </View>
-                  <View style={styles.bottomRow}>
-                    <Text style={styles.lastMessage} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                    {unread ? <View style={styles.unreadDot} /> : null}
+                    <View style={styles.bottomRow}>
+                      <Text style={styles.lastMessage} numberOfLines={1}>
+                        {subtitle}
+                      </Text>
+                      {unread ? <View style={styles.unreadDot} /> : null}
+                    </View>
                   </View>
                 </View>
-              </TouchableOpacity>
+              </ConversationSwipeRow>
             );
           }}
         />
       )}
+
+      <ConfirmActionModal
+        visible={archiveTargetId != null}
+        title="Archive Conversation?"
+        message="This conversation will be moved to your Archived Conversations. You can restore it at any time."
+        confirmLabel="Archive"
+        busy={busy}
+        onCancel={() => setArchiveTargetId(null)}
+        onConfirm={() => void confirmArchive()}
+      />
+
+      <ConfirmActionModal
+        visible={deleteTargetId != null}
+        title="Delete Conversation?"
+        message="This will remove the conversation from your inbox. This only affects your account."
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onCancel={() => setDeleteTargetId(null)}
+        onConfirm={() => void confirmDelete()}
+      />
     </ScreenContainer>
   );
 }
@@ -201,6 +285,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+    backgroundColor: colors.white,
   },
   avatar: { width: 52, height: 52, borderRadius: radius.avatar },
   content: { flex: 1 },
