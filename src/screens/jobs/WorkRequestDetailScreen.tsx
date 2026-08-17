@@ -355,6 +355,9 @@ export default function WorkRequestDetailScreen({
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineText, setDeclineText] = useState('');
+  /** Latest engagement_events.note for delivered → disputed (Marketplace SoT). */
+  const [disputeNote, setDisputeNote] = useState<string | null>(null);
+  const [disputeAt, setDisputeAt] = useState<string | null>(null);
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
@@ -374,6 +377,8 @@ export default function WorkRequestDetailScreen({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setDisputeNote(null);
+    setDisputeAt(null);
     try {
       const fetched = await workRequestApi.get(requestId);
       setRequest(fetched);
@@ -406,12 +411,30 @@ export default function WorkRequestDetailScreen({
       } else {
         setWorkConversationId(null);
       }
+
+      // Dispute reason lives on engagement_events — fetch only while disputed.
+      if (engagementId && engagementStatus === 'disputed') {
+        const engagement = await marketplaceApi
+          .getEngagement(engagementId)
+          .catch(() => null);
+        const lastDispute = engagement
+          ? [...engagement.events]
+              .reverse()
+              .find((e) => e.toStatus === 'disputed' && e.note?.trim())
+          : undefined;
+        if (lastDispute) {
+          setDisputeNote(lastDispute.note.trim());
+          setDisputeAt(lastDispute.createdAt);
+        }
+      }
     } catch (e) {
       setError(
         e instanceof ApiError ? e.message : 'Failed to load this request',
       );
       setRequest(null);
       setWorkConversationId(null);
+      setDisputeNote(null);
+      setDisputeAt(null);
     } finally {
       setLoading(false);
     }
@@ -1051,44 +1074,81 @@ export default function WorkRequestDetailScreen({
           </View>
         ) : null}
 
+        {request.workEngagementStatus === 'disputed' ? (
+          <View style={[styles.noticeCard, styles.declineNotice]}>
+            <Ionicons name="alert-circle-outline" size={18} color="#C2410C" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.noticeText, styles.declineNoticeText]}>
+                Delivery declined
+              </Text>
+              {disputeNote ? (
+                <Text style={[styles.noticeText, styles.declineNoticeText]}>
+                  {'\n'}Reason:{'\n'}“{disputeNote}”
+                </Text>
+              ) : (
+                <Text style={[styles.noticeText, styles.declineNoticeText]}>
+                  {'\n'}The parties should resolve this through the work
+                  conversation.
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : null}
+
         <Text style={styles.sectionTitle}>Timeline</Text>
         <View style={styles.termsCard}>
-          {request.events.length === 0 ? (
+          {request.events.length === 0 && !disputeNote ? (
             <Text style={styles.rowValue}>No activity yet.</Text>
           ) : (
-            request.events.map((event) => {
-              const change =
-                event.type === 'changes_requested' ||
-                event.type === 'changes_declined' ||
-                event.type === 'changes_cancelled'
-                  ? termsChangeFromPayload(event.payload)
-                  : null;
-              // Cancelled proposals: show the event, not the term diff, so the
-              // counterparty isn't asked to review discarded numbers.
-              const summary =
-                change && event.type !== 'changes_cancelled'
-                  ? summarizeTermsChange(change)
-                  : '';
-              return (
-                <View key={event.id} style={styles.eventRow}>
+            <>
+              {request.events.map((event) => {
+                const change =
+                  event.type === 'changes_requested' ||
+                  event.type === 'changes_declined' ||
+                  event.type === 'changes_cancelled'
+                    ? termsChangeFromPayload(event.payload)
+                    : null;
+                // Cancelled proposals: show the event, not the term diff, so the
+                // counterparty isn't asked to review discarded numbers.
+                const summary =
+                  change && event.type !== 'changes_cancelled'
+                    ? summarizeTermsChange(change)
+                    : '';
+                return (
+                  <View key={event.id} style={styles.eventRow}>
+                    <View style={styles.eventDot} />
+                    <View style={styles.eventBody}>
+                      <Text style={styles.eventTitle}>
+                        {EVENT_LABEL[event.type] ?? event.type}
+                      </Text>
+                      {summary ? (
+                        <Text style={styles.eventSummary}>{summary}</Text>
+                      ) : null}
+                      {event.note ? (
+                        <Text style={styles.eventNote}>{event.note}</Text>
+                      ) : null}
+                      <Text style={styles.eventTime}>
+                        {formatDateTime(event.createdAt)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+              {request.workEngagementStatus === 'disputed' && disputeNote ? (
+                <View style={styles.eventRow}>
                   <View style={styles.eventDot} />
                   <View style={styles.eventBody}>
-                    <Text style={styles.eventTitle}>
-                      {EVENT_LABEL[event.type] ?? event.type}
-                    </Text>
-                    {summary ? (
-                      <Text style={styles.eventSummary}>{summary}</Text>
+                    <Text style={styles.eventTitle}>Delivery Declined</Text>
+                    <Text style={styles.eventNote}>{disputeNote}</Text>
+                    {disputeAt ? (
+                      <Text style={styles.eventTime}>
+                        {formatDateTime(disputeAt)}
+                      </Text>
                     ) : null}
-                    {event.note ? (
-                      <Text style={styles.eventNote}>{event.note}</Text>
-                    ) : null}
-                    <Text style={styles.eventTime}>
-                      {formatDateTime(event.createdAt)}
-                    </Text>
                   </View>
                 </View>
-              );
-            })
+              ) : null}
+            </>
           )}
         </View>
 
@@ -1578,7 +1638,7 @@ export default function WorkRequestDetailScreen({
               <Button
                 title="Send"
                 style={styles.halfBtn}
-                disabled={busy}
+                disabled={busy || !declineText.trim()}
                 onPress={submitDecline}
               />
             </View>

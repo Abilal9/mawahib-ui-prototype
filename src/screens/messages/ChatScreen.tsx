@@ -57,6 +57,21 @@ type ChatRow =
   | { kind: 'divider'; id: string }
   | { kind: 'message'; id: string; message: ApiMessage };
 
+/** Lightweight chat projection of delivered → disputed; details live on the job. */
+function isDeliveryDeclinedSystemMessage(message: ApiMessage): boolean {
+  const payload = message.systemPayload;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (
+      record.event === 'engagement_status' &&
+      record.toStatus === 'disputed'
+    ) {
+      return true;
+    }
+  }
+  return message.body === 'Delivery was declined.';
+}
+
 function mergeMessages(existing: ApiMessage[], incoming: ApiMessage[]): ApiMessage[] {
   const byId = new Map<string, ApiMessage>();
   for (const m of existing) byId.set(m.id, m);
@@ -783,12 +798,33 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                 }
                 const message = item.message;
                 if (message.kind === 'system') {
-                  return (
-                    <View style={styles.systemRow}>
+                  const declined = isDeliveryDeclinedSystemMessage(message);
+                  const canOpenJob = declined && !!work?.workRequestId;
+                  const systemBody = (
+                    <>
                       <Text style={styles.systemText}>
                         {message.body || 'System update'}
                       </Text>
-                    </View>
+                      {canOpenJob ? (
+                        <Text style={styles.systemLink}>View details</Text>
+                      ) : null}
+                    </>
+                  );
+                  if (canOpenJob) {
+                    return (
+                      <TouchableOpacity
+                        style={styles.systemRow}
+                        onPress={viewJobDetails}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delivery was declined. View job details"
+                      >
+                        {systemBody}
+                      </TouchableOpacity>
+                    );
+                  }
+                  return (
+                    <View style={styles.systemRow}>{systemBody}</View>
                   );
                 }
                 const isMe = message.senderId === me.id;
@@ -1224,6 +1260,13 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  systemLink: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
   },
   inputBar: {
     flexDirection: 'row',
