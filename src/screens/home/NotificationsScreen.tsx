@@ -201,8 +201,29 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     const deep = item.deepLink;
     const params = deep?.params ?? {};
     const deepScreen = deep?.screen;
+    const apiType = item.apiType;
 
-    if (deepScreen === 'conversation') {
+    // Connection events always open the actor/sender profile — even after accept.
+    // Must run before work-request routing: legacy payloads used params.requestId
+    // for the connection request id, which is not a work request id.
+    if (
+      apiType === 'connection_request' ||
+      apiType === 'connection_accepted' ||
+      deepScreen === 'connection' ||
+      deepScreen === 'connection_request'
+    ) {
+      const senderId =
+        item.user?.id ||
+        (typeof params.userId === 'string' ? params.userId : undefined);
+      if (senderId) {
+        openUserProfile(navigation, senderId, me.id);
+      } else {
+        navigation.navigate('Connections');
+      }
+      return;
+    }
+
+    if (apiType === 'message_received' || deepScreen === 'conversation') {
       const conversationId =
         typeof params.conversationId === 'string'
           ? params.conversationId
@@ -211,8 +232,11 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
         navigation.navigate('Chat', { conversationId });
         return;
       }
+      navigation.navigate('MainTabs', { screen: 'MessagesTab' });
+      return;
     }
-    if (deepScreen === 'engagement') {
+
+    if (apiType === 'engagement_status' || deepScreen === 'engagement') {
       const engagementId =
         typeof params.engagementId === 'string'
           ? params.engagementId
@@ -239,27 +263,21 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
       navigation.navigate('MainTabs', { screen: 'JobsTab' });
       return;
     }
+
     if (
+      apiType === 'work_request_event' ||
       deepScreen === 'work_request' ||
-      deepScreen === 'WorkRequestDetail' ||
-      typeof params.requestId === 'string' ||
-      typeof params.workRequestId === 'string'
+      deepScreen === 'WorkRequestDetail'
     ) {
       const requestId =
-        (typeof params.requestId === 'string' && params.requestId) ||
         (typeof params.workRequestId === 'string' && params.workRequestId) ||
+        (typeof params.requestId === 'string' && params.requestId) ||
         resolveRequestId(item);
       if (requestId) {
         navigation.navigate('WorkRequestDetail', { requestId });
         return;
       }
-    }
-    if (deepScreen === 'connection' || deepScreen === 'connection_request') {
-      if (item.user?.id) {
-        openUserProfile(navigation, item.user.id, me.id);
-      } else {
-        navigation.navigate('Connections');
-      }
+      navigation.navigate('MainTabs', { screen: 'JobsTab' });
       return;
     }
 

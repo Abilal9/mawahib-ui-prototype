@@ -150,11 +150,14 @@ export function mapApiNotification(api: ApiNotification): Notification {
     typeof params.conversationId === 'string'
       ? params.conversationId
       : undefined;
+  // Never treat connection `requestId` as a work request id.
   const userJobId =
-    typeof params.requestId === 'string'
-      ? params.requestId
-      : typeof params.workRequestId === 'string'
-        ? params.workRequestId
+    typeof params.workRequestId === 'string'
+      ? params.workRequestId
+      : deep.screen === 'work_request' || deep.screen === 'WorkRequestDetail'
+        ? typeof params.requestId === 'string'
+          ? params.requestId
+          : undefined
         : undefined;
   const jobId =
     typeof params.listingId === 'string' ? params.listingId : undefined;
