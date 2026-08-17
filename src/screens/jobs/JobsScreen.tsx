@@ -540,6 +540,8 @@ export default function JobsScreen({
                       onStarPress={() =>
                         navigation.navigate('WriteReview', {
                           jobId: job.id,
+                          engagementId: job.engagementId,
+                          workRequestId: job.requestId,
                         })
                       }
                     />

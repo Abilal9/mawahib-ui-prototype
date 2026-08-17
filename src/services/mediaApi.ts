@@ -1,6 +1,6 @@
 import { apiRequest } from '../lib/apiClient';
 
-export type MediaPurpose = 'avatar' | 'portfolio' | 'service';
+export type MediaPurpose = 'avatar' | 'portfolio' | 'service' | 'message';
 
 export interface UploadSession {
   mediaAssetId: string;

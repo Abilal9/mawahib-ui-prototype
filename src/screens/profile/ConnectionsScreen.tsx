@@ -14,7 +14,6 @@ import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { connectionService } from '../../services';
 import { User } from '../../data/types';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
@@ -39,14 +38,8 @@ export default function ConnectionsScreen({
     !isOwn && isBackendUserId(viewedUserId) ? viewedUserId : undefined,
   );
   const viewedUser = visitorUser.user ?? undefined;
-  // Connections API not implemented — do not fabricate visitor graphs from mock IDs.
-  const visitorConnections = useMemo(
-    () =>
-      viewedUserId && !isBackendUserId(viewedUserId)
-        ? connectionService.getConnectionsForUser(viewedUserId)
-        : [],
-    [viewedUserId],
-  );
+  // Public connections graph for other users is not exposed yet.
+  const visitorConnections = useMemo(() => [] as User[], []);
 
   const data: User[] = isOwn
     ? tab === 'requests'

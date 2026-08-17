@@ -139,6 +139,20 @@ export interface ApplyToListingResult {
   workRequest: ApiWorkRequest;
 }
 
+export interface ApiEngagementReview {
+  id: string;
+  engagementId: string;
+  reviewerId: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateEngagementReviewResult {
+  review: ApiEngagementReview;
+  conversationId?: string | null;
+}
+
 const EMPLOYMENT_TO_UI: Record<ApiEmploymentType, JobListing['type']> = {
   full_time: 'full-time',
   part_time: 'part-time',
@@ -316,5 +330,29 @@ export const marketplaceApi = {
       method: 'POST',
       body: JSON.stringify({ status, note }),
     });
+  },
+
+  /**
+   * DEV-ONLY: skip pending_payment → in_progress without Phase 5 payments.
+   * Requires backend ENABLE_DEV_START_WORK=true and non-production NODE_ENV.
+   */
+  devStartWork(engagementId: string): Promise<ApiEngagement> {
+    return apiRequest<ApiEngagement>(
+      `/engagements/${engagementId}/dev-start-work`,
+      { method: 'POST' },
+    );
+  },
+
+  createEngagementReview(
+    engagementId: string,
+    input: { rating: number; body?: string },
+  ): Promise<CreateEngagementReviewResult> {
+    return apiRequest<CreateEngagementReviewResult>(
+      `/engagements/${engagementId}/reviews`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    );
   },
 };

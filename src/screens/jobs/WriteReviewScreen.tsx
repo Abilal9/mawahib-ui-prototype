@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +21,8 @@ import { toImageSource } from '../../utils/image';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { ApiError } from '../../lib/apiClient';
+import { marketplaceApi } from '../../services/marketplaceApi';
 import { ScreenProps } from '../../navigation/types';
 
 const MAX_IMAGES = 6;
@@ -32,30 +36,48 @@ const SAMPLE_IMAGES = [
   'https://images.unsplash.com/photo-1542744094-24638eff58bb?w=400&h=400&fit=crop',
 ];
 
-export default function WriteReviewScreen({ route, navigation }: ScreenProps<'WriteReview'>) {
-  const { getJobById } = useUserJobs();
+export default function WriteReviewScreen({
+  route,
+  navigation,
+}: ScreenProps<'WriteReview'>) {
+  const { getJobById, refresh } = useUserJobs();
   const { user: me } = useMyProfile();
-  const job = getJobById(route.params.jobId);
+  const job =
+    getJobById(route.params.jobId) ??
+    (route.params.workRequestId
+      ? getJobById(route.params.workRequestId)
+      : undefined);
+
+  const engagementId = route.params.engagementId ?? job?.engagementId;
+  const canSubmit = Boolean(engagementId);
+
   const initial =
-    route.params.initialRating ??
-    job?.rating ??
-    0;
+    route.params.initialRating ?? job?.rating ?? 0;
 
   const [rating, setRating] = useState(initial);
   const [text, setText] = useState(job?.reviewText ?? '');
   const [images, setImages] = useState<string[]>(job?.reviewImages ?? []);
   const [focused, setFocused] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setRating(initial);
   }, [initial]);
 
-  if (!job) {
+  const titleLabel = useMemo(
+    () => job?.title ?? 'Completed work',
+    [job?.title],
+  );
+
+  if (!job && !engagementId) {
     return (
       <ScreenContainer>
         <View style={styles.missingWrap}>
           <Text style={styles.missingText}>Job not found</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.missingBack}
+          >
             <Text style={styles.missingBackText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -73,6 +95,43 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const onSubmit = async () => {
+    if (!engagementId || submitting) return;
+    if (rating < 1 || rating > 5) {
+      Alert.alert('Rating required', 'Please choose a star rating.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await marketplaceApi.createEngagementReview(engagementId, {
+        rating,
+        body: text.trim() || undefined,
+      });
+      void refresh();
+      Alert.alert('Review submitted', 'Thanks for your feedback.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            if (route.params.conversationId) {
+              navigation.navigate('ArchivedConversations');
+            } else {
+              navigation.goBack();
+            }
+          },
+        },
+      ]);
+    } catch (e) {
+      Alert.alert(
+        'Could not submit review',
+        e instanceof ApiError || e instanceof Error
+          ? e.message
+          : 'Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <ScreenContainer padded={false} backgroundColor={colors.white}>
       <StatusBar style="dark" />
@@ -81,7 +140,11 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            hitSlop={8}
+          >
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Write your review</Text>
@@ -94,31 +157,49 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.deferredBanner}>
-            <Text style={styles.deferredTitle}>Coming in a later phase</Text>
-            <Text style={styles.deferredBody}>
-              Reviews are not available yet. You can preview this screen, but
-              nothing will be submitted.
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.personCard}
-            onPress={() => openUserProfile(navigation, job.counterpart.id, me.id)}
-            activeOpacity={0.85}
-          >
-            <Image
-              source={toImageSource(job.counterpart.avatar)}
-              style={styles.avatar}
-              contentFit="cover"
-            />
-            <View style={styles.personMeta}>
-              <Text style={styles.personName}>{job.counterpart.name}</Text>
-              <Text style={styles.jobTitle} numberOfLines={2}>
-                {job.title}
+          {!canSubmit ? (
+            <View style={styles.deferredBanner}>
+              <Text style={styles.deferredTitle}>Coming in a later phase</Text>
+              <Text style={styles.deferredBody}>
+                Reviews are not available yet for this job. You can preview this
+                screen, but nothing will be submitted.
               </Text>
             </View>
-          </TouchableOpacity>
+          ) : null}
+
+          {job ? (
+            <TouchableOpacity
+              style={styles.personCard}
+              onPress={() =>
+                openUserProfile(navigation, job.counterpart.id, me.id)
+              }
+              activeOpacity={0.85}
+            >
+              <Image
+                source={toImageSource(job.counterpart.avatar)}
+                style={styles.avatar}
+                contentFit="cover"
+              />
+              <View style={styles.personMeta}>
+                <Text style={styles.personName}>{job.counterpart.name}</Text>
+                <Text style={styles.jobTitle} numberOfLines={2}>
+                  {job.title}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.personCard}>
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Ionicons name="briefcase-outline" size={24} color={colors.primary} />
+              </View>
+              <View style={styles.personMeta}>
+                <Text style={styles.personName}>Rate this job</Text>
+                <Text style={styles.jobTitle} numberOfLines={2}>
+                  {titleLabel}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <Text style={styles.sectionLabel}>Your rating</Text>
           <View style={styles.starsRow}>
@@ -161,7 +242,9 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
 
           <View style={styles.photosHeader}>
             <Text style={styles.sectionLabelInline}>Add photos</Text>
-            <Text style={styles.optionalHint}>Optional · {images.length}/{MAX_IMAGES}</Text>
+            <Text style={styles.optionalHint}>
+              Optional · {images.length}/{MAX_IMAGES}
+            </Text>
           </View>
           <Text style={styles.photosHint}>
             Optionally attach photos of the completed work.
@@ -169,7 +252,11 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
           <View style={styles.mediaGrid}>
             {images.map((uri, i) => (
               <View key={`${uri}-${i}`} style={styles.mediaSlot}>
-                <Image source={{ uri }} style={styles.mediaImage} contentFit="cover" />
+                <Image
+                  source={{ uri }}
+                  style={styles.mediaImage}
+                  contentFit="cover"
+                />
                 <TouchableOpacity
                   style={styles.removeMedia}
                   onPress={() => removeImage(i)}
@@ -180,7 +267,11 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
               </View>
             ))}
             {images.length < MAX_IMAGES ? (
-              <TouchableOpacity style={styles.addMedia} onPress={addImage} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.addMedia}
+                onPress={addImage}
+                activeOpacity={0.8}
+              >
                 <Ionicons name="images-outline" size={26} color={colors.primary} />
                 <Text style={styles.addMediaText}>Add</Text>
               </TouchableOpacity>
@@ -189,12 +280,27 @@ export default function WriteReviewScreen({ route, navigation }: ScreenProps<'Wr
         </ScrollView>
 
         <View style={styles.footer}>
-          <Button
-            title="Reviews coming later"
-            fullWidth
-            disabled
-            onPress={() => undefined}
-          />
+          {canSubmit ? (
+            <Button
+              title={submitting ? 'Submitting…' : 'Submit review'}
+              fullWidth
+              disabled={submitting || rating < 1}
+              onPress={() => void onSubmit()}
+            />
+          ) : (
+            <Button
+              title="Reviews coming later"
+              fullWidth
+              disabled
+              onPress={() => undefined}
+            />
+          )}
+          {submitting ? (
+            <ActivityIndicator
+              style={styles.footerSpinner}
+              color={colors.primary}
+            />
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -252,6 +358,10 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.borderLight,
+  },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   personMeta: { flex: 1, gap: 4 },
   personName: { ...typography.label, color: colors.text },
@@ -362,6 +472,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
   },
+  footerSpinner: { marginTop: spacing.sm },
   missingWrap: {
     flex: 1,
     alignItems: 'center',

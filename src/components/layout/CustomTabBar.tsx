@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { colors, spacing, radius, typography } from '../../theme';
 import { useCreateMenu } from '../../context/CreateMenuContext';
+import { useMessagingUnread } from '../../context/MessagingUnreadContext';
 
 type TabIconName = keyof typeof Ionicons.glyphMap;
 
@@ -26,6 +27,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const insets = useSafeAreaInsets();
   const { isOpen: isCreateMenuOpen, toggle: toggleCreateMenu, close: closeCreateMenu } =
     useCreateMenu();
+  const { unreadCount: messagesUnread } = useMessagingUnread();
   const bottomPad = Math.max(insets.bottom, 10);
 
   return (
@@ -108,11 +110,20 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
                 activeOpacity={0.7}
               >
                 {isFocused ? <View style={styles.highlight} pointerEvents="none" /> : null}
-                <Ionicons
-                  name={isFocused ? icons.active : icons.inactive}
-                  size={ICON_SIZE}
-                  color={isFocused ? colors.primary : colors.textSecondary}
-                />
+                <View style={styles.iconWrap}>
+                  <Ionicons
+                    name={isFocused ? icons.active : icons.inactive}
+                    size={ICON_SIZE}
+                    color={isFocused ? colors.primary : colors.textSecondary}
+                  />
+                  {route.name === 'MessagesTab' && messagesUnread > 0 ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {messagesUnread > 9 ? '9+' : String(messagesUnread)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -174,6 +185,33 @@ const styles = StyleSheet.create({
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconWrap: {
+    width: ICON_SIZE + 8,
+    height: ICON_SIZE + 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  badgeText: {
+    ...typography.caption,
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 11,
   },
   /** Behind the icon only — same slot size active/inactive */
   highlight: {

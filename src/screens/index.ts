@@ -47,6 +47,7 @@ export { default as VideoTrimScreen } from './create/VideoTrimScreen';
 export { default as MessagesEmptyScreen } from './messages/MessagesEmptyScreen';
 export { default as MessagesInboxScreen } from './messages/MessagesInboxScreen';
 export { default as ChatScreen } from './messages/ChatScreen';
+export { default as ArchivedConversationsScreen } from './messages/ArchivedConversationsScreen';
 
 // Profile
 export { default as ProfileScreen } from './profile/ProfileScreen';

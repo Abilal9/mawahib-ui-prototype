@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
@@ -27,7 +28,9 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { toImageSource } from '../../utils/image';
 import { ApiError } from '../../lib/apiClient';
+import { messageService } from '../../services/messageService';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -84,10 +87,27 @@ function NotificationItem({
       activeOpacity={0.85}
       onPress={onPress}
     >
-      <NotificationIcon type={item.type} />
+      {item.user?.avatar ? (
+        <Image
+          source={toImageSource(item.user.avatar)}
+          style={styles.avatar}
+          contentFit="cover"
+        />
+      ) : (
+        <NotificationIcon type={item.type} />
+      )}
       <View style={styles.content}>
-        <Text style={styles.title}>{item.title ?? 'Notification'}</Text>
-        <Text style={styles.message}>{item.message}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {item.title ?? item.user?.name ?? 'Notification'}
+        </Text>
+        <Text style={styles.message} numberOfLines={2}>
+          {item.message}
+        </Text>
+        {item.context ? (
+          <Text style={styles.context} numberOfLines={1}>
+            {item.context}
+          </Text>
+        ) : null}
 
         {item.actions?.includes('accept') ? (
           <View style={styles.actionsRow}>
@@ -177,6 +197,71 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
 
   const openNotification = (item: Notification) => {
     markRead(item.id);
+
+    const deep = item.deepLink;
+    const params = deep?.params ?? {};
+    const deepScreen = deep?.screen;
+
+    if (deepScreen === 'conversation') {
+      const conversationId =
+        typeof params.conversationId === 'string'
+          ? params.conversationId
+          : item.conversationId;
+      if (conversationId) {
+        navigation.navigate('Chat', { conversationId });
+        return;
+      }
+    }
+    if (deepScreen === 'engagement') {
+      const engagementId =
+        typeof params.engagementId === 'string'
+          ? params.engagementId
+          : undefined;
+      if (engagementId) {
+        void (async () => {
+          try {
+            const workChats = await messageService.listConversations('work');
+            const match = messageService.findWorkConversation(
+              workChats,
+              engagementId,
+            );
+            if (match) {
+              navigation.navigate('Chat', { conversationId: match.id });
+              return;
+            }
+          } catch {
+            // fall through
+          }
+          navigation.navigate('MainTabs', { screen: 'JobsTab' });
+        })();
+        return;
+      }
+      navigation.navigate('MainTabs', { screen: 'JobsTab' });
+      return;
+    }
+    if (
+      deepScreen === 'work_request' ||
+      deepScreen === 'WorkRequestDetail' ||
+      typeof params.requestId === 'string' ||
+      typeof params.workRequestId === 'string'
+    ) {
+      const requestId =
+        (typeof params.requestId === 'string' && params.requestId) ||
+        (typeof params.workRequestId === 'string' && params.workRequestId) ||
+        resolveRequestId(item);
+      if (requestId) {
+        navigation.navigate('WorkRequestDetail', { requestId });
+        return;
+      }
+    }
+    if (deepScreen === 'connection' || deepScreen === 'connection_request') {
+      if (item.user?.id) {
+        openUserProfile(navigation, item.user.id, me.id);
+      } else {
+        navigation.navigate('Connections');
+      }
+      return;
+    }
 
     switch (item.type) {
       case 'job': {
@@ -335,8 +420,11 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
               clearRatingPrompt(item.id);
               const requestId = resolveRequestId(item);
               if (requestId) {
+                const job = getJobById(requestId);
                 navigation.navigate('WriteReview', {
                   jobId: requestId,
+                  workRequestId: requestId,
+                  engagementId: job?.engagementId,
                   initialRating: rating,
                 });
               }
@@ -458,9 +546,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { flex: 1, gap: 4 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.borderLight,
+  },
+  content: { flex: 1, gap: 2, minWidth: 0 },
   title: { ...typography.label, color: colors.text, fontWeight: '600' },
-  message: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20 },
+  message: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 18 },
+  context: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
   time: { ...typography.caption, color: colors.textSecondary, marginTop: 4 },
   unreadDot: {
     width: 8,

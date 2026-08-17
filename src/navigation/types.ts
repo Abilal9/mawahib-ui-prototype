@@ -67,6 +67,7 @@ export type RootStackParamList = {
   VideoEdit: { uri?: string };
   VideoTrim: { uri?: string };
   Chat: { conversationId: string };
+  ArchivedConversations: undefined;
   ServiceDetail: { serviceId: string; userId?: string };
   RequestService: {
     userId: string;
@@ -84,7 +85,13 @@ export type RootStackParamList = {
   /** The unified request detail — every inbox row opens here. */
   WorkRequestDetail: { requestId: string };
   DirectRequest: { userId: string };
-  WriteReview: { jobId: string; initialRating?: number };
+  WriteReview: {
+    jobId: string;
+    initialRating?: number;
+    engagementId?: string;
+    conversationId?: string;
+    workRequestId?: string;
+  };
   ConfirmPayment: { serviceId?: string; amount?: number; requestId?: string };
   ApplePay: { amount?: number; requestId?: string };
   ScanCard: undefined;

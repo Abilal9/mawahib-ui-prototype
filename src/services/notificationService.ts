@@ -1,38 +1,205 @@
 import { Notification } from '../data/types';
-import { repositories } from '../repositories';
+import {
+  notificationsApi,
+  type ApiNotification,
+  type ApiNotificationType,
+} from './notificationsApi';
 
-const repo = repositories.notifications;
+type UiNotificationType = Notification['type'];
+
+function mapType(type: ApiNotificationType): UiNotificationType {
+  switch (type) {
+    case 'connection_request':
+    case 'connection_accepted':
+      return 'follow';
+    case 'message_received':
+      return 'message';
+    case 'engagement_status':
+    case 'work_request_event':
+      return 'job';
+    case 'system':
+    default:
+      return 'system';
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+export interface NotificationDeepLink {
+  screen?: string;
+  params?: Record<string, unknown>;
+}
+
+export function parseNotificationPayload(
+  payload: unknown,
+): NotificationDeepLink {
+  if (!isRecord(payload)) return {};
+  const screen =
+    typeof payload.screen === 'string' ? payload.screen : undefined;
+  const params = isRecord(payload.params) ? payload.params : undefined;
+  return { screen, params };
+}
+
+const KNOWN_EVENT_SUMMARIES = new Set([
+  'sent you a message',
+  'started a chat with you',
+  'started a conversation with you',
+  'a work chat was started',
+  'wants to connect with you',
+  'accepted your connection request',
+  'sent you a work request',
+  'accepted your work request',
+  'rejected your work request',
+  'requested changes',
+  'started the job',
+  'marked the job as delivered',
+  'completed the job',
+]);
+
+/**
+ * Build compact event-summary copy. Never surface raw message / attachment
+ * contents — including for legacy rows that stored the chat body.
+ */
+function eventCopy(api: ApiNotification): {
+  title: string;
+  message: string;
+  context?: string;
+} {
+  const deep = parseNotificationPayload(api.payload);
+  const params = deep.params ?? {};
+  const actorName = api.actor?.displayName?.trim();
+  const jobTitle =
+    typeof params.jobTitle === 'string' && params.jobTitle.trim()
+      ? params.jobTitle.trim()
+      : undefined;
+  const event =
+    typeof params.event === 'string' ? params.event : undefined;
+
+  switch (api.type) {
+    case 'message_received': {
+      if (event === 'work_chat_started') {
+        return {
+          title: actorName || api.title || 'Work chat',
+          message: 'A work chat was started',
+          context: jobTitle,
+        };
+      }
+      const started =
+        event === 'conversation_started' ||
+        /started a (chat|conversation)/i.test(api.body);
+      // Legacy per-message rows may still exist; show a neutral summary and
+      // never the message body. New sends no longer create those rows.
+      return {
+        title: actorName || api.title || 'Messages',
+        message: started
+          ? 'started a chat with you'
+          : 'sent you a message',
+        context: jobTitle,
+      };
+    }
+    case 'connection_request':
+      return {
+        title: actorName || api.title || 'Connection request',
+        message: 'wants to connect with you',
+      };
+    case 'connection_accepted':
+      return {
+        title: actorName || api.title || 'Connection',
+        message: 'accepted your connection request',
+      };
+    case 'engagement_status':
+    case 'work_request_event': {
+      const body = api.body.trim();
+      const safeBody = KNOWN_EVENT_SUMMARIES.has(body.toLowerCase())
+        ? body
+        : body.length <= 80 && !body.includes('\n')
+          ? body
+          : 'updated a work request';
+      return {
+        title: actorName || api.title || 'Work update',
+        message: safeBody,
+        context: jobTitle,
+      };
+    }
+    default:
+      return {
+        title: actorName || api.title || 'Notification',
+        message:
+          api.body.trim().length > 120
+            ? 'You have a new notification'
+            : api.body.trim() || 'You have a new notification',
+        context: jobTitle,
+      };
+  }
+}
+
+export function mapApiNotification(api: ApiNotification): Notification {
+  const deep = parseNotificationPayload(api.payload);
+  const params = deep.params ?? {};
+  const copy = eventCopy(api);
+
+  const conversationId =
+    typeof params.conversationId === 'string'
+      ? params.conversationId
+      : undefined;
+  const userJobId =
+    typeof params.requestId === 'string'
+      ? params.requestId
+      : typeof params.workRequestId === 'string'
+        ? params.workRequestId
+        : undefined;
+  const jobId =
+    typeof params.listingId === 'string' ? params.listingId : undefined;
+  const postId =
+    typeof params.postId === 'string' ? params.postId : undefined;
+
+  return {
+    id: api.id,
+    type: mapType(api.type),
+    title: copy.title,
+    message: copy.message,
+    context: copy.context,
+    createdAt: api.createdAt,
+    read: !!api.readAt,
+    conversationId,
+    userJobId,
+    jobId,
+    postId,
+    user: api.actor
+      ? {
+          id: api.actor.id,
+          name: api.actor.displayName,
+          username: api.actor.username,
+          avatar: api.actor.avatarUrl ?? '',
+          followers: 0,
+          following: 0,
+          posts: 0,
+        }
+      : undefined,
+    deepLink: deep,
+    apiType: api.type,
+    payload: api.payload,
+  };
+}
 
 export const notificationService = {
   async list(): Promise<Notification[]> {
-    return repo.list();
-  },
-
-  listSync(): Notification[] {
-    return repo.list();
+    const items = await notificationsApi.list();
+    return items.map(mapApiNotification);
   },
 
   async markRead(id: string): Promise<void> {
-    repo.markRead(id);
+    await notificationsApi.markRead(id);
   },
 
-  markAllRead(): void {
-    repo.markAllRead();
+  async markAllRead(): Promise<void> {
+    await notificationsApi.markAllRead();
   },
 
-  unreadCount(): number {
-    return repo.unreadCount();
-  },
-
-  clearActions(id: string): void {
-    repo.clearActions(id);
-  },
-
-  clearRatingPrompt(id: string): void {
-    repo.clearRatingPrompt(id);
-  },
-
-  remove(id: string): void {
-    repo.remove(id);
+  async unreadCount(): Promise<number> {
+    const summary = await notificationsApi.unreadSummary();
+    return summary.unreadCount;
   },
 };

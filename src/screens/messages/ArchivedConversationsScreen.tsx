@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,16 +15,11 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { INBOX_POLL_MS } from '../../config/messaging';
-import { usePolling } from '../../hooks/usePolling';
-import {
-  isConversationUnread,
-  messageService,
-} from '../../services/messageService';
+import { messageService } from '../../services/messageService';
 import type { ApiConversation } from '../../services/messagingApi';
 import { useAuth } from '../../context/AuthContext';
 import { useMessagingUnread } from '../../context/MessagingUnreadContext';
-import { TabScreenProps } from '../../navigation/types';
+import { ScreenProps } from '../../navigation/types';
 
 function formatTime(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -42,14 +38,14 @@ function typeBadge(type: ApiConversation['type']): string {
   return 'Support';
 }
 
-export default function MessagesInboxScreen({
+export default function ArchivedConversationsScreen({
   navigation,
-}: TabScreenProps<'MessagesTab'>) {
+}: ScreenProps<'ArchivedConversations'>) {
   const { isSignedIn } = useAuth();
   const { refresh: refreshUnread } = useMessagingUnread();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [focused, setFocused] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!isSignedIn) {
@@ -58,11 +54,11 @@ export default function MessagesInboxScreen({
       return;
     }
     try {
-      const items = await messageService.listConversations(undefined, 'inbox');
+      const items = await messageService.listConversations(undefined, 'archived');
       setConversations(items);
       void refreshUnread();
     } catch (e) {
-      console.warn('[inbox] load failed', e);
+      console.warn('[archived] load failed', e);
     } finally {
       setLoading(false);
     }
@@ -70,28 +66,86 @@ export default function MessagesInboxScreen({
 
   useFocusEffect(
     useCallback(() => {
-      setFocused(true);
       setLoading(true);
       void load();
-      return () => setFocused(false);
     }, [load]),
   );
 
-  usePolling(load, INBOX_POLL_MS, focused && isSignedIn);
+  const restore = async (id: string) => {
+    setBusyId(id);
+    try {
+      await messageService.unarchive(id);
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      void refreshUnread();
+    } catch (e) {
+      Alert.alert(
+        'Could not restore',
+        e instanceof Error ? e.message : 'Please try again.',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = (id: string) => {
+    Alert.alert(
+      'Delete conversation',
+      'This removes the conversation from your list. The other person keeps their copy.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setBusyId(id);
+              try {
+                await messageService.softDelete(id);
+                setConversations((prev) => prev.filter((c) => c.id !== id));
+                void refreshUnread();
+              } catch (e) {
+                Alert.alert(
+                  'Could not delete',
+                  e instanceof Error ? e.message : 'Please try again.',
+                );
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const openOverflow = (item: ApiConversation) => {
+    Alert.alert(item.peer?.displayName ?? 'Conversation', undefined, [
+      {
+        text: 'Restore',
+        onPress: () => void restore(item.id),
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => remove(item.id),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <ScreenContainer padded={false} safeBottom={false}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
         <TouchableOpacity
+          onPress={() => navigation.goBack()}
           style={styles.headerBtn}
-          onPress={() => navigation.navigate('ArchivedConversations')}
           hitSlop={8}
-          accessibilityLabel="Archived conversations"
         >
-          <Ionicons name="archive-outline" size={24} color={colors.text} />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Archived</Text>
+        <View style={styles.headerBtn} />
       </View>
 
       {loading && conversations.length === 0 ? (
@@ -105,13 +159,9 @@ export default function MessagesInboxScreen({
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              No conversations yet. Connect with someone or start a job to
-              message here.
-            </Text>
+            <Text style={styles.empty}>No archived conversations.</Text>
           }
           renderItem={({ item }) => {
-            const unread = isConversationUnread(item);
             const name =
               item.type === 'work' && item.workContext?.title
                 ? item.peer?.displayName ?? 'Job chat'
@@ -126,6 +176,7 @@ export default function MessagesInboxScreen({
                 onPress={() =>
                   navigation.navigate('Chat', { conversationId: item.id })
                 }
+                onLongPress={() => openOverflow(item)}
                 activeOpacity={0.8}
               >
                 <Image
@@ -150,16 +201,33 @@ export default function MessagesInboxScreen({
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.time}>
-                      {formatTime(item.lastMessageAt)}
-                    </Text>
+                    <View style={styles.rightMeta}>
+                      <Text style={styles.time}>
+                        {formatTime(item.lastMessageAt)}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => openOverflow(item)}
+                        hitSlop={8}
+                        disabled={busyId === item.id}
+                      >
+                        {busyId === item.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        ) : (
+                          <Ionicons
+                            name="ellipsis-horizontal"
+                            size={18}
+                            color={colors.textSecondary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={styles.bottomRow}>
-                    <Text style={styles.lastMessage} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                    {unread ? <View style={styles.unreadDot} /> : null}
-                  </View>
+                  <Text style={styles.lastMessage} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -176,15 +244,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
-  headerTitle: { ...typography.h2, color: colors.text },
   headerBtn: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTitle: { ...typography.h3, color: colors.text },
   list: { paddingHorizontal: spacing.screen, paddingBottom: 120, flexGrow: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: {
@@ -201,6 +271,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+    backgroundColor: colors.white,
   },
   avatar: { width: 52, height: 52, borderRadius: radius.avatar },
   content: { flex: 1 },
@@ -233,22 +304,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  time: { ...typography.caption, color: colors.textSecondary },
-  bottomRow: {
+  rightMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
+  time: { ...typography.caption, color: colors.textSecondary },
   lastMessage: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    flex: 1,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-    marginLeft: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

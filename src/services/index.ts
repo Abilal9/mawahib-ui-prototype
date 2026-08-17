@@ -1,7 +1,5 @@
 /**
- * Service layer — UI/contexts call these; services call repositories.
- * Mock repositories are wired today; swap repository implementations for Supabase later
- * without changing screen code.
+ * Service layer — UI/contexts call these; services call repositories / Nest APIs.
  */
 
 export { postService } from './postService';
@@ -16,3 +14,7 @@ export { profileService } from './profileService';
 export { reviewService } from './reviewService';
 export { connectionService } from './connectionService';
 export { catalogService } from './catalogService';
+export { connectionsApi } from './connectionsApi';
+export { messagingApi } from './messagingApi';
+export { notificationsApi } from './notificationsApi';
+export { mediaApi } from './mediaApi';

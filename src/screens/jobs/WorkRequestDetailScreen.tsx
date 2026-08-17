@@ -69,6 +69,8 @@ import {
   toIsoDate,
   workRequestApi,
 } from '../../services/workRequestApi';
+import { marketplaceApi } from '../../services/marketplaceApi';
+import { messageService } from '../../services/messageService';
 
 const STATUS_TONE: Record<
   ApiWorkRequest['status'],
@@ -329,6 +331,10 @@ export default function WorkRequestDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [workConversationId, setWorkConversationId] = useState<string | null>(
+    null,
+  );
+  const [devStarting, setDevStarting] = useState(false);
 
   const [confirm, setConfirm] = useState<{
     title: string;
@@ -374,11 +380,34 @@ export default function WorkRequestDetailScreen({
         .catch(() => null);
       if (viewed) setRequest(viewed);
       await refreshUnread();
+
+      const engagementId =
+        viewed?.workEngagementId ?? fetched.workEngagementId;
+      const engagementStatus =
+        viewed?.workEngagementStatus ?? fetched.workEngagementStatus;
+      const canOpenWorkChat =
+        engagementId &&
+        (engagementStatus === 'in_progress' ||
+          engagementStatus === 'delivered' ||
+          engagementStatus === 'completed');
+      if (canOpenWorkChat) {
+        const workChats = await messageService
+          .listConversations('work')
+          .catch(() => []);
+        const match = messageService.findWorkConversation(
+          workChats,
+          engagementId,
+        );
+        setWorkConversationId(match?.id ?? null);
+      } else {
+        setWorkConversationId(null);
+      }
     } catch (e) {
       setError(
         e instanceof ApiError ? e.message : 'Failed to load this request',
       );
       setRequest(null);
+      setWorkConversationId(null);
     } finally {
       setLoading(false);
     }
@@ -469,7 +498,64 @@ export default function WorkRequestDetailScreen({
   const canComplete =
     isClient && request.workEngagementStatus === 'delivered';
   const isCompletedEngagement = request.workEngagementStatus === 'completed';
+  const canMessageWork =
+    !!request.workEngagementId &&
+    (request.workEngagementStatus === 'in_progress' ||
+      request.workEngagementStatus === 'delivered' ||
+      request.workEngagementStatus === 'completed');
+  const showDevStartWork =
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ &&
+    isPendingPayment &&
+    !!request.workEngagementId;
   const jobsTab = jobsTabForViewer(isSender);
+
+  const openWorkChat = () => {
+    if (workConversationId) {
+      navigation.navigate('Chat', { conversationId: workConversationId });
+      return;
+    }
+    Alert.alert(
+      'Chat not ready',
+      'The work conversation is not available yet. Try again in a moment.',
+    );
+  };
+
+  const onDevStartWork = () => {
+    if (!request.workEngagementId || devStarting) return;
+    void (async () => {
+      setDevStarting(true);
+      try {
+        await marketplaceApi.devStartWork(request.workEngagementId!);
+        await load();
+        const workChats = await messageService
+          .listConversations('work')
+          .catch(() => []);
+        const match = messageService.findWorkConversation(
+          workChats,
+          request.workEngagementId!,
+        );
+        if (match) {
+          setWorkConversationId(match.id);
+          navigation.navigate('Chat', { conversationId: match.id });
+        } else {
+          Alert.alert(
+            'Work started',
+            'Engagement is in progress. Open Messages if the chat does not appear yet.',
+          );
+        }
+      } catch (e) {
+        Alert.alert(
+          'Dev start work failed',
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Is ENABLE_DEV_START_WORK=true on the backend?',
+        );
+      } finally {
+        setDevStarting(false);
+      }
+    })();
+  };
 
   const openChanges = () => {
     const money = terms.money;
@@ -676,7 +762,9 @@ export default function WorkRequestDetailScreen({
     hasSecondaryActions ||
     !!turn.waitingMessage ||
     isPendingPayment ||
-    isCompletedEngagement;
+    isCompletedEngagement ||
+    canMessageWork ||
+    showDevStartWork;
 
   /**
    * Exact mode picks a single day. Range mode fills `from` then `to`; tapping an
@@ -1076,6 +1164,32 @@ export default function WorkRequestDetailScreen({
 
           {isPendingPayment && isClient ? (
             <Text style={styles.footerHint}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
+          ) : null}
+
+          {showDevStartWork ? (
+            <Button
+              title={
+                devStarting ? 'Starting work…' : 'Start work (dev)'
+              }
+              fullWidth
+              variant="secondary"
+              disabled={busy || devStarting}
+              onPress={onDevStartWork}
+            />
+          ) : null}
+
+          {canMessageWork ? (
+            <Button
+              title={
+                request.workEngagementStatus === 'completed'
+                  ? 'View work chat'
+                  : 'Message'
+              }
+              fullWidth
+              variant={showDevStartWork || primaryAction ? 'secondary' : 'primary'}
+              disabled={busy || !workConversationId}
+              onPress={openWorkChat}
+            />
           ) : null}
         </View>
       ) : null}

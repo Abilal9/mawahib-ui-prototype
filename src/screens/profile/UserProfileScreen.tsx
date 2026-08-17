@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import { stripCurrencyGlyphs } from '../../utils/currency';
 import ProfileTabs from '../../components/profile/ProfileTabs';
 import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
@@ -33,7 +34,6 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
-import { connectionService } from '../../services';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -43,6 +43,7 @@ const TABS_FALLBACK = 56;
 export default function UserProfileScreen({ route, navigation }: ScreenProps<'UserProfile'>) {
   const [activeTab, setActiveTab] = useState<ProfileTab>('About');
   const [unconnectOpen, setUnconnectOpen] = useState(false);
+  const [messageOpening, setMessageOpening] = useState(false);
   const [tabsHeight, setTabsHeight] = useState(TABS_FALLBACK);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -53,7 +54,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     acceptRequest,
     denyRequest,
     disconnect,
-    getConversationId,
+    openOrCreateConversation,
   } = useConnections();
   const { user: me } = useMyProfile();
   const { posts } = usePosts();
@@ -112,7 +113,6 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     reviewCount: user.reviewCount ?? 0,
   };
   const userPosts = posts.filter((p) => p.author.id === user.id);
-  const visitorConnectionCount = connectionService.getConnectionsForUser(user.id).length;
 
   const onConnectPress = () => {
     if (relation === 'none') {
@@ -132,19 +132,25 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     if (relation !== 'connected') {
       Alert.alert(
         'Connect to message',
-        'You can only message people you’re connected with. Send a connection request first.'
+        'You can only message people you’re connected with. Send a connection request first.',
       );
       return;
     }
-    const conversationId = getConversationId(user.id);
-    if (!conversationId) {
-      Alert.alert(
-        'No conversation yet',
-        'A chat thread isn’t available for this connection in the demo. Try messaging someone from your inbox.'
-      );
-      return;
-    }
-    navigation.navigate('Chat', { conversationId });
+    if (messageOpening) return;
+    setMessageOpening(true);
+    void (async () => {
+      try {
+        const conversationId = await openOrCreateConversation(user.id);
+        navigation.navigate('Chat', { conversationId });
+      } catch (e) {
+        Alert.alert(
+          'Could not open chat',
+          e instanceof Error ? e.message : 'Please try again.',
+        );
+      } finally {
+        setMessageOpening(false);
+      }
+    })();
   };
 
   const connectLabel =
@@ -198,9 +204,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           onConnectionsPress={() =>
             navigation.navigate('Connections', { userId: user.id })
           }
-          connectionsLabel={`${visitorConnectionCount} connection${
-            visitorConnectionCount === 1 ? '' : 's'
-          }`}
+          connectionsLabel="Connections"
         >
           {relation === 'incoming' ? (
             <View style={styles.ctaRow}>
@@ -529,6 +533,8 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ActionBusyOverlay visible={messageOpening} message="Opening chat…" />
     </ScreenContainer>
   );
 }

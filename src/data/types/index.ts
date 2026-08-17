@@ -117,6 +117,8 @@ export interface Notification {
   title?: string;
   user?: User;
   message: string;
+  /** Optional tertiary context (e.g. job title) — never message body */
+  context?: string;
   createdAt: string;
   read: boolean;
   postId?: string;
@@ -127,6 +129,14 @@ export interface Notification {
   conversationId?: string;
   actions?: Array<'accept' | 'decline'>;
   showRating?: boolean;
+  /** Backend deep-link payload `{ screen, params }` when present */
+  deepLink?: {
+    screen?: string;
+    params?: Record<string, unknown>;
+  };
+  /** Raw API notification type (Phase 4) */
+  apiType?: string;
+  payload?: unknown;
 }
 
 /**
