@@ -9,6 +9,7 @@ import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { locationDisplayFields } from '../../data/location/geo';
 
 export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupSuccess'>) {
   const insets = useSafeAreaInsets();
@@ -19,10 +20,21 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
   const finish = async (goToProfile: boolean) => {
     setLoading(true);
     try {
+      const fields =
+        signUpBasics?.countryCode && signUpBasics?.locationCode
+          ? locationDisplayFields(
+              signUpBasics.countryCode,
+              signUpBasics.locationCode,
+            )
+          : null;
       const apiUser = await bootstrapSession({
         accountType: accountType || 'talent',
         displayName: signUpBasics?.name?.trim() || undefined,
-        locationCity: signUpBasics?.city?.trim() || undefined,
+        locationCity:
+          fields?.locationCity || signUpBasics?.city?.trim() || undefined,
+        locationCountry: fields?.locationCountry,
+        countryCode: fields?.countryCode ?? signUpBasics?.countryCode,
+        locationCode: fields?.locationCode ?? signUpBasics?.locationCode,
         phoneE164: signUpBasics?.phoneE164,
       });
       if (!apiUser.emailVerified) {

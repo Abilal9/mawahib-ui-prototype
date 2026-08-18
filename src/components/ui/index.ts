@@ -5,6 +5,7 @@ export { default as AppHeader } from './AppHeader';
 export { default as Checkbox } from './Checkbox';
 export { default as RiyalSymbol } from './RiyalSymbol';
 export { default as CurrencyIcon } from './CurrencyIcon';
+export { default as LocationSelectors } from './LocationSelectors';
 export { default as MoneyAmount } from './MoneyAmount';
 export { default as MoneyAmountField } from './MoneyAmountField';
 export { default as ConfirmActionModal } from './ConfirmActionModal';

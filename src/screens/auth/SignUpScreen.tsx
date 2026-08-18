@@ -19,12 +19,17 @@ import TextInput from '../../components/ui/TextInput';
 import Checkbox from '../../components/ui/Checkbox';
 import PasswordRequirements from '../../components/auth/PasswordRequirements';
 import PhoneInputField from '../../components/auth/PhoneInputField';
+import LocationSelectors from '../../components/ui/LocationSelectors';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { isPasswordValid } from '../../lib/passwordRules';
 import { getPhoneValidationMessage, toE164 } from '../../lib/phone';
+import {
+  locationDisplayFields,
+  type CountryCode as GeoCountryCode,
+} from '../../data/location/geo';
 
 export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
   const { accountType, registerWithEmail, clearAuthError } = useAuth();
@@ -33,7 +38,8 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
   const [email, setEmail] = useState('');
   const [country, setCountry] = useState<CountryCode>('SA');
   const [nationalNumber, setNationalNumber] = useState('');
-  const [city, setCity] = useState('');
+  const [countryCode, setCountryCode] = useState<GeoCountryCode>('SA');
+  const [locationCode, setLocationCode] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -63,6 +69,11 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
     .filter(Boolean)
     .join(' ');
 
+  const locationFields =
+    countryCode && locationCode
+      ? locationDisplayFields(countryCode, locationCode)
+      : null;
+
   const canSubmit = useMemo(
     () =>
       !loading &&
@@ -71,16 +82,16 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
       firstName.trim().length > 0 &&
       email.trim().length > 0 &&
       !!phoneE164 &&
-      city.trim().length > 0 &&
+      !!locationFields &&
       passwordOk &&
       passwordsMatch,
     [
       agreed,
       accountType,
-      city,
       email,
       firstName,
       loading,
+      locationFields,
       passwordOk,
       passwordsMatch,
       phoneE164,
@@ -108,7 +119,7 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
       );
       return;
     }
-    if (!canSubmit || !accountType) return;
+    if (!canSubmit || !accountType || !locationFields) return;
     clearAuthError();
     setLoading(true);
     try {
@@ -118,7 +129,9 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         name: displayName,
-        city: city.trim(),
+        city: locationFields.locationCity,
+        countryCode: locationFields.countryCode,
+        locationCode: locationFields.locationCode,
         phoneE164,
         accountType,
       });
@@ -189,12 +202,16 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             error={phoneError}
           />
 
-          <TextInput
-            label="City"
-            placeholder="City, Country"
-            value={city}
-            onChangeText={setCity}
-            autoCapitalize="words"
+          <LocationSelectors
+            countryCode={countryCode}
+            locationCode={locationCode}
+            onCountryChange={(code) => {
+              setCountryCode(code);
+              if (code === 'SA' || code === 'AE') {
+                setCountry(code);
+              }
+            }}
+            onLocationChange={(code) => setLocationCode(code || null)}
           />
 
           <TextInput

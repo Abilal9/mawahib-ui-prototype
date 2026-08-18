@@ -18,7 +18,6 @@ import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
-import MoneyAmount from '../../components/ui/MoneyAmount';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
@@ -64,6 +63,7 @@ import {
   formatMoney,
   fromIsoDate,
   summarizeTermsChange,
+  termsAddonsSum,
   termsChangeFromPayload,
   termsTotal,
   toIsoDate,
@@ -186,6 +186,8 @@ function TermsBlock({
   const deadlineDiff = compareWith
     ? deadlineChanged(terms.deadline, compareWith.deadline)
     : false;
+  const priceLabel =
+    terms.packageName || terms.packageTier ? 'Package Price' : 'Base Price';
 
   return (
     <View
@@ -196,7 +198,7 @@ function TermsBlock({
     >
       <Row label="Title" value={terms.title || '—'} />
       <MoneyRow
-        label="Price"
+        label={priceLabel}
         money={terms.money}
         fallback="Negotiable"
         struck={variant === 'original' && priceDiff}
@@ -277,15 +279,16 @@ function MoneyRow({
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      {amount ? (
-        <MoneyAmount
-          amount={amount}
-          struck={struck}
-          emphasized={emphasized}
-        />
-      ) : (
-        <Text style={styles.rowValue}>{fallback}</Text>
-      )}
+      <Text
+        style={[
+          styles.rowValue,
+          struck && styles.struckValue,
+          emphasized && styles.emphasizedValue,
+        ]}
+        numberOfLines={2}
+      >
+        {amount || fallback}
+      </Text>
     </View>
   );
 }
@@ -1463,7 +1466,7 @@ export default function WorkRequestDetailScreen({
               ) : null}
 
               <MoneyAmountField
-                label="Price"
+                label="Package Price"
                 placeholder="0"
                 value={amountText}
                 onChangeText={(text) => setAmountText(formatAmountInput(text))}
@@ -1474,9 +1477,39 @@ export default function WorkRequestDetailScreen({
                     : undefined
                 }
               />
+              {terms ? (
+                <View style={styles.currentMoneySummary}>
+                  {(() => {
+                    const addonsSum = termsAddonsSum(terms);
+                    const total = termsTotal(terms);
+                    return (
+                      <>
+                        {addonsSum ? (
+                          <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>
+                              Current add-ons
+                            </Text>
+                            <Text style={styles.summaryValue}>
+                              {formatMoney(addonsSum)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {total ? (
+                          <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Total</Text>
+                            <Text style={styles.summaryValue}>
+                              {formatMoney(total)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                </View>
+              ) : null}
               {!(amountText.trim().length > 0 && proposedAmount === null) ? (
                 <Text style={styles.hintText}>
-                  Leave blank to keep the current price.
+                  Leave blank to keep the current package price.
                 </Text>
               ) : null}
 
@@ -2065,6 +2098,25 @@ const styles = StyleSheet.create({
   fieldLabel: { ...typography.caption, color: colors.textSecondary },
   hintText: { ...typography.caption, color: colors.textTertiary },
   priceField: { marginBottom: spacing.sm },
+  currentMoneySummary: {
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  summaryLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  summaryValue: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '600',
+  },
   modeToggle: {
     flexDirection: 'row',
     backgroundColor: colors.borderLight,

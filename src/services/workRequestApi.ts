@@ -1,5 +1,6 @@
 import { apiRequest } from '../lib/apiClient';
 import { ApiEngagement, ApiEngagementStatus } from './marketplaceApi';
+import { formatMoneyDisplay } from '../data/location/geo';
 
 /** Entry point a work request came from. */
 export type WorkRequestSource =
@@ -265,14 +266,13 @@ export function fromIsoDate(value: string | null | undefined): Date | null {
 }
 
 /**
- * Amount-only label (`3,500`). Screens pair this with the pink CurrencyIcon —
- * never prefix with "SAR"/"AED" text codes.
+ * Canonical money label (`SAR 500.00` / `Dhs 500.00`).
  */
 export function formatMoney(money: WorkRequestMoney | null | undefined): string {
   if (!money) return '';
-  return money.amount.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+  return formatMoneyDisplay({
+    amount: Number(money.amount) || 0,
+    currency: money.currency || DEFAULT_CURRENCY,
   });
 }
 
@@ -330,6 +330,21 @@ export function termsTotal(
   return { amount: Math.round(total * 100) / 100, currency };
 }
 
+/** Sum of add-on amounts only (excludes package/base price). */
+export function termsAddonsSum(
+  terms: WorkRequestTerms,
+): WorkRequestMoney | null {
+  const addons = terms.addons ?? [];
+  if (addons.length === 0) return null;
+  const currency =
+    terms.money?.currency ?? addons[0]?.money?.currency ?? DEFAULT_CURRENCY;
+  const total = addons.reduce(
+    (sum, addon) => sum + (Number(addon.money?.amount) || 0),
+    0,
+  );
+  return { amount: Math.round(total * 100) / 100, currency };
+}
+
 export interface WorkRequestTermsChange {
   previousTerms: WorkRequestTerms;
   proposedTerms: WorkRequestTerms;
@@ -352,13 +367,13 @@ export function termsChangeFromPayload(
   };
 }
 
-/** `Price 3,000 → 3,500` — only the fields that actually moved. */
+/** `Package Price SAR 3,000.00 → SAR 3,500.00` — only the fields that actually moved. */
 export function summarizeTermsChange(change: WorkRequestTermsChange): string {
   const parts: string[] = [];
   const beforeMoney = formatMoney(change.previousTerms.money) || 'Negotiable';
   const afterMoney = formatMoney(change.proposedTerms.money) || 'Negotiable';
   if (beforeMoney !== afterMoney) {
-    parts.push(`Price ${beforeMoney} → ${afterMoney}`);
+    parts.push(`Package Price ${beforeMoney} → ${afterMoney}`);
   }
   const beforeDeadline = formatDeadline(change.previousTerms.deadline);
   const afterDeadline = formatDeadline(change.proposedTerms.deadline);

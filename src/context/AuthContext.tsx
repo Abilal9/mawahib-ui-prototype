@@ -17,6 +17,10 @@ import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
 import { authApi, mapApiUserToUser, type ApiUser } from '../services/authApi';
 import type { User } from '../data/types';
+import {
+  locationDisplayFields,
+  type CountryCode,
+} from '../data/location/geo';
 
 export type AccountType = 'talent' | 'business';
 
@@ -24,6 +28,8 @@ export interface SignUpBasics {
   name: string;
   email: string;
   city: string;
+  countryCode?: CountryCode;
+  locationCode?: string;
   phoneE164: string;
   firstName?: string;
   lastName?: string;
@@ -50,6 +56,8 @@ interface AuthContextValue {
     firstName?: string;
     lastName?: string;
     city: string;
+    countryCode?: CountryCode;
+    locationCode?: string;
     phoneE164: string;
     accountType: AccountType;
   }) => Promise<{ needsEmailConfirmation: boolean }>;
@@ -66,6 +74,9 @@ interface AuthContextValue {
     accountType?: AccountType;
     displayName?: string;
     locationCity?: string;
+    locationCountry?: string;
+    countryCode?: CountryCode;
+    locationCode?: string;
     phoneE164?: string;
   }) => Promise<ApiUser>;
   refreshMe: () => Promise<ApiUser>;
@@ -88,12 +99,17 @@ function bootstrapPayloadFromSession(
     accountType?: AccountType;
     displayName?: string;
     locationCity?: string;
+    locationCountry?: string;
+    countryCode?: CountryCode;
+    locationCode?: string;
     phoneE164?: string;
   },
   fallbacks?: {
     accountType?: AccountType | null;
     name?: string;
     city?: string;
+    countryCode?: CountryCode;
+    locationCode?: string;
     phoneE164?: string;
   },
 ) {
@@ -113,6 +129,17 @@ function bootstrapPayloadFromSession(
     overrides?.locationCity ||
     fallbacks?.city ||
     (meta.city as string | undefined);
+  const locationCountry =
+    overrides?.locationCountry ||
+    (meta.location_country as string | undefined);
+  const countryCode =
+    overrides?.countryCode ||
+    fallbacks?.countryCode ||
+    (meta.country_code as CountryCode | undefined);
+  const locationCode =
+    overrides?.locationCode ||
+    fallbacks?.locationCode ||
+    (meta.location_code as string | undefined);
   const phoneE164 =
     overrides?.phoneE164 ||
     fallbacks?.phoneE164 ||
@@ -124,6 +151,9 @@ function bootstrapPayloadFromSession(
     accountType,
     displayName,
     locationCity,
+    locationCountry,
+    countryCode,
+    locationCode,
     email: session.user?.email,
     phoneE164,
     emailVerified: isEmailConfirmed(session),
@@ -173,6 +203,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accountType?: AccountType;
         displayName?: string;
         locationCity?: string;
+        locationCountry?: string;
+        countryCode?: CountryCode;
+        locationCode?: string;
         phoneE164?: string;
       },
     ): Promise<ApiUser | null> => {
@@ -220,6 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 accountType: accountTypeRef.current,
                 name: signUpBasicsRef.current?.name,
                 city: signUpBasicsRef.current?.city,
+                countryCode: signUpBasicsRef.current?.countryCode,
+                locationCode: signUpBasicsRef.current?.locationCode,
                 phoneE164: signUpBasicsRef.current?.phoneE164,
               }),
               accessToken,
@@ -305,6 +340,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       firstName?: string;
       lastName?: string;
       city: string;
+      countryCode?: CountryCode;
+      locationCode?: string;
       phoneE164: string;
       accountType: AccountType;
     }) => {
@@ -326,6 +363,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             first_name: input.firstName?.trim() || undefined,
             last_name: input.lastName?.trim() || undefined,
             city: input.city.trim(),
+            country_code: input.countryCode,
+            location_code: input.locationCode,
             account_type: input.accountType,
             phone_e164: input.phoneE164,
           },
@@ -341,15 +380,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: input.name.trim(),
         email: input.email.trim(),
         city: input.city.trim(),
+        countryCode: input.countryCode,
+        locationCode: input.locationCode,
         phoneE164: input.phoneE164,
         firstName: input.firstName?.trim(),
         lastName: input.lastName?.trim(),
       });
       if (data.session) {
+        const fields =
+          input.countryCode && input.locationCode
+            ? locationDisplayFields(input.countryCode, input.locationCode)
+            : null;
         await hydrateBackendUser(data.session, {
           accountType: input.accountType,
           displayName: input.name.trim(),
-          locationCity: input.city.trim(),
+          locationCity: fields?.locationCity ?? input.city.trim(),
+          locationCountry: fields?.locationCountry,
+          countryCode: fields?.countryCode ?? input.countryCode,
+          locationCode: fields?.locationCode ?? input.locationCode,
           phoneE164: input.phoneE164,
         });
       }
@@ -466,6 +514,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountType?: AccountType;
       displayName?: string;
       locationCity?: string;
+      locationCountry?: string;
+      countryCode?: CountryCode;
+      locationCode?: string;
       phoneE164?: string;
     }) => {
       setAuthError(null);

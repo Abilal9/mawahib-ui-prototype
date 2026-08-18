@@ -1,6 +1,13 @@
 import { User } from '../data/types';
 import { AccountType } from '../context/AuthContext';
 import { apiRequest } from '../lib/apiClient';
+import {
+  currencyForCountry,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+  type CountryCode,
+  type CurrencyCode,
+} from '../data/location/geo';
 
 export interface ApiUser {
   id: string;
@@ -18,6 +25,9 @@ export interface ApiUser {
   title: string | null;
   locationCity: string | null;
   locationCountry: string | null;
+  countryCode?: CountryCode | string | null;
+  locationCode?: string | null;
+  defaultCurrency?: CurrencyCode | string | null;
   avatarUrl: string | null;
   coverUrl: string | null;
   phoneE164: string | null;
@@ -66,6 +76,9 @@ export interface BootstrapPayload {
   displayName: string;
   username?: string;
   locationCity?: string;
+  locationCountry?: string;
+  countryCode?: CountryCode;
+  locationCode?: string;
   email?: string;
   phoneE164?: string;
   emailVerified?: boolean;
@@ -79,6 +92,8 @@ export interface UpdateMePayload {
   bio?: string;
   locationCity?: string | null;
   locationCountry?: string | null;
+  countryCode?: CountryCode | null;
+  locationCode?: string | null;
   avatarUrl?: string | null;
   coverUrl?: string | null;
   skills?: string[];
@@ -91,6 +106,18 @@ const FALLBACK_AVATAR =
   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
 
 export function mapApiUserToUser(api: ApiUser): User {
+  const countryCode = normalizeCountryCode(api.countryCode);
+  const locationCode =
+    typeof api.locationCode === 'string' && api.locationCode.trim()
+      ? api.locationCode.trim().toLowerCase()
+      : null;
+  const defaultCurrency =
+    api.defaultCurrency != null && String(api.defaultCurrency).trim()
+      ? normalizeCurrencyCode(api.defaultCurrency)
+      : countryCode
+        ? currencyForCountry(countryCode)
+        : null;
+
   return {
     id: api.id,
     name: api.displayName,
@@ -98,7 +125,12 @@ export function mapApiUserToUser(api: ApiUser): User {
     avatar: api.avatarUrl || FALLBACK_AVATAR,
     coverImage: api.coverUrl || undefined,
     bio: api.bio,
-    location: [api.locationCity, api.locationCountry].filter(Boolean).join(', ') || undefined,
+    location:
+      [api.locationCity, api.locationCountry].filter(Boolean).join(', ') ||
+      undefined,
+    countryCode,
+    locationCode,
+    defaultCurrency,
     skills: api.skills,
     followers: api.followersCount,
     following: api.followingCount,

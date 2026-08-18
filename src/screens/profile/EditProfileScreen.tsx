@@ -17,17 +17,27 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import LocationSelectors from '../../components/ui/LocationSelectors';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
+import {
+  normalizeCountryCode,
+  type CountryCode,
+} from '../../data/location/geo';
 
 export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfile'>) {
   const insets = useSafeAreaInsets();
   const { user, updateProfileBasics } = useMyProfile();
   const [title, setTitle] = useState(user.title ?? '');
-  const [location, setLocation] = useState(user.location ?? '');
+  const [countryCode, setCountryCode] = useState<CountryCode | null>(
+    normalizeCountryCode(user.countryCode),
+  );
+  const [locationCode, setLocationCode] = useState<string | null>(
+    user.locationCode ?? null,
+  );
   const [avatar, setAvatar] = useState<string | number>(user.avatar);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -53,7 +63,9 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
   const save = () => {
     updateProfileBasics({
       title: title.trim() || undefined,
-      location: location.trim() || undefined,
+      ...(countryCode && locationCode
+        ? { countryCode, locationCode }
+        : {}),
       avatar,
     });
     navigation.goBack();
@@ -105,14 +117,14 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
             placeholder="e.g. Product Designer"
             placeholderTextColor={colors.textSecondary}
           />
-          <Text style={styles.label}>Location</Text>
-          <TextInput
-            style={styles.input}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="City, Country"
-            placeholderTextColor={colors.textSecondary}
-          />
+          <View style={styles.locationBlock}>
+            <LocationSelectors
+              countryCode={countryCode}
+              locationCode={locationCode}
+              onCountryChange={setCountryCode}
+              onLocationChange={(code) => setLocationCode(code || null)}
+            />
+          </View>
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -170,6 +182,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
+  },
+  locationBlock: {
+    alignSelf: 'stretch',
   },
   footer: {
     paddingHorizontal: spacing.screen,

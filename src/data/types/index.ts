@@ -6,6 +6,12 @@ export interface User {
   coverImage?: string;
   bio?: string;
   location?: string;
+  /** ISO country code when known (SA | AE). */
+  countryCode?: 'SA' | 'AE' | null;
+  /** Canonical city/emirate code when known. */
+  locationCode?: string | null;
+  /** Profile default currency derived from country. */
+  defaultCurrency?: 'SAR' | 'AED' | null;
   skills?: string[];
   followers: number;
   following: number;

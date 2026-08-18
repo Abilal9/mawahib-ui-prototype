@@ -2,9 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import TextInput from '../../components/ui/TextInput';
 import Button from '../../components/ui/Button';
+import LocationSelectors from '../../components/ui/LocationSelectors';
 import { colors, spacing, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ProfileSetupStepProps } from './stepProps';
+import {
+  normalizeCountryCode,
+  type CountryCode,
+} from '../../data/location/geo';
 
 export default function ProfileSetupStep1({
   onNext,
@@ -15,10 +20,20 @@ export default function ProfileSetupStep1({
   const { user, content, updateProfileBasics, setBio: saveBio } = useMyProfile();
   const [name, setName] = useState(user.name ?? '');
   const [bio, setBio] = useState(content.bio ?? '');
-  const [location, setLocation] = useState(user.location ?? '');
+  const [countryCode, setCountryCode] = useState<CountryCode | null>(
+    normalizeCountryCode(user.countryCode) ?? 'SA',
+  );
+  const [locationCode, setLocationCode] = useState<string | null>(
+    user.locationCode ?? null,
+  );
 
   const persist = () => {
-    updateProfileBasics({ name: name.trim(), location: location.trim() });
+    updateProfileBasics({
+      name: name.trim(),
+      ...(countryCode && locationCode
+        ? { countryCode, locationCode }
+        : {}),
+    });
     saveBio(bio.trim());
   };
 
@@ -53,11 +68,11 @@ export default function ProfileSetupStep1({
           showCharacterCount
           style={styles.bioInput}
         />
-        <TextInput
-          label="Location"
-          placeholder="City, Country"
-          value={location}
-          onChangeText={setLocation}
+        <LocationSelectors
+          countryCode={countryCode}
+          locationCode={locationCode}
+          onCountryChange={setCountryCode}
+          onLocationChange={(code) => setLocationCode(code || null)}
         />
       </ScrollView>
 

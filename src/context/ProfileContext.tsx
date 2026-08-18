@@ -32,6 +32,11 @@ import {
   mapServiceOffering,
   servicesApi,
 } from '../services/servicesApi';
+import {
+  locationDisplayFields,
+  normalizeCountryCode,
+  type CountryCode,
+} from '../data/location/geo';
 
 /**
  * Signed-in user's editable profile.
@@ -77,13 +82,20 @@ interface ProfileContextValue {
   profileLoading: boolean;
   profileError: string | null;
   refreshProfessionalProfile: () => Promise<void>;
-  applySignupProfile: (basics: { name: string; location: string }) => void;
+  applySignupProfile: (basics: {
+    name: string;
+    location: string;
+    countryCode?: CountryCode | null;
+    locationCode?: string | null;
+  }) => void;
   hydrateFromApiUser: (apiUser: ApiUser) => void;
   clearLocalProfile: () => void;
   updateProfileBasics: (patch: {
     name?: string;
     title?: string;
     location?: string;
+    countryCode?: CountryCode | null;
+    locationCode?: string | null;
     avatar?: string | number;
   }) => void;
   setBio: (bio: string) => void;
@@ -142,7 +154,8 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
-function locationParts(location?: string): {
+/** Split a legacy "City, Country" label into API fields. */
+export function splitLocationFromLabel(location?: string): {
   locationCity?: string | null;
   locationCountry?: string | null;
 } {
@@ -152,6 +165,52 @@ function locationParts(location?: string): {
     locationCity: city || null,
     locationCountry: rest.length ? rest.join(', ') : null,
   };
+}
+
+function locationPartsFromPatch(patch: {
+  location?: string;
+  countryCode?: CountryCode | null;
+  locationCode?: string | null;
+}): Pick<
+  UpdateMePayload,
+  'locationCity' | 'locationCountry' | 'countryCode' | 'locationCode'
+> {
+  const countryCode = normalizeCountryCode(patch.countryCode);
+  const locationCode =
+    typeof patch.locationCode === 'string' && patch.locationCode.trim()
+      ? patch.locationCode.trim().toLowerCase()
+      : null;
+
+  if (countryCode && locationCode) {
+    const fields = locationDisplayFields(countryCode, locationCode);
+    if (fields) {
+      return {
+        countryCode: fields.countryCode,
+        locationCode: fields.locationCode,
+        locationCity: fields.locationCity,
+        locationCountry: fields.locationCountry,
+      };
+    }
+  }
+
+  // Codes must be sent together; partial clears are allowed as null pairs.
+  if (patch.countryCode !== undefined || patch.locationCode !== undefined) {
+    if (!countryCode || !locationCode) {
+      return {
+        countryCode: null,
+        locationCode: null,
+        ...splitLocationFromLabel(
+          typeof patch.location === 'string' ? patch.location : undefined,
+        ),
+      };
+    }
+  }
+
+  if (typeof patch.location === 'string') {
+    return splitLocationFromLabel(patch.location);
+  }
+
+  return {};
 }
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
@@ -239,24 +298,45 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       profileLoading,
       profileError,
       refreshProfessionalProfile,
-      applySignupProfile: ({ name, location }) => {
+      applySignupProfile: ({ name, location, countryCode, locationCode }) => {
         setContent(emptyProfileContent());
         setUser({
           ...emptyUser(),
           name,
           location,
+          countryCode: countryCode ?? null,
+          locationCode: locationCode ?? null,
         });
       },
       hydrateFromApiUser,
       clearLocalProfile,
       updateProfileBasics: (patch) => {
-        setUser((prev) => ({ ...prev, ...patch }));
+        const locationPayload = locationPartsFromPatch(patch);
+        const nextLocation =
+          locationPayload.locationCity != null
+            ? [locationPayload.locationCity, locationPayload.locationCountry]
+                .filter(Boolean)
+                .join(', ')
+            : typeof patch.location === 'string'
+              ? patch.location
+              : undefined;
+        setUser((prev) => ({
+          ...prev,
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.title !== undefined ? { title: patch.title } : {}),
+          ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
+          ...(nextLocation !== undefined ? { location: nextLocation } : {}),
+          ...(locationPayload.countryCode !== undefined
+            ? { countryCode: locationPayload.countryCode }
+            : {}),
+          ...(locationPayload.locationCode !== undefined
+            ? { locationCode: locationPayload.locationCode }
+            : {}),
+        }));
         void persistMe({
           displayName: patch.name,
           title: typeof patch.title === 'string' ? patch.title : undefined,
-          ...locationParts(
-            typeof patch.location === 'string' ? patch.location : undefined,
-          ),
+          ...locationPayload,
           avatarUrl: typeof patch.avatar === 'string' ? patch.avatar : undefined,
         });
       },

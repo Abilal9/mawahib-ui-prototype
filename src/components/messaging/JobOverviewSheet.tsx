@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import type { PeerSummary, WorkContext } from '../../services/messagingApi';
+import { formatMoneyDisplay } from '../../data/location/geo';
 
 function formatStatus(status: string): string {
   return status.replace(/_/g, ' ');
@@ -19,6 +20,20 @@ function formatStatus(status: string): string {
 
 function formatSource(source: string): string {
   return source.replace(/_/g, ' ');
+}
+
+function formatWorkPrice(work: WorkContext): string | null {
+  if (!work.price) return null;
+  const amount = Number(String(work.price).replace(/,/g, ''));
+  if (!Number.isFinite(amount)) {
+    return work.currency
+      ? `${work.price} ${work.currency}`
+      : String(work.price);
+  }
+  return formatMoneyDisplay({
+    amount,
+    currency: work.currency || 'SAR',
+  });
 }
 
 export default function JobOverviewSheet({
@@ -74,8 +89,7 @@ export default function JobOverviewSheet({
                   <View style={styles.metaRow}>
                     <Text style={styles.metaLabel}>Price</Text>
                     <Text style={styles.metaValue}>
-                      {work.price}
-                      {work.currency ? ` ${work.currency}` : ''}
+                      {formatWorkPrice(work)}
                     </Text>
                   </View>
                 ) : null}
