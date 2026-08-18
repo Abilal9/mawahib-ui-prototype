@@ -2,22 +2,30 @@ import React from 'react';
 import { View, Text, StyleSheet, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import CurrencyIcon from './CurrencyIcon';
 import { colors, spacing, typography } from '../../theme';
+import type { CurrencyCode } from '../../data/location/geo';
+import { formatMoneyAmountDigits, toCurrencyCode } from '../../utils/money';
 
 type Props = {
-  /** Numeric label only — no currency code. */
-  amount: string;
+  /**
+   * Numeric amount. Prefer a number; strings should already be amount-only
+   * (e.g. "1,284.87") — never "SAR 500.00".
+   */
+  amount: number | string;
   size?: number;
   color?: string;
   struck?: boolean;
   emphasized?: boolean;
+  /** @deprecated Prefer `currency` from the commercial object. */
   location?: string | null;
   /** Commercial object currency — never the viewer's default. */
-  currency?: import('../../data/location/geo').CurrencyCode | null;
+  currency?: CurrencyCode | string | null;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
+  /** When amount is free-text (e.g. salary range), skip numeric formatting. */
+  rawLabel?: boolean;
 };
 
-/** Pink currency logo + amount, for price rows throughout the app. */
+/** Pink currency logo + amount digits (no SAR/Dhs text prefixes). */
 export default function MoneyAmount({
   amount,
   size = 14,
@@ -28,15 +36,33 @@ export default function MoneyAmount({
   currency,
   style,
   textStyle,
+  rawLabel,
 }: Props) {
-  const iconColor = struck ? colors.textSecondary : emphasized ? colors.primary : color;
+  const iconColor = struck
+    ? colors.textSecondary
+    : emphasized
+      ? colors.primary
+      : color;
+  const code = toCurrencyCode(
+    typeof currency === 'string' ? currency : currency ?? null,
+  );
+  let label: string;
+  if (rawLabel) {
+    label = String(amount);
+  } else if (typeof amount === 'number') {
+    label = formatMoneyAmountDigits(amount);
+  } else {
+    // Pre-formatted amount-only string from the caller.
+    label = String(amount);
+  }
+
   return (
     <View style={[styles.row, style]}>
       <CurrencyIcon
         size={size}
         color={iconColor}
-        currency={currency}
-        location={currency != null ? null : location}
+        currency={code}
+        location={code != null ? null : location}
       />
       <Text
         style={[
@@ -47,7 +73,7 @@ export default function MoneyAmount({
         ]}
         numberOfLines={1}
       >
-        {amount}
+        {label}
       </Text>
     </View>
   );

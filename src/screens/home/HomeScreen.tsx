@@ -23,7 +23,12 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
-import { formatMoneyDisplay } from '../../data/location/geo';
+import MoneyAmount from '../../components/ui/MoneyAmount';
+import {
+  formatMoneyAmountDigits,
+  parseMoneyAmountFromLabel,
+  stripCurrencyCodeTokens,
+} from '../../utils/money';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
@@ -233,10 +238,13 @@ function JobMatchCard({
         </Text>
       </View>
       <View style={styles.jobMetaRow}>
-        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText} numberOfLines={1}>
-          {job.salary}
-        </Text>
+        <MoneyAmount
+          amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
+          currency={job.currency}
+          size={14}
+          color={colors.textSecondary}
+          rawLabel
+        />
       </View>
     </TouchableOpacity>
   );
@@ -285,14 +293,19 @@ function ServiceMatchCard({
         </Text>
       </View>
       <View style={styles.jobMetaRow}>
-        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText} numberOfLines={1}>
-          {service.priceLabel ??
-            formatMoneyDisplay({
-              amount: service.price,
-              currency: service.currency,
-            })}
-        </Text>
+        <MoneyAmount
+          amount={
+            service.priceLabel
+              ? formatMoneyAmountDigits(
+                  parseMoneyAmountFromLabel(service.priceLabel) ?? service.price,
+                )
+              : formatMoneyAmountDigits(service.price)
+          }
+          currency={service.currency}
+          size={14}
+          color={colors.textSecondary}
+          rawLabel
+        />
       </View>
     </TouchableOpacity>
   );

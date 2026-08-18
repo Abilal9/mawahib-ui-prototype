@@ -19,8 +19,13 @@ import CalendarPicker from '../../components/ui/CalendarPicker';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  normalizeMoneyInputEditing,
+  parseMoneyInput,
+} from '../../utils/money';
 import {
   attachmentIcon,
   parseAttachmentsFromNotes,
@@ -60,7 +65,6 @@ import {
   WorkRequestTerms,
   effectiveTerms,
   formatDeadline,
-  formatMoney,
   fromIsoDate,
   summarizeTermsChange,
   termsAddonsSum,
@@ -130,24 +134,6 @@ function formatPickedDate(date: Date) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-/** Groups thousands while the user types, keeping at most two decimals. */
-function formatAmountInput(text: string): string {
-  const cleaned = text.replace(/[^\d.]/g, '');
-  const [whole = '', ...rest] = cleaned.split('.');
-  const grouped = whole
-    .replace(/^0+(?=\d)/, '')
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  if (!cleaned.includes('.')) return grouped;
-  return `${grouped || '0'}.${rest.join('').slice(0, 2)}`;
-}
-
-/** A positive amount, or null when the field is blank or not a real price. */
-function parseAmountInput(text: string): number | null {
-  const amount = Number(text.replace(/,/g, ''));
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  return Math.round(amount * 100) / 100;
 }
 
 function moneyChanged(
@@ -275,20 +261,25 @@ function MoneyRow({
   struck?: boolean;
   emphasized?: boolean;
 }) {
-  const amount = formatMoney(money);
+  if (!money || money.amount == null || !Number.isFinite(money.amount)) {
+    return (
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue}>{fallback}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.rowValue,
-          struck && styles.struckValue,
-          emphasized && styles.emphasizedValue,
-        ]}
-        numberOfLines={2}
-      >
-        {amount || fallback}
-      </Text>
+      <MoneyAmount
+        amount={money.amount}
+        currency={money.currency}
+        size={14}
+        struck={struck}
+        emphasized={emphasized}
+        style={styles.moneyAmountAlign}
+      />
     </View>
   );
 }
@@ -600,7 +591,7 @@ export default function WorkRequestDetailScreen({
 
   const openChanges = () => {
     const money = terms.money;
-    setAmountText(money ? formatAmountInput(String(money.amount)) : '');
+    setAmountText(money ? normalizeMoneyInputEditing(String(money.amount)) : '');
     setCurrency(money?.currency || DEFAULT_CURRENCY);
 
     const deadline = terms.deadline;
@@ -870,7 +861,7 @@ export default function WorkRequestDetailScreen({
     return { type: 'flexible' };
   };
 
-  const proposedAmount = parseAmountInput(amountText);
+  const proposedAmount = parseMoneyInput(amountText);
   const amountReady = amountText.trim().length === 0 || proposedAmount !== null;
   const deadlineReady = proposedDeadline() !== null;
 
@@ -1469,7 +1460,9 @@ export default function WorkRequestDetailScreen({
                 label="Package / Base Price"
                 placeholder="0"
                 value={amountText}
-                onChangeText={(text) => setAmountText(formatAmountInput(text))}
+                onChangeText={(text) =>
+                  setAmountText(normalizeMoneyInputEditing(text))
+                }
                 currency={
                   (currency as 'SAR' | 'AED' | undefined) ??
                   (terms?.money?.currency as 'SAR' | 'AED' | undefined) ??
@@ -1507,9 +1500,11 @@ export default function WorkRequestDetailScreen({
                             <Text style={styles.summaryLabel}>
                               Add-ons (unchanged)
                             </Text>
-                            <Text style={styles.summaryValue}>
-                              {formatMoney(addonsSum)}
-                            </Text>
+                            <MoneyAmount
+                              amount={addonsSum.amount}
+                              currency={addonsSum.currency}
+                              size={13}
+                            />
                           </View>
                         ) : null}
                         {previewTotal ? (
@@ -1517,9 +1512,12 @@ export default function WorkRequestDetailScreen({
                             <Text style={styles.summaryLabel}>
                               Total (base + add-ons)
                             </Text>
-                            <Text style={styles.summaryValue}>
-                              {formatMoney(previewTotal)}
-                            </Text>
+                            <MoneyAmount
+                              amount={previewTotal.amount}
+                              currency={previewTotal.currency}
+                              size={13}
+                              emphasized
+                            />
                           </View>
                         ) : null}
                       </>
@@ -2132,6 +2130,10 @@ const styles = StyleSheet.create({
   summaryLabel: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  moneyAmountAlign: {
+    flexShrink: 1,
+    justifyContent: 'flex-end',
   },
   summaryValue: {
     ...typography.bodySmall,

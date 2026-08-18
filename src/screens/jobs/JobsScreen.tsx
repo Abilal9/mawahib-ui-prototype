@@ -15,9 +15,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
-import { UserJob, UserJobSection } from '../../data/types/userJobs';
+import {
+  UserJob,
+  UserJobSection,
+  jobTotalPrice,
+  resolveJobDetails,
+} from '../../data/types/userJobs';
 import { TabScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -185,6 +191,12 @@ function JobFlowCard({
   }, []);
 
   const displayedRating = previewRating ?? job.rating ?? 0;
+  const details = resolveJobDetails(job);
+  const total = jobTotalPrice(details);
+  const showMoney =
+    job.source !== 'posted_listing' &&
+    total > 0 &&
+    !!details.currencySymbol;
 
   const handleStarPress = (value: number) => {
     setPreviewRating(value);
@@ -249,6 +261,19 @@ function JobFlowCard({
           <Text style={styles.dateValue}>{job.date}</Text>
         </View>
       </View>
+      {showMoney ? (
+        <>
+          <View style={styles.metaSeparator} />
+          <View style={styles.metaLine}>
+            <Text style={styles.metaLabel}>Total</Text>
+            <MoneyAmount
+              amount={total}
+              currency={details.currencySymbol}
+              size={14}
+            />
+          </View>
+        </>
+      ) : null}
       {job.activityLabel ? (
         <>
           <View style={styles.metaSeparator} />

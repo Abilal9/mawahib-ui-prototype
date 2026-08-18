@@ -12,7 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import type { PeerSummary, WorkContext } from '../../services/messagingApi';
-import { formatMoneyDisplay } from '../../data/location/geo';
+import MoneyAmount from '../ui/MoneyAmount';
+import { parseMoneyAmountFromLabel } from '../../utils/money';
 
 function formatStatus(status: string): string {
   return status.replace(/_/g, ' ');
@@ -22,18 +23,11 @@ function formatSource(source: string): string {
   return source.replace(/_/g, ' ');
 }
 
-function formatWorkPrice(work: WorkContext): string | null {
-  if (!work.price) return null;
-  const amount = Number(String(work.price).replace(/,/g, ''));
-  if (!Number.isFinite(amount)) {
-    return work.currency
-      ? `${work.price} ${work.currency}`
-      : String(work.price);
-  }
-  return formatMoneyDisplay({
-    amount,
-    currency: work.currency || 'SAR',
-  });
+function moneyFromWorkField(
+  value: string | null | undefined,
+): number | null {
+  if (!value) return null;
+  return parseMoneyAmountFromLabel(value);
 }
 
 export default function JobOverviewSheet({
@@ -52,6 +46,12 @@ export default function JobOverviewSheet({
   onOpenParticipant: () => void;
 }) {
   const work = workContext;
+  const totalAmount = moneyFromWorkField(work?.price);
+  const packageAmount = moneyFromWorkField(work?.packagePrice);
+  const showPackage =
+    packageAmount != null &&
+    totalAmount != null &&
+    packageAmount !== totalAmount;
 
   return (
     <Modal
@@ -85,25 +85,25 @@ export default function JobOverviewSheet({
                     {formatStatus(work.status)}
                   </Text>
                 </View>
-                {work.price ? (
+                {totalAmount != null ? (
                   <View style={styles.metaRow}>
                     <Text style={styles.metaLabel}>Total</Text>
-                    <Text style={styles.metaValue}>
-                      {formatWorkPrice(work)}
-                    </Text>
+                    <MoneyAmount
+                      amount={totalAmount}
+                      currency={work.currency}
+                      size={14}
+                      emphasized
+                    />
                   </View>
                 ) : null}
-                {work.packagePrice &&
-                work.price &&
-                work.packagePrice !== work.price ? (
+                {showPackage ? (
                   <View style={styles.metaRow}>
                     <Text style={styles.metaLabel}>Package / Base</Text>
-                    <Text style={styles.metaValue}>
-                      {formatMoneyDisplay({
-                        amount: Number(String(work.packagePrice).replace(/,/g, '')),
-                        currency: work.currency || 'SAR',
-                      })}
-                    </Text>
+                    <MoneyAmount
+                      amount={packageAmount!}
+                      currency={work.currency}
+                      size={14}
+                    />
                   </View>
                 ) : null}
                 {work.deadline ? (

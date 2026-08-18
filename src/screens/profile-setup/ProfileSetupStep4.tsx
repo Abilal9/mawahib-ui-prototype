@@ -7,6 +7,10 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ProfileService } from '../../data/types';
 import { ProfileSetupStepProps } from './stepProps';
+import {
+  moneyAmountDraftFromLabel,
+  normalizeMoneyInputEditing,
+} from '../../utils/money';
 
 interface ServiceDraft {
   title: string;
@@ -20,7 +24,7 @@ function draftsFromContent(services: ProfileService[]): ServiceDraft[] {
     .filter((s) => s.id.startsWith(SETUP_SERVICE_PREFIX))
     .map((s) => ({
       title: s.title,
-      price: s.packages[0]?.priceLabel?.replace(/[^\d.]/g, '') ?? '',
+      price: moneyAmountDraftFromLabel(s.packages[0]?.priceLabel),
     }));
   return fromSetup.length > 0 ? fromSetup : [{ title: '', price: '' }];
 }
@@ -103,8 +107,10 @@ export default function ProfileSetupStep4({
             <TextInput
               placeholder="Price"
               value={service.price}
-              onChangeText={(v) => updateService(index, 'price', v)}
-              keyboardType="numeric"
+              onChangeText={(v) =>
+                updateService(index, 'price', normalizeMoneyInputEditing(v))
+              }
+              keyboardType="decimal-pad"
               containerStyle={styles.inputNoMargin}
             />
           </View>

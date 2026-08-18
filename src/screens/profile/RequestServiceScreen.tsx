@@ -24,7 +24,7 @@ import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationMod
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
 import { stripCurrencyGlyphs } from '../../utils/currency';
-import { parseMoneyAmountFromLabel } from '../../utils/money';
+import { formatMoneyAmountDigits, parseMoneyAmountFromLabel } from '../../utils/money';
 import {
   PACKAGE_TIER_BY_NAME,
   useUserJobs,
@@ -66,10 +66,7 @@ function parsePrice(label: string) {
 }
 
 function formatMoney(amount: number) {
-  return amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountDigits(amount);
 }
 
 function formatDate(d: Date) {

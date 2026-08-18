@@ -54,6 +54,8 @@ export interface ApiJobListing {
   employmentType: ApiEmploymentType;
   location: string;
   salaryLabel: string | null;
+  /** Snapshotted poster default currency at create time. */
+  currency: string;
   description: string;
   skills: string[];
   exploreTag: string | null;
@@ -193,6 +195,8 @@ function listingStatusToUi(
 }
 
 export function mapApiListingToJob(api: ApiJobListing): JobListing {
+  const currency =
+    api.currency === 'AED' || api.currency === 'SAR' ? api.currency : null;
   return {
     id: api.id,
     title: api.title,
@@ -200,6 +204,7 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
     type: EMPLOYMENT_TO_UI[api.employmentType],
     location: api.location,
     salary: api.salaryLabel || 'Negotiable',
+    currency,
     description: api.description,
     skills: api.skills ?? [],
     postedAt: api.postedAt || api.createdAt,

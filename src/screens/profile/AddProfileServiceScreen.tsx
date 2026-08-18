@@ -26,6 +26,7 @@ import { ScreenProps } from '../../navigation/types';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
 import {
   moneyAmountDraftFromLabel,
+  normalizeMoneyInputEditing,
   parseMoneyAmountFromLabel,
 } from '../../utils/money';
 
@@ -70,15 +71,7 @@ function amountDraftFromLabel(label: string) {
 
 /** Keep TextInput state as a numeric string (preserves at most two decimals). */
 function normalizePriceInput(text: string) {
-  const cleaned = text.replace(/[^\d.]/g, '');
-  if (!cleaned || cleaned === '.') return '0';
-  const [whole = '', ...rest] = cleaned.split('.');
-  const normalizedWhole = whole.replace(/^0+(?=\d)/, '') || '0';
-  if (!cleaned.includes('.')) return String(Number(normalizedWhole));
-  const decimals = rest.join('').slice(0, 2);
-  return decimals.length > 0
-    ? `${normalizedWhole}.${decimals}`
-    : normalizedWhole;
+  return normalizeMoneyInputEditing(text);
 }
 
 /** Hydrate the three package drafts when opening the wizard in edit mode. */

@@ -33,6 +33,10 @@ import {
 } from '../../services/workRequestApi';
 import type { CurrencyCode } from '../../data/location/geo';
 import { normalizeCurrencyCode } from '../../data/location/geo';
+import {
+  normalizeMoneyInputEditing,
+  parseMoneyInput,
+} from '../../utils/money';
 
 type DeadlineMode = 'exact_date' | 'duration' | 'flexible';
 
@@ -50,24 +54,6 @@ const MOCK_PDFS = [
   { name: 'Moodboard.pdf', size: '3.1 MB' },
   { name: 'References.pdf', size: '2.4 MB' },
 ];
-
-/** Groups thousands while the user types, keeping at most two decimals. */
-function formatAmountInput(text: string): string {
-  const cleaned = text.replace(/[^\d.]/g, '');
-  const [whole = '', ...rest] = cleaned.split('.');
-  const grouped = whole
-    .replace(/^0+(?=\d)/, '')
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  if (!cleaned.includes('.')) return grouped;
-  return `${grouped || '0'}.${rest.join('').slice(0, 2)}`;
-}
-
-/** A positive amount, or null when the field is blank or not a real price. */
-function parseAmountInput(text: string): number | null {
-  const amount = Number(text.replace(/,/g, ''));
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  return Math.round(amount * 100) / 100;
-}
 
 function formatPickedDate(date: Date) {
   return date.toLocaleDateString('en-US', {
@@ -113,7 +99,7 @@ export default function DirectRequestScreen({
   const [durationValue, setDurationValue] = useState('2');
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('weeks');
 
-  const amount = parseAmountInput(amountText);
+  const amount = parseMoneyInput(amountText);
   const amountInvalid = amountText.trim().length > 0 && amount === null;
 
   const buildDeadline = (): WorkRequestDeadlineInput | null => {
@@ -235,7 +221,9 @@ export default function DirectRequestScreen({
             label="Budget"
             placeholder="0"
             value={amountText}
-            onChangeText={(text) => setAmountText(formatAmountInput(text))}
+            onChangeText={(text) =>
+              setAmountText(normalizeMoneyInputEditing(text))
+            }
             currency={requestCurrency}
             error={amountInvalid ? 'Enter an amount greater than zero.' : undefined}
           />

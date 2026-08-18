@@ -30,6 +30,8 @@ import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ScreenProps } from '../../navigation/types';
 import { JobListing } from '../../data/types';
 import { ApiError } from '../../lib/apiClient';
+import MoneyAmount from '../../components/ui/MoneyAmount';
+import { stripCurrencyCodeTokens } from '../../utils/money';
 
 export default function JobListingDetailScreen({
   route,
@@ -311,8 +313,13 @@ export default function JobListingDetailScreen({
             <Text style={styles.metaText}>{job.location}</Text>
           </View>
           <View style={styles.metaRow}>
-            <Ionicons name="cash-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.metaText}>{job.salary}</Text>
+            <MoneyAmount
+              amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
+              currency={job.currency}
+              size={16}
+              color={colors.textSecondary}
+              rawLabel
+            />
           </View>
         </View>
 

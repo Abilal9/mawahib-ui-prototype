@@ -73,6 +73,8 @@ export interface Job {
   type: 'full-time' | 'part-time' | 'contract' | 'freelance' | 'gig';
   location: string;
   salary: string;
+  /** Snapshotted listing currency (SAR | AED). */
+  currency?: 'SAR' | 'AED' | null;
   description: string;
   skills: string[];
   postedAt: string;

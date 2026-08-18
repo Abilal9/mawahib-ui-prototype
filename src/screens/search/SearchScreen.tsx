@@ -15,7 +15,12 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
-import { formatMoneyDisplay } from '../../data/location/geo';
+import MoneyAmount from '../../components/ui/MoneyAmount';
+import {
+  formatMoneyAmountDigits,
+  parseMoneyAmountFromLabel,
+  stripCurrencyCodeTokens,
+} from '../../utils/money';
 import { recentSearches } from '../../data/mock/talents';
 import {
   exploreTabs,
@@ -502,14 +507,20 @@ function ServiceCard({
           <Text style={styles.serviceMeta}>{service.duration}</Text>
         </View>
         <View style={styles.metaRow}>
-          <Ionicons name="cash-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.serviceMeta}>
-            {service.priceLabel ??
-              formatMoneyDisplay({
-                amount: service.price,
-                currency: service.currency,
-              })}
-          </Text>
+          <MoneyAmount
+            amount={
+              service.priceLabel
+                ? formatMoneyAmountDigits(
+                    parseMoneyAmountFromLabel(service.priceLabel) ??
+                      service.price,
+                  )
+                : formatMoneyAmountDigits(service.price)
+            }
+            currency={service.currency}
+            size={14}
+            color={colors.textTertiary}
+            rawLabel
+          />
         </View>
       </View>
     </TouchableOpacity>
@@ -536,8 +547,13 @@ function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
           <Text style={styles.jobMeta}>{job.location}</Text>
         </View>
         <View style={styles.metaRow}>
-          <Ionicons name="cash-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.jobMeta}>{job.salary}</Text>
+          <MoneyAmount
+            amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
+            currency={job.currency}
+            size={14}
+            color={colors.textTertiary}
+            rawLabel
+          />
         </View>
       </View>
       <View style={[styles.jobBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
