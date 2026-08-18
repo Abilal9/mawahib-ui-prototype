@@ -76,6 +76,11 @@ export interface ServiceOffering {
   images: string[];
   /** Backend media asset ids aligned with `images` order when known */
   mediaAssetIds?: string[];
+  /**
+   * Snapshotted at create from the owner's country default currency.
+   * Frozen for the life of the offering (edits may change amounts only).
+   */
+  currency?: 'SAR' | 'AED' | string | null;
   packages: ServicePackage[];
   addons?: ServiceAddon[];
 }

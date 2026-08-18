@@ -50,14 +50,18 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
   const currencyLocation = isVisitorView ? owner?.location : me.location;
   const objectCurrency =
-    (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) === 'AED' ||
-    (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) === 'SAR'
-      ? ((isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) as
-          | 'SAR'
-          | 'AED')
+    profileOffering?.currency === 'AED' || profileOffering?.currency === 'SAR'
+      ? profileOffering.currency
       : catalogListing?.currency === 'AED' || catalogListing?.currency === 'SAR'
         ? catalogListing.currency
-        : null;
+        : (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) ===
+              'AED' ||
+            (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) ===
+              'SAR'
+          ? ((isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) as
+              | 'SAR'
+              | 'AED')
+          : null;
 
   const [activePackage, setActivePackage] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);

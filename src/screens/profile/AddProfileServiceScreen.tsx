@@ -99,15 +99,19 @@ export default function AddProfileServiceScreen({
 }: ScreenProps<'AddProfileService'>) {
   const insets = useSafeAreaInsets();
   const { addService, updateService, content, user } = useMyProfile();
-  const serviceCurrency =
-    user.defaultCurrency === 'AED' || user.defaultCurrency === 'SAR'
-      ? user.defaultCurrency
-      : null;
   const editingId = route.params?.serviceId;
   const existing = editingId
     ? content.services.find((s) => s.id === editingId)
     : undefined;
   const isEditing = Boolean(existing);
+  // Create → owner's current default. Edit → frozen offering snapshot.
+  const serviceCurrency =
+    (existing?.currency === 'AED' || existing?.currency === 'SAR'
+      ? existing.currency
+      : null) ??
+    (user.defaultCurrency === 'AED' || user.defaultCurrency === 'SAR'
+      ? user.defaultCurrency
+      : null);
 
   const [step, setStep] = useState(1);
   const [mediaDragging, setMediaDragging] = useState(false);

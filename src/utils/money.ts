@@ -129,3 +129,11 @@ export function toCurrencyCode(
   if (raw === 'SAR' || raw === 'AED') return raw;
   return null;
 }
+
+/** Prefer the commercial object's snapshotted currency over a profile default. */
+export function resolveObjectCurrency(
+  objectCurrency: string | null | undefined,
+  fallbackDefault?: string | null | undefined,
+): CurrencyCode | null {
+  return toCurrencyCode(objectCurrency) ?? toCurrencyCode(fallbackDefault);
+}

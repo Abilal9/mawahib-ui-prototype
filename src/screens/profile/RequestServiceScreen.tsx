@@ -109,10 +109,6 @@ export default function RequestServiceScreen({
   const provider = providerUser.user;
   const visitor = useVisitorProfessionalProfile(route.params.userId);
   const services = visitor.services;
-  const objectCurrency =
-    provider?.defaultCurrency === 'AED' || provider?.defaultCurrency === 'SAR'
-      ? provider.defaultCurrency
-      : null;
   const currencyLocation = provider?.location;
 
   const initialService = services.find((s) => s.id === route.params.serviceId);
@@ -132,6 +128,20 @@ export default function RequestServiceScreen({
   );
   const [serviceSheetOpen, setServiceSheetOpen] = useState(false);
   const [serviceQuery, setServiceQuery] = useState('');
+
+  const selectedServiceForCurrency = services.find(
+    (s) => s.id === (selectedServiceId || route.params.serviceId),
+  );
+  // Prefer the selected offering snapshot; fall back to provider default only
+  // before services have loaded.
+  const objectCurrency =
+    selectedServiceForCurrency?.currency === 'AED' ||
+    selectedServiceForCurrency?.currency === 'SAR'
+      ? selectedServiceForCurrency.currency
+      : provider?.defaultCurrency === 'AED' ||
+          provider?.defaultCurrency === 'SAR'
+        ? provider.defaultCurrency
+        : null;
 
   // Step 2
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);

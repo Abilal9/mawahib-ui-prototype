@@ -6,6 +6,7 @@ export interface ApiServiceOffering {
   title: string;
   description: string;
   category: string | null;
+  currency: string;
   rating: number;
   reviewCount: number;
   images: string[];
@@ -39,6 +40,7 @@ export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
     reviewCount: api.reviewCount,
     images: api.images,
     mediaAssetIds: api.mediaAssetIds,
+    currency: api.currency,
     packages: api.packages.map(
       (p): ServicePackage => ({
         name: p.name,

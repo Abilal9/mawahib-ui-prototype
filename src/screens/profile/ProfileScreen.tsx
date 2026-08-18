@@ -343,12 +343,17 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                               size={12}
                               color={colors.primary}
                               currency={
-                                user.defaultCurrency === 'AED' ||
-                                user.defaultCurrency === 'SAR'
-                                  ? user.defaultCurrency
-                                  : null
+                                service.currency === 'AED' ||
+                                service.currency === 'SAR'
+                                  ? service.currency
+                                  : user.defaultCurrency === 'AED' ||
+                                      user.defaultCurrency === 'SAR'
+                                    ? user.defaultCurrency
+                                    : null
                               }
                               location={
+                                service.currency === 'AED' ||
+                                service.currency === 'SAR' ||
                                 user.defaultCurrency === 'AED' ||
                                 user.defaultCurrency === 'SAR'
                                   ? null
