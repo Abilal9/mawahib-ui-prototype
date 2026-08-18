@@ -17,14 +17,12 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
-import CurrencyIcon from '../../components/ui/CurrencyIcon';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
-import { stripCurrencyGlyphs } from '../../utils/currency';
-import { formatMoneyAmountDigits, parseMoneyAmountFromLabel } from '../../utils/money';
 import {
   PACKAGE_TIER_BY_NAME,
   useUserJobs,
@@ -60,13 +58,17 @@ type PackageName = ServicePackage['name'];
 type ScheduleMode = 'deadline' | 'duration';
 type Attachment = { id: string; name: string; size: string };
 
-/** Numeric amount from a stored price label; preserves decimal places. */
-function parsePrice(label: string) {
-  return parseMoneyAmountFromLabel(label) ?? 0;
+function packageAmount(pkg: ServicePackage | undefined): number {
+  if (!pkg) return 0;
+  if (typeof pkg.price === 'number' && Number.isFinite(pkg.price)) return pkg.price;
+  return 0;
 }
 
-function formatMoney(amount: number) {
-  return formatMoneyAmountDigits(amount);
+function addonAmount(addon: { price?: number }): number {
+  if (typeof addon.price === 'number' && Number.isFinite(addon.price)) {
+    return addon.price;
+  }
+  return 0;
 }
 
 function formatDate(d: Date) {
@@ -180,8 +182,8 @@ export default function RequestServiceScreen({
   }, [services, serviceQuery]);
 
   const packagePrice = selectedService
-    ? parsePrice(
-        selectedService.packages.find((p) => p.name === selectedPackage)?.priceLabel ?? '0'
+    ? packageAmount(
+        selectedService.packages.find((p) => p.name === selectedPackage),
       )
     : 0;
 
@@ -459,17 +461,12 @@ export default function RequestServiceScreen({
                           {pkg.name}
                         </Text>
                         <View style={styles.priceInline}>
-                          <CurrencyIcon
+                          <MoneyAmount
+                            amount={packageAmount(pkg)}
+                            currency={pkg.currency ?? objectCurrency}
                             size={16}
                             color={active ? colors.primary : colors.text}
-                            currency={objectCurrency}
-                            location={objectCurrency ? null : currencyLocation}
                           />
-                          <Text
-                            style={[styles.packagePrice, active && styles.packagePriceActive]}
-                          >
-                            {formatMoney(parsePrice(pkg.priceLabel))}
-                          </Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -501,15 +498,11 @@ export default function RequestServiceScreen({
                       </View>
                       <Text style={styles.addonTitle}>{addon.title}</Text>
                       <View style={styles.priceInline}>
-                        <CurrencyIcon
+                        <MoneyAmount
+                          amount={addonAmount(addon)}
+                          currency={addon.currency ?? objectCurrency}
                           size={14}
-                          color={colors.primary}
-                          currency={objectCurrency}
-                          location={objectCurrency ? null : currencyLocation}
                         />
-                        <Text style={styles.addonPrice}>
-                          {formatMoney(parsePrice(addon.priceLabel))}
-                        </Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -778,8 +771,11 @@ export default function RequestServiceScreen({
                 <View style={styles.reviewPackageRow}>
                   <Text style={styles.reviewValue}>{selectedPackage ?? '—'}</Text>
                   <View style={styles.priceInline}>
-                    <CurrencyIcon size={14} color={colors.primary} currency={objectCurrency} location={objectCurrency ? null : currencyLocation} />
-                    <Text style={styles.reviewValue}>{formatMoney(packagePrice)}</Text>
+                    <MoneyAmount
+                      amount={packagePrice}
+                      currency={objectCurrency}
+                      size={14}
+                    />
                   </View>
                 </View>
               </ReviewRow>

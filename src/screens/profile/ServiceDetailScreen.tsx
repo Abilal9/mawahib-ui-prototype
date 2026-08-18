@@ -13,9 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
-import { stripCurrencyGlyphs } from '../../utils/currency';
 import { colors, spacing, radius, typography } from '../../theme';
 import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -164,15 +164,11 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                 <View style={styles.packageCardHeader}>
                   <Text style={styles.packageCardName}>{pkg.name}</Text>
                   <View style={styles.packageCardPriceRow}>
-                    <CurrencyIcon
+                    <MoneyAmount
+                      amount={typeof pkg.price === 'number' ? pkg.price : 0}
+                      currency={pkg.currency ?? objectCurrency}
                       size={18}
-                      color={colors.primary}
-                      currency={objectCurrency}
-                      location={objectCurrency ? null : currencyLocation}
                     />
-                    <Text style={styles.packageCardPrice}>
-                      {stripCurrencyGlyphs(pkg.priceLabel)}
-                    </Text>
                   </View>
                 </View>
                 <View style={styles.deliveryRow}>
@@ -195,15 +191,11 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                   <View key={addon.id} style={styles.addonRow}>
                     <Text style={styles.addonTitle}>{addon.title}</Text>
                     <View style={styles.addonPriceRow}>
-                      <CurrencyIcon
+                      <MoneyAmount
+                        amount={typeof addon.price === 'number' ? addon.price : 0}
+                        currency={addon.currency ?? objectCurrency}
                         size={14}
-                        color={colors.primary}
-                        currency={objectCurrency}
-                        location={objectCurrency ? null : currencyLocation}
                       />
-                      <Text style={styles.addonPrice}>
-                        {stripCurrencyGlyphs(addon.priceLabel)}
-                      </Text>
                     </View>
                   </View>
                 ))}

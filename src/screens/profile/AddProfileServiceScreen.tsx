@@ -27,7 +27,7 @@ import { pickAndUploadImage } from '../../lib/uploadMedia';
 import {
   moneyAmountDraftFromLabel,
   normalizeMoneyInputEditing,
-  parseMoneyAmountFromLabel,
+  parseMoneyInput,
 } from '../../utils/money';
 
 /**
@@ -50,13 +50,13 @@ const EMPTY_PACKAGE: PackageDraft = { price: '0', delivery: '', features: [] };
 const PACKAGE_TABS: PackageName[] = ['Basic', 'Standard', 'Premium'];
 
 function hasPositivePrice(value: string): boolean {
-  const amount = parseMoneyAmountFromLabel(value);
+  const amount = parseMoneyInput(value);
   return amount !== null && amount > 0;
 }
 
 /** Digits-only price → locale-formatted display string (currency icon is rendered separately). */
-function formatMoney(value: string) {
-  const amount = parseMoneyAmountFromLabel(value);
+function formatMoneyDigits(value: string) {
+  const amount = parseMoneyInput(value, { requirePositive: false });
   if (amount === null) return '0';
   return amount.toLocaleString('en-US', {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
@@ -85,7 +85,12 @@ function packagesFromService(service: {
   };
   for (const pkg of service.packages) {
     next[pkg.name] = {
-      price: amountDraftFromLabel(pkg.priceLabel),
+      price:
+        typeof pkg.price === 'number' && Number.isFinite(pkg.price)
+          ? Number.isInteger(pkg.price)
+            ? String(pkg.price)
+            : pkg.price.toFixed(2)
+          : amountDraftFromLabel(pkg.priceLabel),
       delivery: pkg.delivery,
       features: [...pkg.includes],
     };
@@ -146,13 +151,19 @@ export default function AddProfileServiceScreen({
   // Step 3
   const [addonTitle, setAddonTitle] = useState('');
   const [addonPrice, setAddonPrice] = useState('0');
-  const [addons, setAddons] = useState<{ id: string; title: string; priceLabel: string }[]>(
-    () =>
-      (existing?.addons ?? []).map((a) => ({
-        id: a.id,
-        title: a.title,
-        priceLabel: `+ ${formatMoney(amountDraftFromLabel(a.priceLabel))}`,
-      }))
+  const [addons, setAddons] = useState<
+    { id: string; title: string; price: string }[]
+  >(() =>
+    (existing?.addons ?? []).map((a) => ({
+      id: a.id,
+      title: a.title,
+      price:
+        typeof a.price === 'number' && Number.isFinite(a.price)
+          ? Number.isInteger(a.price)
+            ? String(a.price)
+            : a.price.toFixed(2)
+          : amountDraftFromLabel(a.priceLabel),
+    })),
   );
 
   const currentPkg = packages[activePackage];
@@ -214,11 +225,11 @@ export default function AddProfileServiceScreen({
       {
         id: `ao-${Date.now()}`,
         title: addonTitle.trim(),
-        priceLabel: `+ ${formatMoney(addonPrice)}`,
+        price: addonPrice,
       },
     ]);
     setAddonTitle('');
-    setAddonPrice('0');
+    setAddonPrice('');
   };
 
   // Back within the wizard first; only leave the screen from step 1.
@@ -259,7 +270,7 @@ export default function AddProfileServiceScreen({
       const p = packages[key];
       return {
         name: key,
-        price: parseMoneyAmountFromLabel(p.price) ?? 0,
+        price: parseMoneyInput(p.price) ?? 0,
         deliveryLabel: p.delivery.trim() || 'Flexible',
         includes: p.features.length ? p.features : ['Details TBD'],
       };
@@ -272,7 +283,7 @@ export default function AddProfileServiceScreen({
       packages: builtPackages,
       addons: addons.map((a) => ({
         title: a.title,
-        price: parseMoneyAmountFromLabel(a.priceLabel) ?? 0,
+        price: parseMoneyInput(a.price) ?? 0,
       })),
     };
 
@@ -321,7 +332,7 @@ export default function AddProfileServiceScreen({
       if (key !== 'Basic' && !hasContent) return null;
       return {
         key,
-        price: formatMoney(p.price),
+        price: formatMoneyDigits(p.price),
         delivery: p.delivery.trim() || '—',
         featureCount: p.features.length,
       };
@@ -572,7 +583,9 @@ export default function AddProfileServiceScreen({
                     <Text style={styles.addonTitle}>{addon.title}</Text>
                     <View style={styles.priceInline}>
                       <CurrencyIcon size={14} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} />
-                      <Text style={styles.addonPrice}>{addon.priceLabel}</Text>
+                      <Text style={styles.addonPrice}>
+                        {formatMoneyDigits(addon.price)}
+                      </Text>
                     </View>
                   </View>
                   <TouchableOpacity
@@ -655,7 +668,10 @@ export default function AddProfileServiceScreen({
                     <View key={a.id} style={styles.reviewLineRow}>
                       <Text style={styles.reviewLine}>• {a.title} </Text>
                       <CurrencyIcon size={13} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} />
-                      <Text style={styles.reviewLine}> {a.priceLabel}</Text>
+                      <Text style={styles.reviewLine}>
+                        {' '}
+                        {formatMoneyDigits(a.price)}
+                      </Text>
                     </View>
                   ))
                 )}

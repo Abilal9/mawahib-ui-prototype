@@ -13,7 +13,6 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
 import type { PeerSummary, WorkContext } from '../../services/messagingApi';
 import MoneyAmount from '../ui/MoneyAmount';
-import { parseMoneyAmountFromLabel } from '../../utils/money';
 
 function formatStatus(status: string): string {
   return status.replace(/_/g, ' ');
@@ -23,11 +22,11 @@ function formatSource(source: string): string {
   return source.replace(/_/g, ' ');
 }
 
-function moneyFromWorkField(
-  value: string | null | undefined,
-): number | null {
-  if (!value) return null;
-  return parseMoneyAmountFromLabel(value);
+/** Messaging already sends amount-only strings (`toFixed(2)`), not SAR/Dhs labels. */
+function amountFromField(value: string | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const amount = Number(String(value).replace(/,/g, ''));
+  return Number.isFinite(amount) ? amount : null;
 }
 
 export default function JobOverviewSheet({
@@ -46,8 +45,8 @@ export default function JobOverviewSheet({
   onOpenParticipant: () => void;
 }) {
   const work = workContext;
-  const totalAmount = moneyFromWorkField(work?.price);
-  const packageAmount = moneyFromWorkField(work?.packagePrice);
+  const totalAmount = amountFromField(work?.price);
+  const packageAmount = amountFromField(work?.packagePrice);
   const showPackage =
     packageAmount != null &&
     totalAmount != null &&

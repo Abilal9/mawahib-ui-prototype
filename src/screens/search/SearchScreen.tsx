@@ -16,11 +16,7 @@ import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
 import MoneyAmount from '../../components/ui/MoneyAmount';
-import {
-  formatMoneyAmountDigits,
-  parseMoneyAmountFromLabel,
-  stripCurrencyCodeTokens,
-} from '../../utils/money';
+import { stripCurrencyCodeTokens } from '../../utils/money';
 import { recentSearches } from '../../data/mock/talents';
 import {
   exploreTabs,
@@ -508,18 +504,10 @@ function ServiceCard({
         </View>
         <View style={styles.metaRow}>
           <MoneyAmount
-            amount={
-              service.priceLabel
-                ? formatMoneyAmountDigits(
-                    parseMoneyAmountFromLabel(service.priceLabel) ??
-                      service.price,
-                  )
-                : formatMoneyAmountDigits(service.price)
-            }
+            amount={service.price}
             currency={service.currency}
             size={14}
             color={colors.textTertiary}
-            rawLabel
           />
         </View>
       </View>

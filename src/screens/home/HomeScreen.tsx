@@ -24,11 +24,7 @@ import { usePosts } from '../../context/PostsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
 import MoneyAmount from '../../components/ui/MoneyAmount';
-import {
-  formatMoneyAmountDigits,
-  parseMoneyAmountFromLabel,
-  stripCurrencyCodeTokens,
-} from '../../utils/money';
+import { stripCurrencyCodeTokens } from '../../utils/money';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
@@ -294,17 +290,10 @@ function ServiceMatchCard({
       </View>
       <View style={styles.jobMetaRow}>
         <MoneyAmount
-          amount={
-            service.priceLabel
-              ? formatMoneyAmountDigits(
-                  parseMoneyAmountFromLabel(service.priceLabel) ?? service.price,
-                )
-              : formatMoneyAmountDigits(service.price)
-          }
+          amount={service.price}
           currency={service.currency}
           size={14}
           color={colors.textSecondary}
-          rawLabel
         />
       </View>
     </TouchableOpacity>

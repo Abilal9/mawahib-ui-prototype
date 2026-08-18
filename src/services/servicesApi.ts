@@ -44,6 +44,8 @@ export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
     packages: api.packages.map(
       (p): ServicePackage => ({
         name: p.name,
+        price: p.price,
+        currency: p.currency,
         priceLabel: p.priceLabel,
         delivery: p.delivery,
         includes: p.includes,
@@ -52,6 +54,8 @@ export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
     addons: api.addons.map((a) => ({
       id: a.id,
       title: a.title,
+      price: a.price,
+      currency: a.currency,
       priceLabel: a.priceLabel,
     })),
   };

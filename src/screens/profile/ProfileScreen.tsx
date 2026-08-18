@@ -12,8 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import CurrencyIcon from '../../components/ui/CurrencyIcon';
-import { stripCurrencyGlyphs } from '../../utils/currency';
+import MoneyAmount from '../../components/ui/MoneyAmount';
 import ProfileTabs from '../../components/profile/ProfileTabs';
 import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
 import ProfileHeaderChrome, {
@@ -339,30 +338,23 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                         <View key={pkg.name} style={styles.priceRow}>
                           <Text style={styles.priceLabel}>{pkg.name}</Text>
                           <View style={styles.priceValueRow}>
-                            <CurrencyIcon
-                              size={12}
-                              color={colors.primary}
+                            <MoneyAmount
+                              amount={
+                                typeof pkg.price === 'number' ? pkg.price : 0
+                              }
                               currency={
-                                service.currency === 'AED' ||
-                                service.currency === 'SAR'
-                                  ? service.currency
-                                  : user.defaultCurrency === 'AED' ||
-                                      user.defaultCurrency === 'SAR'
-                                    ? user.defaultCurrency
-                                    : null
+                                pkg.currency === 'AED' || pkg.currency === 'SAR'
+                                  ? pkg.currency
+                                  : service.currency === 'AED' ||
+                                      service.currency === 'SAR'
+                                    ? service.currency
+                                    : user.defaultCurrency === 'AED' ||
+                                        user.defaultCurrency === 'SAR'
+                                      ? user.defaultCurrency
+                                      : null
                               }
-                              location={
-                                service.currency === 'AED' ||
-                                service.currency === 'SAR' ||
-                                user.defaultCurrency === 'AED' ||
-                                user.defaultCurrency === 'SAR'
-                                  ? null
-                                  : user.location
-                              }
+                              size={12}
                             />
-                            <Text style={styles.priceValue}>
-                              {stripCurrencyGlyphs(pkg.priceLabel)}
-                            </Text>
                           </View>
                         </View>
                       ))}

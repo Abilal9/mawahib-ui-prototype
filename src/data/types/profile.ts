@@ -55,6 +55,10 @@ export interface PortfolioProject {
 
 export interface ServicePackage {
   name: 'Basic' | 'Standard' | 'Premium';
+  /** Structured amount in major units (preferred for display/edit). */
+  price?: number;
+  currency?: string;
+  /** Legacy display label; prefer `price` + `currency`. */
   priceLabel: string;
   delivery: string;
   includes: string[];
@@ -63,6 +67,10 @@ export interface ServicePackage {
 export interface ServiceAddon {
   id: string;
   title: string;
+  /** Structured amount in major units (preferred for display/edit). */
+  price?: number;
+  currency?: string;
+  /** Legacy display label; prefer `price` + `currency`. */
   priceLabel: string;
 }
 

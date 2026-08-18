@@ -1,6 +1,5 @@
 import { Job, Service, Talent, User } from '../data/types';
 import { apiRequest } from '../lib/apiClient';
-import { formatMoneyDisplay } from '../data/location/geo';
 import { mapApiListingToJob, marketplaceApi } from './marketplaceApi';
 
 export interface ExploreProfile {
@@ -89,10 +88,6 @@ export function mapExploreService(row: ExploreServiceRow): Service {
     rating: row.rating,
     reviewCount: row.reviewCount,
     images: row.images,
-    priceLabel: formatMoneyDisplay({
-      amount: row.price,
-      currency: row.currency,
-    }),
     exploreTag: row.exploreTag || undefined,
   };
 }
