@@ -49,6 +49,15 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
     : content.services.find((s) => s.id === route.params.serviceId);
 
   const currencyLocation = isVisitorView ? owner?.location : me.location;
+  const objectCurrency =
+    (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) === 'AED' ||
+    (isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) === 'SAR'
+      ? ((isVisitorView ? owner?.defaultCurrency : me.defaultCurrency) as
+          | 'SAR'
+          | 'AED')
+      : catalogListing?.currency === 'AED' || catalogListing?.currency === 'SAR'
+        ? catalogListing.currency
+        : null;
 
   const [activePackage, setActivePackage] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -154,7 +163,8 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                     <CurrencyIcon
                       size={18}
                       color={colors.primary}
-                      location={currencyLocation}
+                      currency={objectCurrency}
+                      location={objectCurrency ? null : currencyLocation}
                     />
                     <Text style={styles.packageCardPrice}>
                       {stripCurrencyGlyphs(pkg.priceLabel)}
@@ -184,7 +194,8 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                       <CurrencyIcon
                         size={14}
                         color={colors.primary}
-                        location={currencyLocation}
+                        currency={objectCurrency}
+                        location={objectCurrency ? null : currencyLocation}
                       />
                       <Text style={styles.addonPrice}>
                         {stripCurrencyGlyphs(addon.priceLabel)}
@@ -296,7 +307,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
           <View style={styles.metaCards}>
             <View style={styles.metaCard}>
               <View style={styles.metaPriceRow}>
-                <CurrencyIcon size={18} color={colors.primary} location={providerLocation} />
+                <CurrencyIcon size={18} color={colors.primary} currency={objectCurrency} location={objectCurrency ? null : providerLocation} />
                 <Text style={styles.metaValueInline}>{service.price.toLocaleString()}</Text>
               </View>
               <Text style={styles.metaLabel}>Price</Text>

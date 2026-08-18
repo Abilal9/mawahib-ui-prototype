@@ -9,11 +9,14 @@ import {
 } from 'react-native';
 import CurrencyIcon from './CurrencyIcon';
 import { colors, spacing, radius, typography } from '../../theme';
+import type { CurrencyCode } from '../../data/location/geo';
 
 type Props = Omit<TextInputProps, 'style'> & {
   label?: string;
   error?: string;
   containerStyle?: ViewStyle;
+  /** Commercial object currency — never the viewer's default. */
+  currency?: CurrencyCode | null;
 };
 
 /**
@@ -24,13 +27,19 @@ export default function MoneyAmountField({
   label,
   error,
   containerStyle,
+  currency,
   ...props
 }: Props) {
   return (
     <View style={[styles.container, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.field, error ? styles.fieldError : null]}>
-        <CurrencyIcon size={18} color={colors.primary} />
+        <CurrencyIcon
+          size={18}
+          color={colors.primary}
+          currency={currency}
+          location={currency != null ? null : undefined}
+        />
         <RNTextInput
           style={styles.input}
           placeholderTextColor={colors.textSecondary}

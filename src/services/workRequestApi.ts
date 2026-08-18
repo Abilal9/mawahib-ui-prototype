@@ -318,7 +318,7 @@ export function formatDeadline(
 
 /** Total of the package price plus every add-on, in the package currency. */
 export function termsTotal(
-  terms: WorkRequestTerms,
+  terms: Pick<WorkRequestTerms, 'money' | 'addons'>,
 ): WorkRequestMoney | null {
   const addons = terms.addons ?? [];
   if (!terms.money && addons.length === 0) return null;

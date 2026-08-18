@@ -24,6 +24,10 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { ServicePackage } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
+import {
+  moneyAmountDraftFromLabel,
+  parseMoneyAmountFromLabel,
+} from '../../utils/money';
 
 /**
  * Multi-step wizard to create or edit a profile service.
@@ -44,24 +48,37 @@ const EMPTY_PACKAGE: PackageDraft = { price: '0', delivery: '', features: [] };
 
 const PACKAGE_TABS: PackageName[] = ['Basic', 'Standard', 'Premium'];
 
+function hasPositivePrice(value: string): boolean {
+  const amount = parseMoneyAmountFromLabel(value);
+  return amount !== null && amount > 0;
+}
+
 /** Digits-only price → locale-formatted display string (currency icon is rendered separately). */
 function formatMoney(value: string) {
-  const digits = value.replace(/[^\d]/g, '');
-  if (!digits) return '0';
-  return Number(digits).toLocaleString('en-US');
+  const amount = parseMoneyAmountFromLabel(value);
+  if (amount === null) return '0';
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-/** Pull a numeric draft value out of a stored price label like "1,200" or "+ 50". */
-function digitsFromLabel(label: string) {
-  const digits = label.replace(/[^\d]/g, '');
-  return digits ? String(Number(digits)) : '0';
+/** Pull a numeric draft value out of a stored price label like "SAR 900.00". */
+function amountDraftFromLabel(label: string) {
+  return moneyAmountDraftFromLabel(label);
 }
 
-/** Keep TextInput state as a plain digit string (leading zeros stripped). */
+/** Keep TextInput state as a numeric string (preserves at most two decimals). */
 function normalizePriceInput(text: string) {
-  const digits = text.replace(/[^\d]/g, '');
-  if (!digits) return '0';
-  return String(Number(digits));
+  const cleaned = text.replace(/[^\d.]/g, '');
+  if (!cleaned || cleaned === '.') return '0';
+  const [whole = '', ...rest] = cleaned.split('.');
+  const normalizedWhole = whole.replace(/^0+(?=\d)/, '') || '0';
+  if (!cleaned.includes('.')) return String(Number(normalizedWhole));
+  const decimals = rest.join('').slice(0, 2);
+  return decimals.length > 0
+    ? `${normalizedWhole}.${decimals}`
+    : normalizedWhole;
 }
 
 /** Hydrate the three package drafts when opening the wizard in edit mode. */
@@ -75,7 +92,7 @@ function packagesFromService(service: {
   };
   for (const pkg of service.packages) {
     next[pkg.name] = {
-      price: digitsFromLabel(pkg.priceLabel),
+      price: amountDraftFromLabel(pkg.priceLabel),
       delivery: pkg.delivery,
       features: [...pkg.includes],
     };
@@ -88,7 +105,11 @@ export default function AddProfileServiceScreen({
   route,
 }: ScreenProps<'AddProfileService'>) {
   const insets = useSafeAreaInsets();
-  const { addService, updateService, content } = useMyProfile();
+  const { addService, updateService, content, user } = useMyProfile();
+  const serviceCurrency =
+    user.defaultCurrency === 'AED' || user.defaultCurrency === 'SAR'
+      ? user.defaultCurrency
+      : null;
   const editingId = route.params?.serviceId;
   const existing = editingId
     ? content.services.find((s) => s.id === editingId)
@@ -133,23 +154,20 @@ export default function AddProfileServiceScreen({
       (existing?.addons ?? []).map((a) => ({
         id: a.id,
         title: a.title,
-        priceLabel: `+ ${formatMoney(digitsFromLabel(a.priceLabel))}`,
+        priceLabel: `+ ${formatMoney(amountDraftFromLabel(a.priceLabel))}`,
       }))
   );
 
   const currentPkg = packages[activePackage];
   const basicReady =
-    packages.Basic.price.replace(/[^\d]/g, '') !== '' &&
-    packages.Basic.price.replace(/[^\d]/g, '') !== '0' &&
+    hasPositivePrice(packages.Basic.price) &&
     packages.Basic.delivery.trim().length > 0;
 
   const canNextStep1 = name.trim().length > 0;
   const canNextStep2 = basicReady;
   const canAddFeature = featureDraft.trim().length > 0;
   const canAddAddon =
-    addonTitle.trim().length > 0 &&
-    addonPrice.replace(/[^\d]/g, '') !== '' &&
-    addonPrice.replace(/[^\d]/g, '') !== '0';
+    addonTitle.trim().length > 0 && hasPositivePrice(addonPrice);
 
   const updatePackage = (patch: Partial<PackageDraft>) => {
     setPackages((prev) => ({
@@ -236,8 +254,7 @@ export default function AddProfileServiceScreen({
       if (key === 'Basic') return true;
       const p = packages[key];
       return (
-        (p.price.replace(/[^\d]/g, '') !== '' &&
-          p.price.replace(/[^\d]/g, '') !== '0') ||
+        hasPositivePrice(p.price) ||
         p.delivery.trim() ||
         p.features.length > 0
       );
@@ -245,7 +262,7 @@ export default function AddProfileServiceScreen({
       const p = packages[key];
       return {
         name: key,
-        price: Number(p.price.replace(/[^\d]/g, '') || '0'),
+        price: parseMoneyAmountFromLabel(p.price) ?? 0,
         deliveryLabel: p.delivery.trim() || 'Flexible',
         includes: p.features.length ? p.features : ['Details TBD'],
       };
@@ -258,7 +275,7 @@ export default function AddProfileServiceScreen({
       packages: builtPackages,
       addons: addons.map((a) => ({
         title: a.title,
-        price: Number(digitsFromLabel(a.priceLabel)),
+        price: parseMoneyAmountFromLabel(a.priceLabel) ?? 0,
       })),
     };
 
@@ -301,9 +318,8 @@ export default function AddProfileServiceScreen({
     return PACKAGE_TABS.map((key) => {
       const p = packages[key];
       const hasContent =
-        (p.price.replace(/[^\d]/g, '') !== '' &&
-          p.price.replace(/[^\d]/g, '') !== '0') ||
-        p.delivery.trim() ||
+        hasPositivePrice(p.price) ||
+        !!p.delivery.trim() ||
         p.features.length > 0;
       if (key !== 'Basic' && !hasContent) return null;
       return {
@@ -453,7 +469,7 @@ export default function AddProfileServiceScreen({
 
               <Text style={styles.label}>Price</Text>
               <View style={styles.priceRow}>
-                <CurrencyIcon size={18} color={colors.primary} style={styles.currencyIcon} />
+                <CurrencyIcon size={18} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} style={styles.currencyIcon} />
                 <TextInput
                   style={styles.priceInput}
                   value={currentPkg.price}
@@ -534,7 +550,7 @@ export default function AddProfileServiceScreen({
                 />
                 <Text style={styles.label}>Add-On Price</Text>
                 <View style={styles.priceRow}>
-                  <CurrencyIcon size={18} color={colors.primary} style={styles.currencyIcon} />
+                  <CurrencyIcon size={18} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} style={styles.currencyIcon} />
                   <TextInput
                     style={styles.priceInput}
                     value={addonPrice}
@@ -558,7 +574,7 @@ export default function AddProfileServiceScreen({
                   <View style={styles.flex}>
                     <Text style={styles.addonTitle}>{addon.title}</Text>
                     <View style={styles.priceInline}>
-                      <CurrencyIcon size={14} color={colors.primary} />
+                      <CurrencyIcon size={14} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} />
                       <Text style={styles.addonPrice}>{addon.priceLabel}</Text>
                     </View>
                   </View>
@@ -618,7 +634,7 @@ export default function AddProfileServiceScreen({
                 {packageSummary.map((line) => (
                   <View key={line.key} style={styles.reviewLineRow}>
                     <Text style={styles.reviewLine}>{line.key} : • </Text>
-                    <CurrencyIcon size={13} color={colors.primary} />
+                    <CurrencyIcon size={13} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} />
                     <Text style={styles.reviewLine}>
                       {' '}
                       {line.price} • {line.delivery} • {line.featureCount} Feature
@@ -641,7 +657,7 @@ export default function AddProfileServiceScreen({
                   addons.map((a) => (
                     <View key={a.id} style={styles.reviewLineRow}>
                       <Text style={styles.reviewLine}>• {a.title} </Text>
-                      <CurrencyIcon size={13} color={colors.primary} />
+                      <CurrencyIcon size={13} color={colors.primary} currency={serviceCurrency} location={serviceCurrency ? null : undefined} />
                       <Text style={styles.reviewLine}> {a.priceLabel}</Text>
                     </View>
                   ))

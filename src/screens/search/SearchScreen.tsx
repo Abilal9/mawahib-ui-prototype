@@ -15,6 +15,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
 import { toImageSource } from '../../utils/image';
 import { colors, spacing, radius, typography } from '../../theme';
+import { formatMoneyDisplay } from '../../data/location/geo';
 import { recentSearches } from '../../data/mock/talents';
 import {
   exploreTabs,
@@ -503,7 +504,11 @@ function ServiceCard({
         <View style={styles.metaRow}>
           <Ionicons name="cash-outline" size={14} color={colors.textTertiary} />
           <Text style={styles.serviceMeta}>
-            {service.priceLabel ?? `${service.currency} ${service.price.toLocaleString()}`}
+            {service.priceLabel ??
+              formatMoneyDisplay({
+                amount: service.price,
+                currency: service.currency,
+              })}
           </Text>
         </View>
       </View>

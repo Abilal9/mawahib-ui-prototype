@@ -1466,10 +1466,15 @@ export default function WorkRequestDetailScreen({
               ) : null}
 
               <MoneyAmountField
-                label="Package Price"
+                label="Package / Base Price"
                 placeholder="0"
                 value={amountText}
                 onChangeText={(text) => setAmountText(formatAmountInput(text))}
+                currency={
+                  (currency as 'SAR' | 'AED' | undefined) ??
+                  (terms?.money?.currency as 'SAR' | 'AED' | undefined) ??
+                  null
+                }
                 containerStyle={styles.priceField}
                 error={
                   amountText.trim().length > 0 && proposedAmount === null
@@ -1481,24 +1486,39 @@ export default function WorkRequestDetailScreen({
                 <View style={styles.currentMoneySummary}>
                   {(() => {
                     const addonsSum = termsAddonsSum(terms);
-                    const total = termsTotal(terms);
+                    const proposedBase =
+                      proposedAmount !== null
+                        ? {
+                            amount: proposedAmount,
+                            currency:
+                              currency ||
+                              terms.money?.currency ||
+                              DEFAULT_CURRENCY,
+                          }
+                        : terms.money;
+                    const previewTotal = termsTotal({
+                      money: proposedBase,
+                      addons: terms.addons,
+                    });
                     return (
                       <>
                         {addonsSum ? (
                           <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>
-                              Current add-ons
+                              Add-ons (unchanged)
                             </Text>
                             <Text style={styles.summaryValue}>
                               {formatMoney(addonsSum)}
                             </Text>
                           </View>
                         ) : null}
-                        {total ? (
+                        {previewTotal ? (
                           <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Total</Text>
+                            <Text style={styles.summaryLabel}>
+                              Total (base + add-ons)
+                            </Text>
                             <Text style={styles.summaryValue}>
-                              {formatMoney(total)}
+                              {formatMoney(previewTotal)}
                             </Text>
                           </View>
                         ) : null}
@@ -1509,7 +1529,8 @@ export default function WorkRequestDetailScreen({
               ) : null}
               {!(amountText.trim().length > 0 && proposedAmount === null) ? (
                 <Text style={styles.hintText}>
-                  Leave blank to keep the current package price.
+                  Edits the package/base price only. Add-ons stay attached; total
+                  = base + add-ons. Leave blank to keep the current base price.
                 </Text>
               ) : null}
 

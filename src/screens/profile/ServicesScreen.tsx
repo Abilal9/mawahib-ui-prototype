@@ -65,9 +65,23 @@ export default function ServicesScreen({ route, navigation }: Props) {
                   <CurrencyIcon
                     size={14}
                     color={colors.primary}
-                    location={item.provider.location}
+                    currency={
+                      item.currency === 'AED' || item.currency === 'SAR'
+                        ? item.currency
+                        : null
+                    }
+                    location={
+                      item.currency === 'AED' || item.currency === 'SAR'
+                        ? null
+                        : item.provider.location
+                    }
                   />
-                  <Text style={styles.price}>{item.price.toLocaleString()}</Text>
+                  <Text style={styles.price}>
+                    {item.price.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
                 </View>
                 <View style={styles.rating}>
                   <Ionicons name="star" size={14} color={colors.warning} />

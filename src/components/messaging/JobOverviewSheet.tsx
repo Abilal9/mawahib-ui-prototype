@@ -87,9 +87,22 @@ export default function JobOverviewSheet({
                 </View>
                 {work.price ? (
                   <View style={styles.metaRow}>
-                    <Text style={styles.metaLabel}>Price</Text>
+                    <Text style={styles.metaLabel}>Total</Text>
                     <Text style={styles.metaValue}>
                       {formatWorkPrice(work)}
+                    </Text>
+                  </View>
+                ) : null}
+                {work.packagePrice &&
+                work.price &&
+                work.packagePrice !== work.price ? (
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Package / Base</Text>
+                    <Text style={styles.metaValue}>
+                      {formatMoneyDisplay({
+                        amount: Number(String(work.packagePrice).replace(/,/g, '')),
+                        currency: work.currency || 'SAR',
+                      })}
                     </Text>
                   </View>
                 ) : null}

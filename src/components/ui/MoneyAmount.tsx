@@ -11,6 +11,8 @@ type Props = {
   struck?: boolean;
   emphasized?: boolean;
   location?: string | null;
+  /** Commercial object currency — never the viewer's default. */
+  currency?: import('../../data/location/geo').CurrencyCode | null;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
 };
@@ -23,13 +25,19 @@ export default function MoneyAmount({
   struck,
   emphasized,
   location,
+  currency,
   style,
   textStyle,
 }: Props) {
   const iconColor = struck ? colors.textSecondary : emphasized ? colors.primary : color;
   return (
     <View style={[styles.row, style]}>
-      <CurrencyIcon size={size} color={iconColor} location={location} />
+      <CurrencyIcon
+        size={size}
+        color={iconColor}
+        currency={currency}
+        location={currency != null ? null : location}
+      />
       <Text
         style={[
           styles.amount,

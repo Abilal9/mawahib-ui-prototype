@@ -19,7 +19,10 @@ export interface WorkContext {
   title: string;
   source: string;
   status: ApiEngagementStatus;
+  /** Chargeable total (base + add-ons). */
   price: string | null;
+  /** Package/base only when present. */
+  packagePrice?: string | null;
   currency: string | null;
   deadline: string | null;
   workRequestId: string | null;

@@ -24,6 +24,7 @@ import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationMod
 import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileService, ServicePackage } from '../../data/types';
 import { stripCurrencyGlyphs } from '../../utils/currency';
+import { parseMoneyAmountFromLabel } from '../../utils/money';
 import {
   PACKAGE_TIER_BY_NAME,
   useUserJobs,
@@ -59,14 +60,16 @@ type PackageName = ServicePackage['name'];
 type ScheduleMode = 'deadline' | 'duration';
 type Attachment = { id: string; name: string; size: string };
 
-/** Numeric amount from a stored price label; strips legacy currency glyphs first. */
+/** Numeric amount from a stored price label; preserves decimal places. */
 function parsePrice(label: string) {
-  const digits = stripCurrencyGlyphs(label).replace(/[^\d]/g, '');
-  return digits ? Number(digits) : 0;
+  return parseMoneyAmountFromLabel(label) ?? 0;
 }
 
 function formatMoney(amount: number) {
-  return amount.toLocaleString('en-US');
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatDate(d: Date) {
@@ -109,6 +112,10 @@ export default function RequestServiceScreen({
   const provider = providerUser.user;
   const visitor = useVisitorProfessionalProfile(route.params.userId);
   const services = visitor.services;
+  const objectCurrency =
+    provider?.defaultCurrency === 'AED' || provider?.defaultCurrency === 'SAR'
+      ? provider.defaultCurrency
+      : null;
   const currencyLocation = provider?.location;
 
   const initialService = services.find((s) => s.id === route.params.serviceId);
@@ -448,7 +455,8 @@ export default function RequestServiceScreen({
                           <CurrencyIcon
                             size={16}
                             color={active ? colors.primary : colors.text}
-                            location={currencyLocation}
+                            currency={objectCurrency}
+                            location={objectCurrency ? null : currencyLocation}
                           />
                           <Text
                             style={[styles.packagePrice, active && styles.packagePriceActive]}
@@ -489,7 +497,8 @@ export default function RequestServiceScreen({
                         <CurrencyIcon
                           size={14}
                           color={colors.primary}
-                          location={currencyLocation}
+                          currency={objectCurrency}
+                          location={objectCurrency ? null : currencyLocation}
                         />
                         <Text style={styles.addonPrice}>
                           {formatMoney(parsePrice(addon.priceLabel))}
@@ -762,7 +771,7 @@ export default function RequestServiceScreen({
                 <View style={styles.reviewPackageRow}>
                   <Text style={styles.reviewValue}>{selectedPackage ?? '—'}</Text>
                   <View style={styles.priceInline}>
-                    <CurrencyIcon size={14} color={colors.primary} location={currencyLocation} />
+                    <CurrencyIcon size={14} color={colors.primary} currency={objectCurrency} location={objectCurrency ? null : currencyLocation} />
                     <Text style={styles.reviewValue}>{formatMoney(packagePrice)}</Text>
                   </View>
                 </View>

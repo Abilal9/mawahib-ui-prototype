@@ -23,6 +23,7 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
+import { formatMoneyDisplay } from '../../data/location/geo';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
@@ -286,7 +287,11 @@ function ServiceMatchCard({
       <View style={styles.jobMetaRow}>
         <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
         <Text style={styles.jobMetaText} numberOfLines={1}>
-          {service.priceLabel ?? `${service.price} ${service.currency}`}
+          {service.priceLabel ??
+            formatMoneyDisplay({
+              amount: service.price,
+              currency: service.currency,
+            })}
         </Text>
       </View>
     </TouchableOpacity>

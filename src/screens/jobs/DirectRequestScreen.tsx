@@ -26,12 +26,13 @@ import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { ScreenProps } from '../../navigation/types';
 import {
-  DEFAULT_CURRENCY,
   DURATION_UNITS,
   DurationUnit,
   WorkRequestDeadlineInput,
   toIsoDate,
 } from '../../services/workRequestApi';
+import type { CurrencyCode } from '../../data/location/geo';
+import { normalizeCurrencyCode } from '../../data/location/geo';
 
 type DeadlineMode = 'exact_date' | 'duration' | 'flexible';
 
@@ -86,6 +87,10 @@ export default function DirectRequestScreen({
 }: ScreenProps<'DirectRequest'>) {
   const { createDirectRequest, refresh } = useUserJobs();
   const recipient = useVisitorUser(route.params.userId);
+  // Provider (recipient) default currency is the commercial context for a direct hire.
+  const requestCurrency: CurrencyCode = normalizeCurrencyCode(
+    recipient.user?.defaultCurrency,
+  );
   const {
     successVisible,
     successTitle,
@@ -157,7 +162,7 @@ export default function DirectRequestScreen({
           scope: scope.trim() || undefined,
           money:
             amount !== null
-              ? { amount, currency: DEFAULT_CURRENCY }
+              ? { amount, currency: requestCurrency }
               : undefined,
           deadline,
           message: combinedMessage || undefined,
@@ -231,6 +236,7 @@ export default function DirectRequestScreen({
             placeholder="0"
             value={amountText}
             onChangeText={(text) => setAmountText(formatAmountInput(text))}
+            currency={requestCurrency}
             error={amountInvalid ? 'Enter an amount greater than zero.' : undefined}
           />
 

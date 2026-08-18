@@ -20,7 +20,7 @@ export const DEV_BACKEND_USERS = {
     name: 'Najd Creative Studio',
     username: 'najd_studio_dev',
     title: 'Creative Production Studio',
-    location: 'Jeddah, Saudi Arabia',
+    location: 'Dubai, United Arab Emirates',
     avatar:
       'https://images.unsplash.com/photo-1560179707-f14ee9aa457c?w=200&h=200&fit=crop',
   },

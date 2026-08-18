@@ -342,7 +342,18 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                             <CurrencyIcon
                               size={12}
                               color={colors.primary}
-                              location={user.location}
+                              currency={
+                                user.defaultCurrency === 'AED' ||
+                                user.defaultCurrency === 'SAR'
+                                  ? user.defaultCurrency
+                                  : null
+                              }
+                              location={
+                                user.defaultCurrency === 'AED' ||
+                                user.defaultCurrency === 'SAR'
+                                  ? null
+                                  : user.location
+                              }
                             />
                             <Text style={styles.priceValue}>
                               {stripCurrencyGlyphs(pkg.priceLabel)}
