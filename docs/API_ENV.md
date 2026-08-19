@@ -52,6 +52,9 @@ npm run start:railway
 Confirm requests hit `mawahib-backend-production.up.railway.app` (network
 inspector). No `.env.local` create/delete needed.
 
+Live vs mock domains on the FE: [`STATUS.md`](./STATUS.md). Backend roadmap:
+`mawahib-backend/docs/ROADMAP.md`.
+
 After changing Supabase keys in `.env`, restart with cache clear if needed:
 
 ```bash

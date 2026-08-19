@@ -7,7 +7,7 @@ Full **email OTP delivery**, **SMTP**, **phone OTP/SMS provider (Twilio)**, and 
 Development can use:
 
 - Normal signup UI (phone + email collection + validation)
-- `npm run seed:dev` for pre-confirmed test users (see `docs/DEV_SEED.md`)
+- `npm run seed:dev` for pre-confirmed test users (run in **`mawahib-backend`**; see `mawahib-backend/docs/DEV_SEED.md`)
 
 Return later to:
 
