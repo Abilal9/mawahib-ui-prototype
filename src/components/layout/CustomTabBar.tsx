@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, radius, typography } from '../../theme';
+import { colors, spacing, radius } from '../../theme';
 import { useCreateMenu } from '../../context/CreateMenuContext';
 import { useMessagingUnread } from '../../context/MessagingUnreadContext';
+import { useUserJobs } from '../../context/UserJobsContext';
 
 type TabIconName = keyof typeof Ionicons.glyphMap;
 
@@ -28,6 +29,9 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const { isOpen: isCreateMenuOpen, toggle: toggleCreateMenu, close: closeCreateMenu } =
     useCreateMenu();
   const { unreadCount: messagesUnread } = useMessagingUnread();
+  const { unread: jobsUnread } = useUserJobs();
+  const showMessagesDot = messagesUnread > 0;
+  const showJobsDot = jobsUnread.sent + jobsUnread.received > 0;
   const bottomPad = Math.max(insets.bottom, 10);
 
   return (
@@ -99,6 +103,10 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
               inactive: 'ellipse-outline' as TabIconName,
             };
 
+            const showDot =
+              (route.name === 'MessagesTab' && showMessagesDot) ||
+              (route.name === 'JobsTab' && showJobsDot);
+
             return (
               <TouchableOpacity
                 key={route.key}
@@ -116,13 +124,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
                     size={ICON_SIZE}
                     color={isFocused ? colors.primary : colors.textSecondary}
                   />
-                  {route.name === 'MessagesTab' && messagesUnread > 0 ? (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>
-                        {messagesUnread > 9 ? '9+' : String(messagesUnread)}
-                      </Text>
-                    </View>
-                  ) : null}
+                  {showDot ? <View style={styles.indicatorDot} /> : null}
                 </View>
               </TouchableOpacity>
             );
@@ -192,26 +194,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badge: {
+  /** Binary unread cue — no count. Same look selected or not. */
+  indicatorDot: {
     position: 'absolute',
-    top: -2,
-    right: -8,
-    backgroundColor: colors.primary,
+    top: 0,
+    right: -1,
+    width: 8,
+    height: 8,
     borderRadius: radius.full,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
+    backgroundColor: colors.primary,
     borderWidth: 1.5,
     borderColor: colors.white,
-  },
-  badgeText: {
-    ...typography.caption,
-    color: colors.white,
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 11,
   },
   /** Behind the icon only — same slot size active/inactive */
   highlight: {

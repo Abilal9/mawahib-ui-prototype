@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { JobListing, User } from '../data/types';
 import {
   UserJob,
@@ -14,6 +15,8 @@ import {
   UserJobStatus,
 } from '../data/types/userJobs';
 import { ApiError } from '../lib/apiClient';
+import { INBOX_POLL_MS } from '../config/messaging';
+import { usePolling } from '../hooks/usePolling';
 import { useAuth } from './AuthContext';
 import { jobService } from '../services';
 import {
@@ -311,6 +314,17 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unread, setUnread] = useState<UnreadSummary>({ sent: 0, received: 0 });
+  const [appActive, setAppActive] = useState(
+    AppState.currentState === 'active',
+  );
+
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      setAppActive(next === 'active');
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, []);
 
   const refreshUnread = useCallback(async () => {
     if (!isSignedIn || !apiUser) {
@@ -368,6 +382,10 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Lightweight unread poll so the Jobs tab indicator stays current while the
+  // user is elsewhere in the app (same cadence as messaging unread).
+  usePolling(refreshUnread, INBOX_POLL_MS, isSignedIn && appActive);
 
   const value = useMemo<UserJobsContextValue>(
     () => ({
