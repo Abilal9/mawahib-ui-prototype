@@ -16,6 +16,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import ConversationSwipeRow from '../../components/messaging/ConversationSwipeRow';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { INBOX_POLL_MS } from '../../config/messaging';
 import { usePolling } from '../../hooks/usePolling';
@@ -190,10 +191,10 @@ export default function MessagesInboxScreen({
                 }
               >
                 <View style={styles.conversation}>
-                  <Image
-                    source={toImageSource(item.peer?.avatarUrl ?? '')}
+                  <UserAvatar
+                    uri={item.peer?.avatarUrl}
+                    size={52}
                     style={styles.avatar}
-                    contentFit="cover"
                   />
                   <View style={styles.content}>
                     <View style={styles.topRow}>

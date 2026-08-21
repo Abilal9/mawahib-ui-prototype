@@ -33,7 +33,7 @@ export function mapAuthError(error: unknown, fallback = 'Something went wrong. P
     lower.includes('token has expired') ||
     lower.includes('email link is invalid or has expired')
   ) {
-    return 'This verification link or code has expired. Request a new one and try again.';
+    return 'The code you entered is incorrect or has expired. Try again or request a new code.';
   }
 
   if (
@@ -41,7 +41,7 @@ export function mapAuthError(error: unknown, fallback = 'Something went wrong. P
     lower.includes('access_denied') ||
     lower.includes('email link is invalid')
   ) {
-    return 'This confirmation link is invalid or has already been used. Request a new code.';
+    return 'The code you entered is incorrect or has expired. Try again or request a new code.';
   }
 
   if (lower.includes('invalid login credentials') || lower.includes('invalid credentials')) {
@@ -86,7 +86,7 @@ export function mapAuthError(error: unknown, fallback = 'Something went wrong. P
     lower.includes('otp has expired') ||
     code === 'otp_disabled'
   ) {
-    return 'That code is incorrect or expired. Check the latest email/SMS and try again.';
+    return 'The code you entered is incorrect or has expired. Try again or request a new code.';
   }
 
   if (
@@ -114,6 +114,27 @@ export function mapAuthError(error: unknown, fallback = 'Something went wrong. P
 
   if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) {
     return 'Please verify your email before signing in. Check your inbox for the code.';
+  }
+
+  if (
+    lower.includes('over_email_send_rate_limit') ||
+    lower.includes('over_sms_send_rate_limit') ||
+    lower.includes('rate limit') ||
+    lower.includes('too many requests') ||
+    code === 'over_email_send_rate_limit' ||
+    code === 'over_sms_send_rate_limit'
+  ) {
+    return 'Too many requests. Wait a minute, then try resending the code.';
+  }
+
+  if (
+    lower.includes('signed in but failed to load profile') ||
+    lower.includes('email verified but failed to load profile') ||
+    lower.includes('backend hydration') ||
+    lower.includes('nest /users/me') ||
+    lower.includes('failed to bootstrap')
+  ) {
+    return 'Your account was verified, but we could not load your Mawahib profile. Check that the API is running, then try again.';
   }
 
   if (lower.includes('signup is disabled')) {

@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -106,7 +107,7 @@ export default function ConnectionsScreen({
       onPress={() => openUserProfile(navigation, item.id, me.id)}
       activeOpacity={0.85}
     >
-      <Image source={toImageSource(item.avatar)} style={styles.avatar} contentFit="cover" />
+      <UserAvatar uri={item.avatar} size={52} style={styles.avatar} />
       <View style={styles.info}>
         <View style={styles.nameRow}>
           <Text style={styles.name}>{item.name}</Text>
@@ -128,7 +129,7 @@ export default function ConnectionsScreen({
         onPress={() => openUserProfile(navigation, item.id, me.id)}
         activeOpacity={0.85}
       >
-        <Image source={toImageSource(item.avatar)} style={styles.avatar} contentFit="cover" />
+        <UserAvatar uri={item.avatar} size={52} style={styles.avatar} />
         <View style={styles.info}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{item.name}</Text>

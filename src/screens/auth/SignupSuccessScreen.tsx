@@ -42,9 +42,8 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
           'Verify your email',
           'Confirm your email before entering Mawahib.',
         );
-        navigation.navigate('VerifyAccount', {
+        navigation.navigate('ConfirmCode', {
           email: apiUser.email || signUpBasics?.email || '',
-          phoneE164: apiUser.phoneE164 || signUpBasics?.phoneE164 || '',
         });
         return;
       }

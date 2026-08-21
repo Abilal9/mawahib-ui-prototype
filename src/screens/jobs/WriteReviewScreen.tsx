@@ -18,6 +18,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
@@ -175,11 +176,7 @@ export default function WriteReviewScreen({
               }
               activeOpacity={0.85}
             >
-              <Image
-                source={toImageSource(job.counterpart.avatar)}
-                style={styles.avatar}
-                contentFit="cover"
-              />
+              <UserAvatar uri={job.counterpart.avatar} size={56} style={styles.avatar} />
               <View style={styles.personMeta}>
                 <Text style={styles.personName}>{job.counterpart.name}</Text>
                 <Text style={styles.jobTitle} numberOfLines={2}>

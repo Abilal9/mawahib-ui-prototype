@@ -27,6 +27,7 @@ import ProfileOverviewSheet from '../../components/messaging/ProfileOverviewShee
 import JobOverviewSheet from '../../components/messaging/JobOverviewSheet';
 import ChatImageLightbox from '../../components/messaging/ChatImageLightbox';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { coerceByteSize, formatBytes } from '../../utils/formatBytes';
 import { colors, spacing, radius, typography } from '../../theme';
 import { CHAT_POLL_MS, MESSAGE_BODY_MAX_LENGTH } from '../../config/messaging';
@@ -633,10 +634,10 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           activeOpacity={0.8}
           disabled={!peer?.id && !work}
         >
-          <Image
-            source={toImageSource(peer?.avatarUrl ?? '')}
+          <UserAvatar
+            uri={peer?.avatarUrl}
+            size={40}
             style={styles.headerAvatar}
-            contentFit="cover"
           />
           <View style={styles.headerInfo}>
             <Text style={styles.headerName} numberOfLines={1}>

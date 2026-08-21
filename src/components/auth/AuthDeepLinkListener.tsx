@@ -5,18 +5,37 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { handleAuthDeepLink } from '../../lib/authDeepLink';
 import { useAuth } from '../../context/AuthContext';
+import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import type { RootStackParamList } from '../../navigation/types';
 
 /**
- * Listens for Supabase auth redirects (email confirmation / recovery).
- * Primary signup UX is email OTP on ConfirmCode; this covers link-based emails
- * and surfaces expired-link errors inside the app instead of Nest's 404 page.
+ * Listens for Supabase auth redirects (legacy confirmation links / recovery / OAuth).
+ * Primary signup UX is email OTP on ConfirmCode — deep links must still pass the
+ * same post-auth gate and cannot bypass email verification or Nest hydrate.
+ *
+ * Initial URL is processed once; live `url` events still work. Auth/session
+ * dependency updates must not re-run getInitialURL side effects.
  */
 export default function AuthDeepLinkListener() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { refreshMe, bootstrapSession, isSignedIn, apiUser } = useAuth();
+  const { refreshMe, bootstrapSession, apiUser, session, signUpBasics } =
+    useAuth();
   const handling = useRef(false);
+  const initialUrlHandled = useRef(false);
+  const apiUserRef = useRef(apiUser);
+  const sessionRef = useRef(session);
+  const signUpBasicsRef = useRef(signUpBasics);
+  const refreshMeRef = useRef(refreshMe);
+  const bootstrapSessionRef = useRef(bootstrapSession);
+  const navigationRef = useRef(navigation);
+
+  apiUserRef.current = apiUser;
+  sessionRef.current = session;
+  signUpBasicsRef.current = signUpBasics;
+  refreshMeRef.current = refreshMe;
+  bootstrapSessionRef.current = bootstrapSession;
+  navigationRef.current = navigation;
 
   useEffect(() => {
     const run = async (url: string | null) => {
@@ -28,24 +47,34 @@ export default function AuthDeepLinkListener() {
           Alert.alert('Verification failed', result.message, [
             {
               text: 'OK',
-              onPress: () => navigation.navigate('SignIn'),
+              onPress: () => navigationRef.current.navigate('SignIn'),
             },
           ]);
           return;
         }
         if (result.type === 'session') {
           try {
-            if (apiUser) {
-              await refreshMe();
-            } else {
-              await bootstrapSession();
-            }
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'MainTabs' }],
+            const user = apiUserRef.current
+              ? await refreshMeRef.current()
+              : await bootstrapSessionRef.current();
+            const dest = resolvePostAuthDestination({
+              flow: 'deeplink',
+              apiUser: user,
+              session: sessionRef.current,
+              signUpBasics: signUpBasicsRef.current,
             });
-          } catch {
-            navigation.navigate('TurnOnNotifications');
+            navigationRef.current.reset({
+              index: 0,
+              routes: [{ name: dest.name, params: dest.params as never }],
+            });
+          } catch (e) {
+            Alert.alert(
+              'Signed in, but profile failed',
+              e instanceof Error
+                ? e.message
+                : 'Could not load your Mawahib profile. Your session is kept — retry when the backend is available.',
+            );
+            navigationRef.current.navigate('SignIn');
           }
         }
       } finally {
@@ -53,12 +82,16 @@ export default function AuthDeepLinkListener() {
       }
     };
 
-    void Linking.getInitialURL().then((url) => run(url));
+    if (!initialUrlHandled.current) {
+      initialUrlHandled.current = true;
+      void Linking.getInitialURL().then((url) => run(url));
+    }
+
     const sub = Linking.addEventListener('url', ({ url }) => {
       void run(url);
     });
     return () => sub.remove();
-  }, [apiUser, bootstrapSession, isSignedIn, navigation, refreshMe]);
+  }, []);
 
   return null;
 }

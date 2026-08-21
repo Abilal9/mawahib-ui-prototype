@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { messageService } from '../../services/messageService';
 import type { ApiConversation } from '../../services/messagingApi';
@@ -179,10 +180,10 @@ export default function ArchivedConversationsScreen({
                 onLongPress={() => openOverflow(item)}
                 activeOpacity={0.8}
               >
-                <Image
-                  source={toImageSource(item.peer?.avatarUrl ?? '')}
+                <UserAvatar
+                  uri={item.peer?.avatarUrl}
+                  size={52}
                   style={styles.avatar}
-                  contentFit="cover"
                 />
                 <View style={styles.content}>
                   <View style={styles.topRow}>

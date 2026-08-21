@@ -1,13 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, typography } from '../../theme';
 import { User } from '../../data/types';
-
 interface ProfileHeroProps {
   user: User;
   title: string;
@@ -62,7 +60,7 @@ export default function ProfileHero({
       </View>
 
       <View style={styles.center}>
-        <Image source={toImageSource(user.avatar)} style={styles.avatar} contentFit="cover" />
+        <UserAvatar uri={user.avatar} size={88} style={styles.avatar} />
         <View style={styles.nameRow}>
           <Text style={styles.name}>{user.name}</Text>
           {user.isVerified ? (

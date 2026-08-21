@@ -10,3 +10,4 @@ export { default as MoneyAmount } from './MoneyAmount';
 export { default as MoneyAmountField } from './MoneyAmountField';
 export { default as ConfirmActionModal } from './ConfirmActionModal';
 export { default as ReorderableMediaGrid } from './ReorderableMediaGrid';
+export { default as UserAvatar } from './UserAvatar';

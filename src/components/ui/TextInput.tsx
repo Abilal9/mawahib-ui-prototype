@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   TextInput as RNTextInput,
@@ -6,8 +6,13 @@ import {
   StyleSheet,
   TextInputProps,
   ViewStyle,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
+
+/** Mawahib pink for password visibility icons (per product request). */
+const PASSWORD_TOGGLE_PINK = '#F6339A';
 
 interface TextInputComponentProps extends TextInputProps {
   label?: string;
@@ -16,6 +21,13 @@ interface TextInputComponentProps extends TextInputProps {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   showCharacterCount?: boolean;
+  /**
+   * When true, shows an eye / eye-off toggle that only affects secureTextEntry display.
+   * Does not change the value or validation. Opt-in so SignIn stays unchanged.
+   */
+  enableVisibilityToggle?: boolean;
+  /** Accessibility labels for the visibility toggle (defaults: Show/Hide password). */
+  visibilityToggleLabels?: { show: string; hide: string };
 }
 
 export default function TextInput({
@@ -28,12 +40,40 @@ export default function TextInput({
   showCharacterCount,
   value,
   maxLength,
+  enableVisibilityToggle = false,
+  visibilityToggleLabels,
+  secureTextEntry,
   ...props
 }: TextInputComponentProps) {
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const charCount =
     showCharacterCount && maxLength != null
       ? `${String(value ?? '').length}/${maxLength}`
       : null;
+
+  const showToggle = enableVisibilityToggle;
+  const isSecure = showToggle ? !passwordVisible : Boolean(secureTextEntry);
+  const showLabel = visibilityToggleLabels?.show ?? 'Show password';
+  const hideLabel = visibilityToggleLabels?.hide ?? 'Hide password';
+
+  const toggleControl = showToggle ? (
+    <TouchableOpacity
+      onPress={() => setPasswordVisible((v) => !v)}
+      accessibilityRole="button"
+      accessibilityLabel={passwordVisible ? hideLabel : showLabel}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      style={styles.toggleHit}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name={passwordVisible ? 'eye' : 'eye-off'}
+        size={22}
+        color={PASSWORD_TOGGLE_PINK}
+      />
+    </TouchableOpacity>
+  ) : null;
+
+  const resolvedRightIcon = toggleControl ?? rightIcon;
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -46,13 +86,21 @@ export default function TextInput({
       <View style={[styles.inputWrapper, error && styles.inputError]}>
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <RNTextInput
-          style={[styles.input, leftIcon ? styles.inputWithLeft : undefined, style]}
+          style={[
+            styles.input,
+            leftIcon ? styles.inputWithLeft : undefined,
+            resolvedRightIcon ? styles.inputWithRight : undefined,
+            style,
+          ]}
           placeholderTextColor={colors.textSecondary}
           value={value}
           maxLength={maxLength}
+          secureTextEntry={isSecure}
           {...props}
         />
-        {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+        {resolvedRightIcon ? (
+          <View style={styles.iconRight}>{resolvedRightIcon}</View>
+        ) : null}
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
     </View>
@@ -99,11 +147,22 @@ const styles = StyleSheet.create({
   inputWithLeft: {
     paddingLeft: spacing.sm,
   },
+  inputWithRight: {
+    paddingRight: spacing.sm,
+  },
   iconLeft: {
     paddingLeft: spacing.lg,
   },
   iconRight: {
-    paddingRight: spacing.lg,
+    paddingRight: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleHit: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   error: {
     ...typography.caption,

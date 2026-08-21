@@ -9,19 +9,17 @@ import {
   Dimensions,
   Pressable,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SidebarCalendarPreview from './SidebarCalendarPreview';
 import { colors, spacing, radius, typography } from '../../theme';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useAuth } from '../../context/AuthContext';
 import { RootStackParamList } from '../../navigation/types';
-
 const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.82;
 
 const PRIMARY_LINKS: {
@@ -137,11 +135,7 @@ export default function AppSidebar() {
               onPress={() => handleNavigate('Profile')}
               activeOpacity={0.85}
             >
-              <Image
-                source={toImageSource(user.avatar)}
-                style={styles.avatar}
-                contentFit="cover"
-              />
+              <UserAvatar uri={user.avatar} size={48} style={styles.avatar} />
               <View style={styles.profileInfo}>
                 <View style={styles.nameRow}>
                   <Text style={styles.name} numberOfLines={1}>

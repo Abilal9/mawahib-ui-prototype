@@ -6,12 +6,10 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, typography } from '../../theme';
 import { User } from '../../data/types';
-
 export const PROFILE_COLLAPSE_DISTANCE = 100;
 /** Pink strip under nav — tall enough for the avatar without clipping under the bar */
 export const PROFILE_WAVE_MAX = 64;
@@ -135,11 +133,7 @@ export default function ProfileCollapsingHeader({
           },
         ]}
       >
-        <Image
-          source={toImageSource(user.avatar)}
-          style={styles.avatarImage}
-          contentFit="cover"
-        />
+        <UserAvatar uri={user.avatar} fill style={styles.avatarImage} />
       </Animated.View>
 
       <Animated.View

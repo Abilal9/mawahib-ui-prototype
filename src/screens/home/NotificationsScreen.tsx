@@ -29,6 +29,7 @@ import { useNotifications } from '../../context/NotificationsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { ApiError } from '../../lib/apiClient';
 import { messageService } from '../../services/messageService';
 
@@ -87,12 +88,8 @@ function NotificationItem({
       activeOpacity={0.85}
       onPress={onPress}
     >
-      {item.user?.avatar ? (
-        <Image
-          source={toImageSource(item.user.avatar)}
-          style={styles.avatar}
-          contentFit="cover"
-        />
+      {item.user ? (
+        <UserAvatar uri={item.user.avatar} size={40} style={styles.avatar} />
       ) : (
         <NotificationIcon type={item.type} />
       )}

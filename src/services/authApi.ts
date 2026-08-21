@@ -81,8 +81,6 @@ export interface BootstrapPayload {
   locationCode?: string;
   email?: string;
   phoneE164?: string;
-  emailVerified?: boolean;
-  phoneVerified?: boolean;
 }
 
 export interface UpdateMePayload {
@@ -98,12 +96,7 @@ export interface UpdateMePayload {
   coverUrl?: string | null;
   skills?: string[];
   phoneE164?: string | null;
-  phoneVerified?: boolean;
-  emailVerified?: boolean;
 }
-
-const FALLBACK_AVATAR =
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
 
 export function mapApiUserToUser(api: ApiUser): User {
   const countryCode = normalizeCountryCode(api.countryCode);
@@ -122,7 +115,8 @@ export function mapApiUserToUser(api: ApiUser): User {
     id: api.id,
     name: api.displayName,
     username: api.username,
-    avatar: api.avatarUrl || FALLBACK_AVATAR,
+    // null/empty → UserAvatar renders Mawahib default (no Unsplash / Storage fake).
+    avatar: api.avatarUrl?.trim() || '',
     coverImage: api.coverUrl || undefined,
     bio: api.bio,
     location:

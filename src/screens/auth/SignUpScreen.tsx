@@ -9,8 +9,6 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import type { CountryCode } from 'libphonenumber-js';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -19,27 +17,70 @@ import TextInput from '../../components/ui/TextInput';
 import Checkbox from '../../components/ui/Checkbox';
 import PasswordRequirements from '../../components/auth/PasswordRequirements';
 import PhoneInputField from '../../components/auth/PhoneInputField';
+import AuthBrandHeader from '../../components/auth/AuthBrandHeader';
 import LocationSelectors from '../../components/ui/LocationSelectors';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { isPasswordValid } from '../../lib/passwordRules';
-import { getPhoneValidationMessage, toE164 } from '../../lib/phone';
+import {
+  DIAL_COUNTRIES,
+  getPhoneValidationMessage,
+  toE164,
+} from '../../lib/phone';
+import { hasResumablePendingVerification } from '../../lib/pendingSignup';
+import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import {
   locationDisplayFields,
   type CountryCode as GeoCountryCode,
 } from '../../data/location/geo';
 
-export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
-  const { accountType, registerWithEmail, clearAuthError } = useAuth();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [country, setCountry] = useState<CountryCode>('SA');
-  const [nationalNumber, setNationalNumber] = useState('');
-  const [countryCode, setCountryCode] = useState<GeoCountryCode>('SA');
-  const [locationCode, setLocationCode] = useState<string | null>(null);
+function splitStoredPhone(phoneE164: string): {
+  country: CountryCode;
+  national: string;
+} | null {
+  const match = DIAL_COUNTRIES.find((c) => phoneE164.startsWith(c.dial));
+  if (!match) return null;
+  return {
+    country: match.code,
+    national: phoneE164.slice(match.dial.length),
+  };
+}
+
+export default function SignUpScreen({
+  route,
+  navigation,
+}: ScreenProps<'SignUp'>) {
+  const {
+    accountType,
+    registerWithEmail,
+    resumeEmailVerification,
+    signUpBasics,
+    clearAuthError,
+    session,
+  } = useAuth();
+  const draft =
+    route.params?.preserveDraft && signUpBasics ? signUpBasics : null;
+  const draftPhone = draft?.phoneE164
+    ? splitStoredPhone(draft.phoneE164)
+    : null;
+
+  const [firstName, setFirstName] = useState(draft?.firstName || '');
+  const [lastName, setLastName] = useState(draft?.lastName || '');
+  const [email, setEmail] = useState(draft?.email || '');
+  const [country, setCountry] = useState<CountryCode>(
+    draftPhone?.country || 'SA',
+  );
+  const [nationalNumber, setNationalNumber] = useState(
+    draftPhone?.national || '',
+  );
+  const [countryCode, setCountryCode] = useState<GeoCountryCode>(
+    (draft?.countryCode as GeoCountryCode) || 'SA',
+  );
+  const [locationCode, setLocationCode] = useState<string | null>(
+    draft?.locationCode || null,
+  );
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -98,6 +139,74 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
     ],
   );
 
+  const showSignupRecovery = (
+    mode: 'already_verified' | 'ambiguous',
+    recoveryEmail: string,
+  ) => {
+    const message =
+      mode === 'already_verified'
+        ? 'This email may already be associated with an account. Try logging in instead, or use a different email address.'
+        : 'This email may already be associated with an account. Try logging in, continue verification if you previously started signing up, or use a different email.';
+
+    const buttons: Array<{
+      text: string;
+      style?: 'cancel' | 'default' | 'destructive';
+      onPress?: () => void;
+    }> = [
+      {
+        text: 'Log In',
+        onPress: () => navigation.navigate('SignIn'),
+      },
+    ];
+
+    if (mode === 'ambiguous') {
+      buttons.push({
+        text: 'Continue Verification',
+        onPress: () => {
+          void (async () => {
+            try {
+              await resumeEmailVerification(recoveryEmail);
+              navigation.navigate('ConfirmCode', { email: recoveryEmail });
+            } catch (e) {
+              if (hasResumablePendingVerification(recoveryEmail)) {
+                Alert.alert(
+                  'Verification still pending',
+                  'A new code could not be sent yet. If you still have a recent code, you can enter it now.',
+                  [
+                    {
+                      text: 'Enter code',
+                      onPress: () =>
+                        navigation.navigate('ConfirmCode', {
+                          email: recoveryEmail,
+                        }),
+                    },
+                    { text: 'OK', style: 'cancel' },
+                  ],
+                );
+                return;
+              }
+              Alert.alert(
+                'Unable to continue signup',
+                `${mapAuthError(e)}\n\nNo new code was sent. Try logging in later, wait and retry Continue Verification, or use a different email.`,
+                [
+                  {
+                    text: 'Log In',
+                    onPress: () => navigation.navigate('SignIn'),
+                  },
+                  { text: 'OK', style: 'cancel' },
+                ],
+              );
+            }
+          })();
+        },
+      });
+    }
+
+    buttons.push({ text: 'Change Email', style: 'cancel' });
+
+    Alert.alert('Unable to continue signup', message, buttons);
+  };
+
   const handleSignUp = async () => {
     setSubmitted(true);
     if (!passwordOk) {
@@ -122,9 +231,10 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
     if (!canSubmit || !accountType || !locationFields) return;
     clearAuthError();
     setLoading(true);
+    const normalizedEmail = email.trim().toLowerCase();
     try {
-      await registerWithEmail({
-        email: email.trim(),
+      const result = await registerWithEmail({
+        email: normalizedEmail,
         password,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -135,10 +245,41 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
         phoneE164,
         accountType,
       });
-      navigation.navigate('VerifyAccount', {
-        email: email.trim(),
-        phoneE164,
-      });
+
+      if (result.status === 'otp_sent') {
+        navigation.navigate('ConfirmCode', { email: normalizedEmail });
+        return;
+      }
+      if (result.status === 'session_ready') {
+        const dest = resolvePostAuthDestination({
+          flow: 'verify',
+          apiUser: result.user,
+          session,
+          signUpBasics: {
+            name: displayName,
+            email: normalizedEmail,
+            city: locationFields.locationCity,
+            countryCode: locationFields.countryCode,
+            locationCode: locationFields.locationCode,
+            phoneE164,
+          },
+          pendingEmail: normalizedEmail,
+          pendingPhoneE164: phoneE164,
+        });
+        navigation.reset({
+          index: 0,
+          routes: [{ name: dest.name, params: dest.params as never }],
+        });
+        return;
+      }
+      if (result.status === 'already_verified') {
+        showSignupRecovery('already_verified', normalizedEmail);
+        return;
+      }
+      if (result.status === 'ambiguous') {
+        showSignupRecovery('ambiguous', normalizedEmail);
+        return;
+      }
     } catch (e) {
       Alert.alert('Sign up failed', mapAuthError(e));
     } finally {
@@ -153,17 +294,15 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-
-          <Image
-            source={require('../../../assets/images/logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-
+        <View style={styles.fixedHeader}>
+          <AuthBrandHeader onBack={() => navigation.goBack()} />
+        </View>
+        <ScrollView
+          style={styles.flex}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scroll}
+        >
           <Text style={styles.title}>Sign Up</Text>
           <Text style={styles.subtitle}>
             Create your {accountLabel.toLowerCase()} account to get started.
@@ -220,6 +359,14 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            enableVisibilityToggle
+            visibilityToggleLabels={{
+              show: 'Show password',
+              hide: 'Hide password',
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
           />
           <PasswordRequirements password={password} />
 
@@ -229,6 +376,14 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry
+            enableVisibilityToggle
+            visibilityToggleLabels={{
+              show: 'Show confirm password',
+              hide: 'Hide confirm password',
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
           />
           {showMismatch ? (
             <Text style={styles.errorText}>Passwords do not match</Text>
@@ -256,24 +411,6 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
             style={styles.signUpButton}
           />
 
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>Or continue with</Text>
-            <View style={styles.divider} />
-          </View>
-
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-              <Ionicons name="logo-google" size={22} color={colors.text} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-              <Ionicons name="logo-apple" size={22} color={colors.text} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.8}>
-              <Ionicons name="logo-facebook" size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
@@ -288,23 +425,14 @@ export default function SignUpScreen({ navigation }: ScreenProps<'SignUp'>) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  fixedHeader: {
+    paddingHorizontal: spacing.screen,
+    backgroundColor: colors.background,
+    zIndex: 1,
+  },
   scroll: {
     paddingBottom: spacing.xxxl,
     paddingHorizontal: spacing.screen,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    alignSelf: 'center',
-    marginBottom: spacing.xl,
   },
   title: {
     ...typography.h1,
@@ -341,37 +469,6 @@ const styles = StyleSheet.create({
   },
   signUpButton: {
     marginBottom: spacing.lg,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.lg,
-    gap: spacing.sm,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  socialButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
   },
   footer: {
     flexDirection: 'row',

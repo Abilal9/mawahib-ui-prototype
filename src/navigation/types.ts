@@ -41,7 +41,7 @@ export type RootStackParamList = {
   TurnOnNotifications: undefined;
   AccountType: undefined;
   SignIn: undefined;
-  SignUp: undefined;
+  SignUp: { preserveDraft?: boolean } | undefined;
   VerifyAccount: { email: string; phoneE164: string };
   SignupSuccess: undefined;
   Profile: undefined;

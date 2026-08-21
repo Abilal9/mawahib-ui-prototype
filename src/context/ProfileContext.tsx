@@ -44,9 +44,6 @@ import {
  * About list sections (education/experience/…) remain local until a later API.
  */
 
-const FALLBACK_AVATAR =
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop';
-
 /** Real empty about shell — not a mock “filled” demo profile. */
 export const emptyProfileContent = (): ProfileContent => ({
   bio: '',
@@ -64,7 +61,7 @@ const emptyUser = (): User => ({
   id: '',
   name: '',
   username: '',
-  avatar: FALLBACK_AVATAR,
+  avatar: '',
   bio: '',
   skills: [],
   followers: 0,

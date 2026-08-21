@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import { useConnections } from '../../context/ConnectionsContext';
 import { authApi, type ApiUser } from '../../services/authApi';
 import type { ConnectionRelation } from '../../data/types';
@@ -129,10 +130,10 @@ export default function ProfileOverviewSheet({
                 onPress={openFull}
                 activeOpacity={0.85}
               >
-                <Image
-                  source={toImageSource(user.avatarUrl ?? '')}
+                <UserAvatar
+                  uri={user.avatarUrl}
+                  size={64}
                   style={styles.avatar}
-                  contentFit="cover"
                 />
                 <View style={styles.identityText}>
                   <View style={styles.nameRow}>

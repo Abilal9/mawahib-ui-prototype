@@ -1,14 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import Button from '../../components/ui/Button';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { appEnv } from '../../config/env';
@@ -16,9 +18,8 @@ import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
 
 /**
- * Choose verification method after signup.
- * Email OTP is always available (Supabase Auth).
- * Phone OTP activates when EXPO_PUBLIC_PHONE_AUTH_ENABLED=true and SMS is configured.
+ * Post-email verification: show email status + optional phone verify / skip.
+ * Also used as a recovery hub when email is not yet verified.
  */
 export default function VerifyAccountScreen({
   route,
@@ -28,21 +29,36 @@ export default function VerifyAccountScreen({
   const email = route.params.email;
   const phoneE164 = route.params.phoneE164;
   const phoneEnabled = appEnv.phoneAuthEnabled;
-  const emailAlreadyVerified = Boolean(
+  const [sending, setSending] = useState(false);
+
+  const emailVerified = Boolean(
     apiUser?.emailVerified ||
       session?.user?.email_confirmed_at ||
       session?.user?.confirmed_at,
   );
+  const phoneVerified = Boolean(apiUser?.phoneVerified);
 
   const phoneSubtitle = useMemo(() => {
+    if (phoneVerified) return 'Verified';
     if (!phoneEnabled) {
-      return 'Available once SMS verification is enabled';
+      return 'Optional — available once SMS verification is enabled';
     }
-    if (!session) {
+    if (!emailVerified || !session) {
       return 'Verify email first, then you can verify phone';
     }
     return phoneE164;
-  }, [phoneEnabled, session, phoneE164]);
+  }, [phoneEnabled, session, phoneE164, phoneVerified, emailVerified]);
+
+  const continueAfterPhoneChoice = () => {
+    if (!emailVerified) {
+      navigation.navigate('ConfirmCode', { email });
+      return;
+    }
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'TurnOnNotifications' }],
+    });
+  };
 
   const onEmail = () => {
     navigation.navigate('ConfirmCode', { email });
@@ -52,23 +68,26 @@ export default function VerifyAccountScreen({
     if (!phoneEnabled) {
       Alert.alert(
         'SMS not enabled',
-        'Phone verification will activate automatically once an SMS provider is configured in Supabase. Email verification is required to continue.',
+        'Phone verification activates once an SMS provider is configured in Supabase. You can skip for now.',
       );
       return;
     }
-    if (!session) {
+    if (!emailVerified || !session) {
       Alert.alert(
         'Verify email first',
-        'Confirm your email to create a session, then return here to verify your phone on the same account.',
+        'Confirm your email, then return here to verify your phone on the same account.',
       );
       return;
     }
     clearAuthError();
+    setSending(true);
     try {
       await sendPhoneOtp(phoneE164);
       navigation.navigate('ConfirmCode', { phone: phoneE164 });
     } catch (e) {
       Alert.alert('Could not send SMS', mapAuthError(e));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -79,14 +98,16 @@ export default function VerifyAccountScreen({
         <Ionicons name="arrow-back" size={24} color={colors.text} />
       </TouchableOpacity>
 
-      <Text style={styles.title}>Verify your account</Text>
-      <Text style={styles.subtitle}>Choose a verification method</Text>
+      <Text style={styles.title}>
+        {emailVerified ? 'Almost done' : 'Verify your account'}
+      </Text>
+      <Text style={styles.subtitle}>
+        {emailVerified
+          ? 'Email is verified. Phone verification is optional.'
+          : 'Email verification is required to continue.'}
+      </Text>
 
-      <TouchableOpacity
-        style={styles.option}
-        onPress={onEmail}
-        activeOpacity={0.85}
-      >
+      <View style={styles.option}>
         <View style={styles.optionIcon}>
           <Ionicons name="mail-outline" size={22} color={colors.primary} />
         </View>
@@ -94,16 +115,19 @@ export default function VerifyAccountScreen({
           <Text style={styles.optionTitle}>Email</Text>
           <Text style={styles.optionMeta}>{email}</Text>
         </View>
-        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-      </TouchableOpacity>
+        {emailVerified ? (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="checkmark" size={14} color={colors.white} />
+            <Text style={styles.verifiedText}>Verified</Text>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={onEmail} activeOpacity={0.85}>
+            <Text style={styles.actionLink}>Verify</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-      <TouchableOpacity
-        style={[styles.option, !phoneEnabled && styles.optionDisabled]}
-        onPress={() => {
-          void onPhone();
-        }}
-        activeOpacity={phoneEnabled ? 0.85 : 1}
-      >
+      <View style={[styles.option, !phoneEnabled && styles.optionDisabled]}>
         <View style={styles.optionIcon}>
           <Ionicons
             name="phone-portrait-outline"
@@ -122,26 +146,52 @@ export default function VerifyAccountScreen({
           </Text>
           <Text style={styles.optionMeta}>{phoneSubtitle}</Text>
         </View>
-        {phoneEnabled ? (
-          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        {phoneVerified ? (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="checkmark" size={14} color={colors.white} />
+            <Text style={styles.verifiedText}>Verified</Text>
+          </View>
+        ) : phoneEnabled && emailVerified ? (
+          sending ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                void onPhone();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionLink}>Verify</Text>
+            </TouchableOpacity>
+          )
         ) : (
-          <Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />
+          <Ionicons
+            name="lock-closed-outline"
+            size={18}
+            color={colors.textSecondary}
+          />
         )}
-      </TouchableOpacity>
+      </View>
 
-      {emailAlreadyVerified ? (
-        <TouchableOpacity
-          style={styles.continueBtn}
-          onPress={() => navigation.navigate('TurnOnNotifications')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.continueText}>Continue</Text>
-        </TouchableOpacity>
+      {emailVerified ? (
+        <View style={styles.footerActions}>
+          <Button
+            title="Skip for now"
+            variant="ghost"
+            fullWidth
+            onPress={continueAfterPhoneChoice}
+          />
+          <Button
+            title="Continue"
+            fullWidth
+            onPress={continueAfterPhoneChoice}
+          />
+        </View>
       ) : null}
 
       <Text style={styles.hint}>
         Email verification is required before entering Mawahib. Phone verification
-        is optional until SMS is enabled.
+        is optional and may be required later for payouts.
       </Text>
     </ScreenContainer>
   );
@@ -199,21 +249,31 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  actionLink: {
+    ...typography.bodyMedium,
+    color: colors.primary,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.button,
+  },
+  verifiedText: {
+    ...typography.caption,
+    color: colors.white,
+  },
   hint: {
     ...typography.caption,
     color: colors.textSecondary,
     lineHeight: 18,
     marginTop: spacing.md,
   },
-  continueBtn: {
+  footerActions: {
     marginTop: spacing.lg,
-    backgroundColor: colors.primary,
-    borderRadius: radius.button,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  continueText: {
-    ...typography.bodyMedium,
-    color: colors.white,
+    gap: spacing.sm,
   },
 });

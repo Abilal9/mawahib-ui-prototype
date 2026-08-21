@@ -56,6 +56,7 @@ import {
 } from '../screens';
 import { RootStackParamList } from './types';
 import { useAuth } from '../context/AuthContext';
+import { resolvePostAuthDestination } from '../lib/postAuthGate';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -74,8 +75,7 @@ function MainTabsGate() {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const emailOk = Boolean(apiUser?.emailVerified);
-  const needsVerify =
-    isSignedIn && apiUser && !emailOk;
+  const needsVerify = isSignedIn && apiUser && !emailOk;
 
   useEffect(() => {
     if (authLoading) return;
@@ -87,24 +87,16 @@ function MainTabsGate() {
       return;
     }
     if (!emailOk) {
-      const email = apiUser.email || session?.user?.email || signUpBasics?.email;
-      const phoneE164 = apiUser.phoneE164 || signUpBasics?.phoneE164;
-      if (email && phoneE164) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'VerifyAccount', params: { email, phoneE164 } }],
-        });
-      } else if (email) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'ConfirmCode', params: { email } }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'SignIn' }],
-        });
-      }
+      const dest = resolvePostAuthDestination({
+        flow: 'restore',
+        apiUser,
+        session,
+        signUpBasics,
+      });
+      navigation.reset({
+        index: 0,
+        routes: [{ name: dest.name, params: dest.params as never }],
+      });
     }
   }, [
     authLoading,

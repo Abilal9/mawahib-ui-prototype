@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import { stripCurrencyCodeTokens } from '../../utils/money';
@@ -381,11 +382,7 @@ function TalentCard({
   return (
     <TouchableOpacity style={styles.talentCard} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.talentRow}>
-        <Image
-          source={toImageSource(talent.user.avatar)}
-          style={styles.talentAvatar}
-          contentFit="cover"
-        />
+        <UserAvatar uri={talent.user.avatar} size={36} style={styles.talentAvatar} />
         <View style={styles.talentBody}>
           <View style={styles.nameRow}>
             <Text style={styles.talentName}>{talent.user.name}</Text>
@@ -408,12 +405,11 @@ function TalentCard({
             <View style={styles.mutualRow}>
               <View style={styles.mutualAvatars}>
                 {(talent.mutualAvatars ?? []).slice(0, 3).map((avatar, index) => (
-                  <Image
+                  <UserAvatar
                     key={`${talent.id}-m-${index}`}
-                    source={toImageSource(avatar)}
-                    style={[styles.mutualAvatar, { marginLeft: index === 0 ? 0 : -6, zIndex: 3 - index }]}
-                    contentFit="cover"
-                  />
+                    uri={avatar}
+                    size={20}
+                    style={[styles.mutualAvatar, { marginLeft: index === 0 ? 0 : -6, zIndex: 3 - index }]} />
                 ))}
               </View>
               <Text style={styles.mutualText}>
@@ -488,10 +484,10 @@ function ServiceCard({
           onPress={onProviderPress}
           activeOpacity={0.85}
         >
-          <Image
-            source={toImageSource(service.provider.avatar)}
+          <UserAvatar
+            uri={service.provider.avatar}
+            size={20}
             style={styles.providerAvatar}
-            contentFit="cover"
           />
           <Text style={styles.providerName}>{service.provider.name}</Text>
           {service.provider.isVerified ? (

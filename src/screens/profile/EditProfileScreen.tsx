@@ -11,15 +11,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import LocationSelectors from '../../components/ui/LocationSelectors';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
-import { toImageSource } from '../../utils/image';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
@@ -94,7 +93,7 @@ export default function EditProfileScreen({ navigation }: ScreenProps<'EditProfi
             }}
             disabled={uploading}
           >
-            <Image source={toImageSource(avatar)} style={styles.avatar} contentFit="cover" />
+            <UserAvatar uri={avatar} size={96} style={styles.avatar} />
             <View style={styles.cameraBadge}>
               {uploading ? (
                 <ActivityIndicator size="small" color={colors.white} />

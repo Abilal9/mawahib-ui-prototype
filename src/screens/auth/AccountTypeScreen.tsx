@@ -1,13 +1,16 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import AuthBrandHeader from '../../components/auth/AuthBrandHeader';
 import { colors, spacing, radius, typography } from '../../theme';
 import { RootStackScreenProps } from '../../navigation/types';
 import { useAuth, AccountType } from '../../context/AuthContext';
+
+/** Selected-state accent (border / icon / check) — visual only. */
+const SELECTED_PINK = '#F6339A';
 
 const OPTIONS: {
   type: AccountType;
@@ -38,15 +41,7 @@ export default function AccountTypeScreen({
     <ScreenContainer>
       <StatusBar style="dark" />
       <View style={styles.container}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <Image
-          source={require('../../../assets/images/logo.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
+        <AuthBrandHeader onBack={() => navigation.goBack()} />
 
         <Text style={styles.title}>Join Mawahib</Text>
         <Text style={styles.subtitle}>Choose how you want to use the platform.</Text>
@@ -72,9 +67,16 @@ export default function AccountTypeScreen({
                   <Text style={styles.optionTitle}>{option.title}</Text>
                   <Text style={styles.optionDescription}>{option.description}</Text>
                 </View>
-                {selected && (
-                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-                )}
+                {/* Fixed slot so selection never changes card width/height */}
+                <View style={styles.checkSlot}>
+                  {selected ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color={SELECTED_PINK}
+                    />
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -101,21 +103,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
+    paddingTop: 0,
     paddingBottom: spacing.xl,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    alignSelf: 'center',
-    marginBottom: spacing.xl,
   },
   title: {
     ...typography.h1,
@@ -142,7 +131,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   optionCardSelected: {
-    borderColor: colors.primary,
+    borderColor: SELECTED_PINK,
     backgroundColor: '#FFF5FA',
   },
   iconWrap: {
@@ -154,7 +143,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconWrapSelected: {
-    backgroundColor: colors.primary,
+    backgroundColor: SELECTED_PINK,
   },
   optionText: {
     flex: 1,
@@ -167,6 +156,12 @@ const styles = StyleSheet.create({
   optionDescription: {
     ...typography.bodySmall,
     color: colors.textSecondary,
+  },
+  checkSlot: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   footer: {
     flexDirection: 'row',

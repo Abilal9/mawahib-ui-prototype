@@ -7,6 +7,11 @@ import SplashLoadingDots from '../../components/onboarding/SplashLoadingDots';
 import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import {
+  hasResumablePendingVerification,
+  loadPendingSignup,
+} from '../../lib/pendingSignup';
 
 /**
  * Splash + auth gate:
@@ -15,7 +20,7 @@ import { useAuth } from '../../context/AuthContext';
  */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { authLoading, isSignedIn, apiUser, signUpBasics } = useAuth();
+  const { authLoading, isSignedIn, apiUser, session, signUpBasics } = useAuth();
   const [minSplashDone, setMinSplashDone] = useState(false);
 
   useEffect(() => {
@@ -33,27 +38,35 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     if (authLoading || !minSplashDone) return;
 
     if (isSignedIn && apiUser) {
-      if (!apiUser.emailVerified) {
-        const email = apiUser.email || signUpBasics?.email;
-        const phoneE164 = apiUser.phoneE164 || signUpBasics?.phoneE164;
-        if (email && phoneE164) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'VerifyAccount', params: { email, phoneE164 } }],
-          });
-          return;
-        }
-        if (email) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'ConfirmCode', params: { email } }],
-          });
-          return;
-        }
-      }
+      const dest = resolvePostAuthDestination({
+        flow: 'restore',
+        apiUser,
+        session,
+        signUpBasics,
+      });
       navigation.reset({
         index: 0,
-        routes: [{ name: 'MainTabs' }],
+        routes: [{ name: dest.name, params: dest.params as never }],
+      });
+      return;
+    }
+
+    // Restore ConfirmCode only when a recent successful OTP send is on record.
+    // Do not imply a new code was just sent.
+    const pending = loadPendingSignup();
+    if (
+      pending?.email &&
+      !isSignedIn &&
+      hasResumablePendingVerification(pending.email)
+    ) {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'ConfirmCode',
+            params: { email: pending.email },
+          },
+        ],
       });
       return;
     }
@@ -64,6 +77,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     minSplashDone,
     isSignedIn,
     apiUser,
+    session,
     signUpBasics,
     navigation,
   ]);

@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ReviewItem } from '../../data/types';
 import { reviewService } from '../../services';
@@ -162,7 +163,7 @@ function ReviewRow({
   return (
     <View style={styles.reviewRow}>
       <TouchableOpacity onPress={onAuthorPress} activeOpacity={0.8} hitSlop={4}>
-        <Image source={{ uri: review.authorAvatar }} style={styles.avatar} contentFit="cover" />
+        <UserAvatar uri={review.authorAvatar} size={40} style={styles.avatar} />
       </TouchableOpacity>
       <View style={styles.reviewBody}>
         <View style={styles.reviewTop}>

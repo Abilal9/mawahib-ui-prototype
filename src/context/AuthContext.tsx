@@ -10,8 +10,13 @@ import React, {
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { ApiError } from '../lib/apiClient';
+import { AuthFailure } from '../lib/authFailure';
 import { mapAuthError } from '../lib/authErrors';
-import { getAuthRedirectUrl } from '../lib/authRedirect';
+import {
+  clearPendingSignup,
+  loadPendingSignup,
+  savePendingSignup,
+} from '../lib/pendingSignup';
 import { isPasswordValid } from '../lib/passwordRules';
 import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
@@ -35,6 +40,16 @@ export interface SignUpBasics {
   lastName?: string;
 }
 
+/**
+ * Signup outcomes — ConfirmCode only for otp_sent (send/resend actually succeeded).
+ * Uses Supabase obfuscation signal: confirmed duplicate → user.identities === [].
+ */
+export type RegisterEmailResult =
+  | { status: 'otp_sent'; kind: 'fresh' | 'resumed' }
+  | { status: 'session_ready'; user: ApiUser }
+  | { status: 'already_verified' }
+  | { status: 'ambiguous' };
+
 interface AuthContextValue {
   accountType: AccountType | null;
   setAccountType: (type: AccountType) => void;
@@ -48,7 +63,7 @@ interface AuthContextValue {
   authLoading: boolean;
   authError: string | null;
   clearAuthError: () => void;
-  /** Supabase email/password signup (may require OTP confirm). */
+  /** Supabase email/password signup (email OTP confirmation required). */
   registerWithEmail: (input: {
     email: string;
     password: string;
@@ -60,8 +75,8 @@ interface AuthContextValue {
     locationCode?: string;
     phoneE164: string;
     accountType: AccountType;
-  }) => Promise<{ needsEmailConfirmation: boolean }>;
-  verifySignupOtp: (email: string, token: string) => Promise<void>;
+  }) => Promise<RegisterEmailResult>;
+  verifySignupOtp: (email: string, token: string) => Promise<ApiUser>;
   resendSignupOtp: (email: string) => Promise<void>;
   /**
    * Phone OTP on the same Supabase user (updateUser + phone_change).
@@ -81,6 +96,8 @@ interface AuthContextValue {
   }) => Promise<ApiUser>;
   refreshMe: () => Promise<ApiUser>;
   signInWithEmail: (email: string, password: string) => Promise<ApiUser>;
+  /** Resume verification for an unverified email (resend + pending context). */
+  resumeEmailVerification: (email: string) => Promise<void>;
   completeSignUp: () => void;
   signIn: () => void;
   signOut: () => Promise<void>;
@@ -147,6 +164,7 @@ function bootstrapPayloadFromSession(
     session.user?.phone ||
     undefined;
 
+  // Verification flags are server-authoritative — do not send from client.
   return {
     accountType,
     displayName,
@@ -156,8 +174,6 @@ function bootstrapPayloadFromSession(
     locationCode,
     email: session.user?.email,
     phoneE164,
-    emailVerified: isEmailConfirmed(session),
-    phoneVerified: Boolean(session.user?.phone_confirmed_at),
   };
 }
 
@@ -169,7 +185,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  type HydrateOverrides = {
+    accountType?: AccountType;
+    displayName?: string;
+    locationCity?: string;
+    locationCountry?: string;
+    countryCode?: CountryCode;
+    locationCode?: string;
+    phoneE164?: string;
+  };
+
   const hydrateInFlight = useRef<Promise<ApiUser | null> | null>(null);
+  const hydrateSessionRef = useRef<Session | null>(null);
+  const hydrateOverridesRef = useRef<HydrateOverrides | undefined>(undefined);
   const lastHydrateErrorRef = useRef<string | null>(null);
   const accountTypeRef = useRef(accountType);
   const signUpBasicsRef = useRef(signUpBasics);
@@ -192,64 +220,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsSignedIn(true);
   }, []);
 
+  const mergeHydrateOverrides = (
+    base: HydrateOverrides | undefined,
+    next: HydrateOverrides | undefined,
+  ): HydrateOverrides | undefined => {
+    if (!base && !next) return undefined;
+    if (!next) return base;
+    if (!base) return next;
+    const merged: HydrateOverrides = { ...base };
+    (Object.keys(next) as (keyof HydrateOverrides)[]).forEach((key) => {
+      if (next[key] !== undefined) {
+        (merged as Record<string, unknown>)[key] = next[key];
+      }
+    });
+    return merged;
+  };
+
   /**
    * Restore Nest user for an active Supabase session.
    * Prefer GET /users/me; bootstrap once on 404. Never treat mock data as identity.
+   * Nest syncs emailVerified / phoneVerified from Supabase Auth (not client).
+   *
+   * Concurrent calls coalesce: later overrides merge into the in-flight work and
+   * a follow-up pass runs if new overrides arrived mid-flight (no silent drop).
+   *
+   * Nest/network failures (non-401) keep the Supabase session, clear Nest identity,
+   * and surface authError — MainTabs stays gated on apiUser.
    */
   const hydrateBackendUser = useCallback(
     async (
       active: Session | null,
-      overrides?: {
-        accountType?: AccountType;
-        displayName?: string;
-        locationCity?: string;
-        locationCountry?: string;
-        countryCode?: CountryCode;
-        locationCode?: string;
-        phoneE164?: string;
-      },
+      overrides?: HydrateOverrides,
     ): Promise<ApiUser | null> => {
       if (!active) {
+        hydrateSessionRef.current = null;
+        hydrateOverridesRef.current = undefined;
         clearAuthenticatedState();
         return null;
       }
 
+      hydrateSessionRef.current = active;
+      hydrateOverridesRef.current = mergeHydrateOverrides(
+        hydrateOverridesRef.current,
+        overrides,
+      );
       setSession(active);
 
-      const run = async (): Promise<ApiUser | null> => {
-        // Always prefer the session token we were given. After signInWithPassword /
-        // SIGNED_IN, getSession() can still be empty briefly (RN storage race),
-        // which produced a false 401 and signed the user back out.
-        const accessToken = active.access_token;
+      const runOnce = async (
+        sessionSnap: Session,
+        overridesSnap: HydrateOverrides | undefined,
+      ): Promise<ApiUser | null> => {
+        const accessToken = sessionSnap.access_token;
         try {
           let user: ApiUser;
           try {
             user = await authApi.getMe(accessToken);
-            // Keep Nest verification flags aligned with Supabase when session confirms email/phone.
-            const emailVerified = isEmailConfirmed(active);
-            const phoneVerified = Boolean(active.user.phone_confirmed_at);
-            if (
-              (emailVerified && !user.emailVerified) ||
-              (phoneVerified && !user.phoneVerified)
-            ) {
-              user = await authApi.updateMe(
-                {
-                  ...(emailVerified && !user.emailVerified
-                    ? { emailVerified: true }
-                    : {}),
-                  ...(phoneVerified && !user.phoneVerified
-                    ? { phoneVerified: true }
-                    : {}),
-                },
-                accessToken,
-              );
-            }
           } catch (err) {
             if (!(err instanceof ApiError) || err.status !== 404) {
               throw err;
             }
             user = await authApi.bootstrap(
-              bootstrapPayloadFromSession(active, overrides, {
+              bootstrapPayloadFromSession(sessionSnap, overridesSnap, {
                 accountType: accountTypeRef.current,
                 name: signUpBasicsRef.current?.name,
                 city: signUpBasicsRef.current?.city,
@@ -262,6 +293,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           lastHydrateErrorRef.current = null;
           applyApiUser(user);
+          if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
+            clearPendingSignup();
+          }
           return user;
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
@@ -270,21 +304,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastHydrateErrorRef.current = err.message;
             return null;
           }
+          // Keep Supabase session; Nest profile unavailable (5xx / network / down).
           const message =
             err instanceof Error ? err.message : 'Failed to restore session';
           lastHydrateErrorRef.current = message;
           setAuthError(message);
-          // Keep Supabase session for retry, but do not enter the app without Nest user.
           setApiUser(null);
           setIsSignedIn(false);
           return null;
         }
       };
 
+      const runCoalesced = async (): Promise<ApiUser | null> => {
+        let last: ApiUser | null = null;
+        for (;;) {
+          const sessionSnap = hydrateSessionRef.current;
+          if (!sessionSnap) {
+            clearAuthenticatedState();
+            return null;
+          }
+          const tokenAtStart = sessionSnap.access_token;
+          const overridesSnap = hydrateOverridesRef.current;
+          hydrateOverridesRef.current = undefined;
+          last = await runOnce(sessionSnap, overridesSnap);
+
+          const overridesPending =
+            hydrateOverridesRef.current !== undefined;
+          const sessionChanged =
+            hydrateSessionRef.current?.access_token !== tokenAtStart;
+          // Another caller queued bootstrap metadata — run again with merged data.
+          if (overridesPending) continue;
+          // Newer session arrived mid-flight without overrides: re-run once if hydrate failed.
+          if (sessionChanged && !last) continue;
+          return last;
+        }
+      };
+
       if (hydrateInFlight.current) {
         return hydrateInFlight.current;
       }
-      const promise = run().finally(() => {
+      const promise = runCoalesced().finally(() => {
         if (hydrateInFlight.current === promise) {
           hydrateInFlight.current = null;
         }
@@ -300,6 +359,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
+        const pending = loadPendingSignup();
+        if (pending && mounted) {
+          setSignUpBasics({
+            name: pending.displayName || '',
+            email: pending.email,
+            city: pending.city || '',
+            countryCode: pending.countryCode as CountryCode | undefined,
+            locationCode: pending.locationCode,
+            phoneE164: pending.phoneE164 || '',
+          });
+          if (pending.accountType) {
+            setAccountType(pending.accountType);
+          }
+        }
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
         await hydrateBackendUser(data.session);
@@ -332,6 +405,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [clearAuthenticatedState, hydrateBackendUser]);
 
+  const resendSignupOtp = useCallback(async (email: string) => {
+    setAuthError(null);
+    const normalized = email.trim().toLowerCase();
+    // ResendParams still use type: 'signup' for email confirmation resend.
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalized,
+    });
+    if (error) {
+      const message = mapAuthError(error);
+      setAuthError(message);
+      throw new Error(message);
+    }
+    // OTP was actually requested — stamp lastOtpRequestedAt.
+    savePendingSignup(
+      {
+        email: normalized,
+        phoneE164: signUpBasicsRef.current?.phoneE164,
+        displayName: signUpBasicsRef.current?.name,
+        accountType: accountTypeRef.current || undefined,
+        countryCode: signUpBasicsRef.current?.countryCode,
+        locationCode: signUpBasicsRef.current?.locationCode,
+        city: signUpBasicsRef.current?.city,
+      },
+      { otpRequested: true },
+    );
+  }, []);
+
+  const resumeEmailVerification = useCallback(
+    async (email: string) => {
+      await resendSignupOtp(email.trim().toLowerCase());
+    },
+    [resendSignupOtp],
+  );
+
   const registerWithEmail = useCallback(
     async (input: {
       email: string;
@@ -344,7 +452,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       locationCode?: string;
       phoneE164: string;
       accountType: AccountType;
-    }) => {
+    }): Promise<RegisterEmailResult> => {
       setAuthError(null);
       if (!isPasswordValid(input.password)) {
         const message =
@@ -352,17 +460,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(message);
         throw new Error(message);
       }
-      const redirectTo = getAuthRedirectUrl();
+
+      const basics: SignUpBasics = {
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        city: input.city.trim(),
+        countryCode: input.countryCode,
+        locationCode: input.locationCode,
+        phoneE164: input.phoneE164,
+        firstName: input.firstName?.trim(),
+        lastName: input.lastName?.trim(),
+      };
+
+      // OTP-first: do not set emailRedirectTo — confirmation links are fallback only.
       const { data, error } = await supabase.auth.signUp({
-        email: input.email.trim(),
+        email: basics.email,
         password: input.password,
         options: {
-          emailRedirectTo: redirectTo,
           data: {
-            display_name: input.name.trim(),
-            first_name: input.firstName?.trim() || undefined,
-            last_name: input.lastName?.trim() || undefined,
-            city: input.city.trim(),
+            display_name: basics.name,
+            first_name: basics.firstName || undefined,
+            last_name: basics.lastName || undefined,
+            city: basics.city,
             country_code: input.countryCode,
             location_code: input.locationCode,
             account_type: input.accountType,
@@ -370,38 +489,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         },
       });
+
       if (error) {
+        const lower = error.message.toLowerCase();
+        const code =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          typeof (error as { code?: string }).code === 'string'
+            ? (error as { code: string }).code.toLowerCase()
+            : '';
+        const already =
+          code === 'user_already_exists' ||
+          code === 'email_exists' ||
+          lower.includes('already registered') ||
+          lower.includes('already been registered') ||
+          lower.includes('user already registered') ||
+          lower.includes('email address is already');
+
+        if (already) {
+          // Do not claim an OTP was sent. Offer Login / Continue Verification / Change Email.
+          setAccountType(input.accountType);
+          setSignUpBasics(basics);
+          return { status: 'ambiguous' };
+        }
         const message = mapAuthError(error);
         setAuthError(message);
         throw new Error(message);
       }
+
+      // Supabase anti-enumeration: existing *confirmed* email → fake user, identities: [].
+      // No confirmation email is sent in this case — do not open ConfirmCode.
+      const identities = data.user?.identities ?? null;
+      if (data.user && Array.isArray(identities) && identities.length === 0) {
+        setAccountType(input.accountType);
+        setSignUpBasics(basics);
+        return { status: 'already_verified' };
+      }
+
       setAccountType(input.accountType);
-      setSignUpBasics({
-        name: input.name.trim(),
-        email: input.email.trim(),
-        city: input.city.trim(),
-        countryCode: input.countryCode,
-        locationCode: input.locationCode,
-        phoneE164: input.phoneE164,
-        firstName: input.firstName?.trim(),
-        lastName: input.lastName?.trim(),
-      });
+      setSignUpBasics(basics);
+
       if (data.session) {
         const fields =
           input.countryCode && input.locationCode
             ? locationDisplayFields(input.countryCode, input.locationCode)
             : null;
-        await hydrateBackendUser(data.session, {
+        const user = await hydrateBackendUser(data.session, {
           accountType: input.accountType,
-          displayName: input.name.trim(),
-          locationCity: fields?.locationCity ?? input.city.trim(),
+          displayName: basics.name,
+          locationCity: fields?.locationCity ?? basics.city,
           locationCountry: fields?.locationCountry,
           countryCode: fields?.countryCode ?? input.countryCode,
           locationCode: fields?.locationCode ?? input.locationCode,
           phoneE164: input.phoneE164,
         });
+        if (!user) {
+          const detail =
+            lastHydrateErrorRef.current || 'Nest /users/me or bootstrap failed';
+          const message = `Signed up but failed to load profile: ${detail}`;
+          setAuthError(message);
+          throw new AuthFailure('backend_hydration', message, detail);
+        }
+        clearPendingSignup();
+        return { status: 'session_ready', user };
       }
-      return { needsEmailConfirmation: !data.session };
+
+      if (!data.user) {
+        const message =
+          'Could not start signup. Try again or use a different email.';
+        setAuthError(message);
+        throw new Error(message);
+      }
+
+      // Fresh signup (or unverified identity returned with identities) — OTP email sent.
+      savePendingSignup(
+        {
+          email: basics.email,
+          phoneE164: basics.phoneE164,
+          displayName: basics.name,
+          accountType: input.accountType,
+          countryCode: input.countryCode,
+          locationCode: input.locationCode,
+          city: basics.city,
+        },
+        { otpRequested: true },
+      );
+      return { status: 'otp_sent', kind: 'fresh' };
     },
     [hydrateBackendUser],
   );
@@ -409,38 +583,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifySignupOtp = useCallback(
     async (email: string, token: string) => {
       setAuthError(null);
+      // Installed @supabase/supabase-js: EmailOtpType includes 'email' and deprecated 'signup'.
+      // Prefer 'email' for signup OTP verification (current SDK guidance).
       const { data, error } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token: token.trim(),
-        type: 'signup',
+        type: 'email',
       });
       if (error) {
         const message = mapAuthError(error);
         setAuthError(message);
-        throw new Error(message);
+        throw new AuthFailure('email_otp', message);
       }
-      if (data.session) {
-        await hydrateBackendUser(data.session);
+      if (!data.session) {
+        const message = 'Verification succeeded but no session was returned.';
+        setAuthError(message);
+        throw new AuthFailure('email_otp', message);
       }
+      const user = await hydrateBackendUser(data.session);
+      if (!user) {
+        const detail =
+          lastHydrateErrorRef.current || 'Nest /users/me or bootstrap failed';
+        const message = `Email verified but failed to load profile: ${detail}`;
+        setAuthError(message);
+        throw new AuthFailure('backend_hydration', message, detail);
+      }
+      clearPendingSignup();
+      return user;
     },
     [hydrateBackendUser],
   );
-
-  const resendSignupOtp = useCallback(async (email: string) => {
-    setAuthError(null);
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.trim(),
-      options: {
-        emailRedirectTo: getAuthRedirectUrl(),
-      },
-    });
-    if (error) {
-      const message = mapAuthError(error);
-      setAuthError(message);
-      throw new Error(message);
-    }
-  }, []);
 
   const sendPhoneOtp = useCallback(async (phone: string) => {
     setAuthError(null);
@@ -476,7 +648,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const message =
           'SMS verification is not yet enabled. Configure a Supabase phone provider first.';
         setAuthError(message);
-        throw new Error(message);
+        throw new AuthFailure('phone_otp', message);
       }
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phone.trim(),
@@ -486,27 +658,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         const message = mapAuthError(error);
         setAuthError(message);
-        throw new Error(message);
+        throw new AuthFailure('phone_otp', message);
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
-        throw new Error(
-          `Phone verified but failed to load profile: ${
-            lastHydrateErrorRef.current || 'Nest /users/me failed'
-          }`,
-        );
-      }
-      if (!user.phoneVerified) {
-        return authApi
-          .updateMe({ phoneVerified: true }, data.session?.access_token)
-          .then((updated) => {
-            applyApiUser(updated);
-            return updated;
-          });
+        const detail =
+          lastHydrateErrorRef.current || 'Nest /users/me failed';
+        const message = `Phone verified but failed to load profile: ${detail}`;
+        setAuthError(message);
+        throw new AuthFailure('backend_hydration', message, detail);
       }
       return user;
     },
-    [applyApiUser, hydrateBackendUser],
+    [hydrateBackendUser],
   );
 
   const bootstrapSession = useCallback(
@@ -530,7 +694,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phoneE164: input?.phoneE164 ?? signUpBasicsRef.current?.phoneE164,
       });
       if (!user) {
-        throw new Error('Failed to bootstrap session');
+        throw new AuthFailure(
+          'backend_hydration',
+          lastHydrateErrorRef.current || 'Failed to bootstrap session',
+        );
       }
       return user;
     },
@@ -552,6 +719,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       if (error) {
+        const lower = error.message.toLowerCase();
+        if (
+          lower.includes('email not confirmed') ||
+          lower.includes('email_not_confirmed')
+        ) {
+          // Do NOT stamp lastOtpRequestedAt — no OTP was sent by this failure.
+          // SignInScreen may attempt a legitimate resend before ConfirmCode.
+          const message = mapAuthError(error);
+          setAuthError(message);
+          const err = new Error(message) as Error & {
+            code?: string;
+            needsEmailConfirmation?: boolean;
+          };
+          err.code = 'email_not_confirmed';
+          err.needsEmailConfirmation = true;
+          throw err;
+        }
         const message = mapAuthError(error);
         setAuthError(message);
         throw new Error(message);
@@ -568,8 +752,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'Nest /users/me failed after Supabase sign-in';
         const message = `Signed in but failed to load profile: ${detail}`;
         setAuthError(message);
-        throw new Error(message);
+        throw new AuthFailure('backend_hydration', message, detail);
       }
+      clearPendingSignup();
       return user;
     },
     [hydrateBackendUser],
@@ -585,6 +770,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setAuthError(null);
+    // Keep pendingSignup so abandoned verification can resume after logout.
     await supabase.auth.signOut();
     clearAuthenticatedState();
   }, [clearAuthenticatedState]);
@@ -611,6 +797,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       bootstrapSession,
       refreshMe,
       signInWithEmail,
+      resumeEmailVerification,
       completeSignUp,
       signIn,
       signOut,
@@ -632,6 +819,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       bootstrapSession,
       refreshMe,
       signInWithEmail,
+      resumeEmailVerification,
       completeSignUp,
       signIn,
       signOut,

@@ -11,6 +11,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import type { PeerSummary, WorkContext } from '../../services/messagingApi';
 import MoneyAmount from '../ui/MoneyAmount';
 
@@ -119,11 +120,7 @@ export default function JobOverviewSheet({
                   onPress={onOpenParticipant}
                   activeOpacity={0.85}
                 >
-                  <Image
-                    source={toImageSource(peer.avatarUrl ?? '')}
-                    style={styles.avatar}
-                    contentFit="cover"
-                  />
+                  <UserAvatar uri={peer.avatarUrl} size={44} style={styles.avatar} />
                   <View style={styles.participantText}>
                     <Text style={styles.participantLabel}>Participant</Text>
                     <Text style={styles.participantName} numberOfLines={1}>

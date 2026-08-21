@@ -12,7 +12,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -28,6 +28,7 @@ import { stripCurrencyCodeTokens } from '../../utils/money';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Story, Service, Talent } from '../../data/types';
+import { toImageSource } from '../../utils/image';
 
 const REFRESH_DELAY_MS = 450;
 
@@ -47,11 +48,7 @@ function StoryItem({
   return (
     <TouchableOpacity style={styles.storyItem} onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.storyCard, !story.seen && !isOwn && styles.storyCardActive]}>
-        <Image
-          source={imageSource(story.user.avatar)}
-          style={styles.storyImage}
-          contentFit="cover"
-        />
+        <UserAvatar uri={story.user.avatar} fill style={styles.storyImage} />
         {isOwn && (
           <View style={styles.storyAddButton}>
             <Ionicons name="add" size={16} color={colors.white} />
@@ -92,10 +89,10 @@ function FeedPostCard({
         onPress={onAuthorPress}
         activeOpacity={0.85}
       >
-        <Image
-          source={imageSource(post.author.avatar)}
+        <UserAvatar
+          uri={post.author.avatar}
+          size={40}
           style={styles.feedAvatar}
-          contentFit="cover"
         />
         <View style={styles.feedAuthor}>
           <View style={styles.feedAuthorRow}>
@@ -316,11 +313,7 @@ function TalentMatchCard({
       </TouchableOpacity>
 
       <View style={styles.jobTop}>
-        <Image
-          source={imageSource(talent.user.avatar)}
-          style={styles.talentAvatar}
-          contentFit="cover"
-        />
+        <UserAvatar uri={talent.user.avatar} size={48} style={styles.talentAvatar} />
         <View style={styles.jobInfo}>
           <View style={styles.jobTitleRow}>
             <Text style={styles.jobTitle} numberOfLines={1}>

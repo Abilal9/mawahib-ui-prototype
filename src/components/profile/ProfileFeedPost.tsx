@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { Post } from '../../data/types';
 
@@ -28,11 +29,7 @@ export default function ProfileFeedPost({
         onPress={onAuthorPress}
         activeOpacity={0.85}
       >
-        <Image
-          source={toImageSource(post.author.avatar)}
-          style={styles.feedAvatar}
-          contentFit="cover"
-        />
+        <UserAvatar uri={post.author.avatar} size={40} style={styles.feedAvatar} />
         <View style={{ flex: 1 }}>
           <Text style={styles.feedName}>{post.author.name}</Text>
           <Text style={styles.feedMeta}>

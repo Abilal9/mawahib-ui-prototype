@@ -10,34 +10,27 @@ export type DialCountry = {
   flag: string;
 };
 
-/** GCC-first list for Mawahib; expandable later. */
+/** Mawahib phone picker: SA + AE only. */
 export const DIAL_COUNTRIES: DialCountry[] = [
   { code: 'SA', name: 'Saudi Arabia', dial: '+966', flag: '🇸🇦' },
   { code: 'AE', name: 'United Arab Emirates', dial: '+971', flag: '🇦🇪' },
-  { code: 'KW', name: 'Kuwait', dial: '+965', flag: '🇰🇼' },
-  { code: 'BH', name: 'Bahrain', dial: '+973', flag: '🇧🇭' },
-  { code: 'QA', name: 'Qatar', dial: '+974', flag: '🇶🇦' },
-  { code: 'OM', name: 'Oman', dial: '+968', flag: '🇴🇲' },
-  { code: 'EG', name: 'Egypt', dial: '+20', flag: '🇪🇬' },
-  { code: 'JO', name: 'Jordan', dial: '+962', flag: '🇯🇴' },
-  { code: 'US', name: 'United States', dial: '+1', flag: '🇺🇸' },
-  { code: 'GB', name: 'United Kingdom', dial: '+44', flag: '🇬🇧' },
 ];
 
-/** Saudi mobile local format: 5XXXXXXXX (9 digits). */
+/** Saudi / UAE mobile local format: 5XXXXXXXX (exactly 9 digits). */
 const SA_MOBILE_NATIONAL = /^5\d{8}$/;
+const AE_MOBILE_NATIONAL = /^5\d{8}$/;
 
 /**
  * Max national digits accepted in the input.
- * SA is fixed at 9; other countries use a generous E.164-safe cap
+ * SA and AE are fixed at 9; other countries use a generous E.164-safe cap
  * (libphonenumber still decides validity).
  */
 export function maxNationalDigits(country: CountryCode): number {
-  if (country === 'SA') return 9;
+  if (country === 'SA' || country === 'AE') return 9;
   return 15;
 }
 
-/** Digits only, capped to the country max (blocks 10th SA digit, letters, etc.). */
+/** Digits only, capped to the country max (blocks 10th SA/AE digit, letters, +). */
 export function sanitizeNationalInput(
   raw: string,
   country: CountryCode,
@@ -57,6 +50,16 @@ export function toE164(
     return `+966${digits}`;
   }
 
+  if (country === 'AE') {
+    if (!AE_MOBILE_NATIONAL.test(digits)) return null;
+    const parsed = parsePhoneNumberFromString(digits, 'AE');
+    if (!parsed || !parsed.isValid()) return null;
+    const e164 = parsed.format('E.164');
+    // Canonical UAE mobile shape for Nest agreement: +9715XXXXXXXX
+    if (!/^\+9715\d{8}$/.test(e164)) return null;
+    return e164;
+  }
+
   const parsed = parsePhoneNumberFromString(digits, country);
   if (!parsed || !parsed.isValid()) return null;
   return parsed.format('E.164');
@@ -70,7 +73,7 @@ export function isValidNationalNumber(
 }
 
 /**
- * Live UX messages. Saudi rules only when country is SA (+966).
+ * Live UX messages for the local-number field.
  * Returns null when empty or valid.
  */
 export function getPhoneValidationMessage(
@@ -90,6 +93,19 @@ export function getPhoneValidationMessage(
     return null;
   }
 
+  if (country === 'AE') {
+    if (digits[0] !== '5') {
+      return 'Enter a valid UAE mobile number';
+    }
+    if (digits.length < 9) {
+      return 'Enter a 9-digit mobile number';
+    }
+    if (!toE164(digits, 'AE')) {
+      return 'Enter a valid UAE mobile number';
+    }
+    return null;
+  }
+
   if (!toE164(digits, country)) {
     return 'Enter a valid phone number for the selected country';
   }
@@ -99,9 +115,8 @@ export function getPhoneValidationMessage(
 export function formatNationalHint(country: CountryCode): string {
   switch (country) {
     case 'SA':
-      return '5XXXXXXXX';
     case 'AE':
-      return '5X XXX XXXX';
+      return '5XXXXXXXX';
     default:
       return 'Phone number';
   }

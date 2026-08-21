@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -94,7 +94,11 @@ export default function StoryViewerScreen({ route, navigation }: ScreenProps<'St
             onPress={() => openUserProfile(navigation, story.user.id, me.id)}
             activeOpacity={0.85}
           >
-            <Image source={toImageSource(story.user.avatar)} style={styles.avatar} contentFit="cover" />
+            <UserAvatar
+              uri={story.user.avatar}
+              size={36}
+              style={styles.avatar}
+            />
             <Text style={styles.userName}>{story.user.name}</Text>
           </TouchableOpacity>
           <Text style={styles.timeAgo}>2h ago</Text>

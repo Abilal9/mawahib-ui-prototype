@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { Comment } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -133,7 +133,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           onPress={() => openUserProfile(navigation, post.author.id, user.id)}
           activeOpacity={0.8}
         >
-          <Image source={toImageSource(post.author.avatar)} style={styles.avatar} contentFit="cover" />
+          <UserAvatar uri={post.author.avatar} size={44} style={styles.avatar} />
           <View style={styles.authorInfo}>
             <Text style={styles.authorName}>{post.author.name}</Text>
             {post.role || post.author.title ? (
@@ -216,7 +216,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
                 activeOpacity={0.8}
                 hitSlop={4}
               >
-                <Image source={{ uri: c.avatar }} style={styles.commentAvatar} contentFit="cover" />
+                <UserAvatar uri={c.avatar} size={36} style={styles.commentAvatar} />
               </TouchableOpacity>
               <View style={styles.commentBody}>
                 <TouchableOpacity
@@ -234,11 +234,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
       </ScrollView>
 
       <View style={styles.inputBar}>
-        <Image
-          source={toImageSource(user.avatar)}
-          style={styles.inputAvatar}
-          contentFit="cover"
-        />
+        <UserAvatar uri={user.avatar} size={32} style={styles.inputAvatar} />
         <TextInput
           style={styles.commentInput}
           placeholder="Add a comment..."
@@ -252,9 +248,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             const text = comment.trim();
             if (!text || !post) return;
             const avatar =
-              typeof user.avatar === 'string'
-                ? user.avatar
-                : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop';
+              typeof user.avatar === 'string' ? user.avatar : '';
             const created = addComment(post.id, {
               userId: user.id,
               user: user.name,

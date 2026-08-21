@@ -4,9 +4,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, radius, typography } from '../../theme';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from './UserAvatar';
 import { useMyProfile } from '../../context/ProfileContext';
-
 interface AppHeaderProps {
   onAvatarPress?: () => void;
   onNotificationPress?: () => void;
@@ -31,7 +30,7 @@ export default function AppHeader({
       <View style={styles.row}>
         <View style={styles.leftSlot}>
           <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
-            <Image source={toImageSource(user.avatar)} style={styles.avatar} />
+            <UserAvatar uri={user.avatar} size={SIDE_ICON_SIZE} style={styles.avatar} />
           </TouchableOpacity>
         </View>
 

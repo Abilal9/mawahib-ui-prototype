@@ -16,6 +16,7 @@ import Button from '../../components/ui/Button';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
@@ -281,7 +282,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
             onPress={() => openUserProfile(navigation, service.provider.id, me.id)}
             activeOpacity={0.8}
           >
-            <Image source={toImageSource(service.provider.avatar)} style={styles.providerAvatar} contentFit="cover" />
+            <UserAvatar uri={service.provider.avatar} size={44} style={styles.providerAvatar} />
             <View>
               <Text style={styles.providerName}>{service.provider.name}</Text>
               <TouchableOpacity

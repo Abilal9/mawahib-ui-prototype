@@ -10,14 +10,13 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import { colors, spacing, radius, typography } from '../../theme';
-import { toImageSource } from '../../utils/image';
+import UserAvatar from '../../components/ui/UserAvatar';
 import {
   UserJob,
   UserJobSection,
@@ -245,10 +244,10 @@ function JobFlowCard({
           }}
           activeOpacity={0.8}
         >
-          <Image
-            source={toImageSource(job.counterpart.avatar)}
+          <UserAvatar
+            uri={job.counterpart.avatar}
+            size={22}
             style={styles.userAvatar}
-            contentFit="cover"
           />
           <Text style={styles.metaValue}>{job.counterpart.name}</Text>
         </TouchableOpacity>
