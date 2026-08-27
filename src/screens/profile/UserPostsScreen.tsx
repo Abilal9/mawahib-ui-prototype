@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,10 +14,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import { usePosts } from '../../context/PostsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { Post } from '../../data/types';
+import { postService } from '../../services/postService';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -34,21 +35,32 @@ export default function UserPostsScreen({
   navigation,
 }: ScreenProps<'UserPosts'>) {
   const insets = useSafeAreaInsets();
-  const { user: me, content } = useMyProfile();
-  const { posts } = usePosts();
+  const { user: me } = useMyProfile();
   const userId = route.params?.userId;
   const isOwn = !userId || userId === me.id;
+  const targetId = isOwn ? me.id : userId!;
   const visitorUser = useVisitorUser(isOwn ? undefined : userId);
   const profileUser = isOwn ? me : visitorUser.user;
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const userPosts = useMemo(() => {
-    if (isOwn) {
-      return content.postIds
-        .map((id) => posts.find((p) => p.id === id))
-        .filter((p): p is Post => Boolean(p));
-    }
-    return posts.filter((p) => p.author.id === userId);
-  }, [isOwn, content.postIds, userId, posts]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const page = await postService.listUserPosts(targetId);
+        if (!cancelled) setUserPosts(page.items);
+      } catch {
+        if (!cancelled) setUserPosts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetId]);
 
   const title = profileUser
     ? isOwn
@@ -79,35 +91,47 @@ export default function UserPostsScreen({
         )}
       </View>
 
-      <FlatList
-        data={userPosts}
-        keyExtractor={(item) => item.id}
-        numColumns={COL}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.grid}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No posts yet.</Text>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.tile}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-          >
-            <Image
-              source={{ uri: item.images[0] }}
-              style={styles.tileImage}
-              contentFit="cover"
-            />
-            {item.images.length > 1 ? (
-              <View style={styles.multiBadge}>
-                <Ionicons name="copy-outline" size={12} color={colors.white} />
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        )}
-      />
+      {loading ? (
+        <View style={styles.empty}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={userPosts}
+          keyExtractor={(item) => item.id}
+          numColumns={COL}
+          contentContainerStyle={styles.grid}
+          columnWrapperStyle={styles.row}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>No posts yet</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.tile}
+              activeOpacity={0.9}
+              onPress={() =>
+                navigation.navigate('PostDetail', { postId: item.id })
+              }
+            >
+              {item.images[0] ? (
+                <Image
+                  source={{ uri: item.images[0] }}
+                  style={styles.tileImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={[styles.tileImage, styles.tileTextOnly]}>
+                  <Text style={styles.tileCaption} numberOfLines={4}>
+                    {item.caption}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -116,12 +140,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    backgroundColor: colors.white,
   },
   iconBtn: {
     width: 40,
@@ -136,31 +158,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   grid: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxxl,
+    padding: spacing.screen,
+    paddingBottom: 120,
   },
-  row: {
-    gap: GAP,
-    marginBottom: GAP,
-  },
+  row: { gap: GAP, marginBottom: GAP },
   tile: {
     width: TILE,
     height: TILE,
-    borderRadius: radius.button,
+    borderRadius: radius.card,
     overflow: 'hidden',
     backgroundColor: colors.borderLight,
   },
   tileImage: { width: '100%', height: '100%' },
-  multiBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
+  tileTextOnly: {
+    padding: spacing.sm,
+    justifyContent: 'center',
+    backgroundColor: colors.borderLight,
   },
+  tileCaption: { ...typography.caption, color: colors.text },
   empty: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingTop: spacing.xxl,
+    padding: spacing.xxl,
+    alignItems: 'center',
   },
+  emptyText: { ...typography.bodySmall, color: colors.textSecondary },
 });

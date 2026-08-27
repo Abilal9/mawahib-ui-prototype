@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import MoneyAmount from '../../components/ui/MoneyAmount';
@@ -26,9 +27,10 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useConnections } from '../../context/ConnectionsContext';
-import { usePosts } from '../../context/PostsContext';
 import { useAuth } from '../../context/AuthContext';
+import { postService } from '../../services/postService';
 import {
+  Post,
   ProfileTab,
   AboutSectionKey,
   ABOUT_SECTION_KEYS,
@@ -47,9 +49,26 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, profileError, refreshProfessionalProfile } = useMyProfile();
   const { connectedUsers } = useConnections();
-  const { posts } = usePosts();
   const { accountType } = useAuth();
-  const userPosts = posts.filter((p) => content.postIds.includes(p.id));
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const page = await postService.listUserPosts(user.id);
+          if (!cancelled) setUserPosts(page.items);
+        } catch {
+          if (!cancelled) setUserPosts([]);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [user.id]),
+  );
+
   const completeBannerSub =
     accountType === 'business'
       ? 'Add services and details so you can post jobs and request talent confidently.'

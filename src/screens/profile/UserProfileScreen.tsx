@@ -27,12 +27,12 @@ import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import { shareProfile } from '../../utils/shareProfile';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
-import { ProfileTab } from '../../data/types';
+import { ProfileTab, Post } from '../../data/types';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { usePosts } from '../../context/PostsContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
+import { postService } from '../../services/postService';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -56,10 +56,29 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     openOrCreateConversation,
   } = useConnections();
   const { user: me } = useMyProfile();
-  const { posts } = usePosts();
   const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
   const visitorUser = useVisitorUser(route.params.userId);
   const user = visitorUser.user;
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+
+  useEffect(() => {
+    if (!user?.id || user.id === me.id) {
+      setUserPosts([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await postService.listUserPosts(user.id);
+        if (!cancelled) setUserPosts(page.items);
+      } catch {
+        if (!cancelled) setUserPosts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, me.id]);
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
@@ -111,7 +130,6 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     rating: user.rating ?? 0,
     reviewCount: user.reviewCount ?? 0,
   };
-  const userPosts = posts.filter((p) => p.author.id === user.id);
 
   const onConnectPress = () => {
     if (relation === 'none') {

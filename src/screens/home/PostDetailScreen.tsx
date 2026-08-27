@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,60 +12,228 @@ import {
   Share,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useIsFocused } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import UserAvatar from '../../components/ui/UserAvatar';
+import Button from '../../components/ui/Button';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
+import PostLikesModal from '../../components/ui/PostLikesModal';
 import { colors, spacing, radius, typography } from '../../theme';
-import { Comment } from '../../data/types';
+import { Comment, Post } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const REPORT_MIN_CHARS = 10;
+const REPORT_MAX_CHARS = 1000;
 
-const SEED_COMMENTS: Comment[] = [
-  { id: 'c1', userId: 'u2', user: 'Omar Hassan', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop', text: 'This is absolutely stunning! 🔥', time: '2h ago' },
-  { id: 'c2', userId: 'u3', user: 'Fatima Al-Zahra', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop', text: 'Love the color palette you used here', time: '4h ago' },
-  { id: 'c3', userId: 'u-khalid', user: 'Khalid Mansour', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop', text: 'Would love to collaborate on something similar', time: '6h ago' },
-];
-
-export default function PostDetailScreen({ route, navigation }: ScreenProps<'PostDetail'>) {
-  const { getPostById, getComments, addComment } = usePosts();
-  const post = getPostById(route.params.postId);
+export default function PostDetailScreen({
+  route,
+  navigation,
+}: ScreenProps<'PostDetail'>) {
+  const {
+    posts: feedPosts,
+    getPostById,
+    fetchPostById,
+    getComments,
+    addComment,
+    deleteComment,
+    toggleLike,
+    toggleSave,
+    softDelete,
+  } = usePosts();
   const focusComments = route.params.focusComments === true;
+  const postId = route.params.postId;
   const { user, removePostId } = useMyProfile();
+  const isFocused = useIsFocused();
   const scrollRef = useRef<ScrollView>(null);
   const commentsY = useRef(0);
+  const [post, setPost] = useState<Post | undefined>(() => getPostById(postId));
+  const [loading, setLoading] = useState(!post);
   const [activeImage, setActiveImage] = useState(0);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState<Comment[]>(() => {
-    const stored = getComments(route.params.postId);
-    return stored.length > 0 ? stored : SEED_COMMENTS;
-  });
-  const [liked, setLiked] = useState(post?.isLiked ?? false);
-  const [likeCount, setLikeCount] = useState(post?.likes ?? 0);
-  const [saved, setSaved] = useState(post?.isSaved ?? false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [commentMenuId, setCommentMenuId] = useState<string | null>(null);
+  const [commentDeleteTarget, setCommentDeleteTarget] = useState<Comment | null>(
+    null,
+  );
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
+  const [reportTarget, setReportTarget] = useState<Comment | null>(null);
+  const [reportText, setReportText] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
+  const [likesOpen, setLikesOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    let cancelled = false;
+    (async () => {
+      const cached = getPostById(postId);
+      if (cached) {
+        setPost(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+      const remote = await fetchPostById(postId);
+      if (cancelled) return;
+      if (remote) setPost(remote);
+      setLoading(false);
+      try {
+        const list = await getComments(postId);
+        if (!cancelled) setComments(list);
+      } catch {
+        if (!cancelled) setComments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [postId, isFocused, getPostById, fetchPostById, getComments]);
+
+  // Keep engagement in sync with PostsContext (source of truth for like/save/count).
+  useEffect(() => {
+    const fromFeed = feedPosts.find((p) => p.id === postId);
+    if (!fromFeed) return;
+    setPost((prev) => {
+      if (!prev) return fromFeed;
+      if (
+        prev.isLiked === fromFeed.isLiked &&
+        prev.likes === fromFeed.likes &&
+        prev.isSaved === fromFeed.isSaved &&
+        prev.comments === fromFeed.comments
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        isLiked: fromFeed.isLiked,
+        likes: fromFeed.likes,
+        isSaved: fromFeed.isSaved,
+        comments: fromFeed.comments,
+      };
+    });
+  }, [feedPosts, postId]);
 
   useEffect(() => {
     if (!focusComments || !post) return;
     const t = setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(commentsY.current - 12, 0), animated: true });
+      scrollRef.current?.scrollTo({
+        y: Math.max(commentsY.current - 12, 0),
+        animated: true,
+      });
     }, 250);
     return () => clearTimeout(t);
   }, [focusComments, post]);
+
+  const submitComment = useCallback(async () => {
+    const text = comment.trim();
+    if (!text || isSubmittingComment || !post) return;
+    setIsSubmittingComment(true);
+    try {
+      const created = await addComment(post.id, text);
+      setComments((prev) => {
+        if (prev.some((c) => c.id === created.id)) return prev;
+        return [...prev, created];
+      });
+      setComment('');
+    } catch (e) {
+      Alert.alert(
+        'Could not comment',
+        e instanceof Error ? e.message : 'Please try again',
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  }, [addComment, comment, isSubmittingComment, post]);
+
+  const confirmDeleteComment = useCallback(async () => {
+    if (!commentDeleteTarget || !post || isDeletingComment) return;
+    const target = commentDeleteTarget;
+    setIsDeletingComment(true);
+    setComments((prev) => prev.filter((c) => c.id !== target.id));
+    setCommentDeleteTarget(null);
+    try {
+      await deleteComment(post.id, target.id);
+    } catch (e) {
+      setComments((prev) => {
+        if (prev.some((c) => c.id === target.id)) return prev;
+        return [...prev, target];
+      });
+      Alert.alert(
+        'Could not delete',
+        e instanceof Error ? e.message : 'Please try again',
+      );
+    } finally {
+      setIsDeletingComment(false);
+    }
+  }, [commentDeleteTarget, deleteComment, isDeletingComment, post]);
+
+  const openCommentReport = useCallback((target: Comment) => {
+    setCommentMenuId(null);
+    setReportText('');
+    setReportTarget(target);
+  }, []);
+
+  const closeCommentReport = useCallback(() => {
+    if (reportBusy) return;
+    setReportTarget(null);
+    setReportText('');
+  }, [reportBusy]);
+
+  const submitCommentReport = useCallback(async () => {
+    if (!reportTarget || !post) return;
+    const description = reportText.trim();
+    if (description.length < REPORT_MIN_CHARS) return;
+    setReportBusy(true);
+    try {
+      // Deferred: moderation phase will replace this stub with
+      // POST /comments/:commentId/report { reason, postId, reportedUserId }.
+      const _futurePayload = {
+        commentId: reportTarget.id,
+        postId: post.id,
+        reportedUserId: reportTarget.userId,
+        reason: description,
+      };
+      void _futurePayload;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setReportTarget(null);
+      setReportText('');
+      setReportSuccessOpen(true);
+    } finally {
+      setReportBusy(false);
+    }
+  }, [post, reportTarget, reportText]);
+
+  if (loading && !post) {
+    return (
+      <ScreenContainer>
+        <View style={styles.missingWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   if (!post) {
     return (
       <ScreenContainer>
         <View style={styles.missingWrap}>
           <Text style={styles.missingText}>Post not found</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.missingBack}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.missingBack}
+          >
             <Text style={styles.missingBackText}>Go back</Text>
           </TouchableOpacity>
         </View>
@@ -73,13 +241,20 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
     );
   }
 
-  // Only the real author gets the ⋯ menu (Share / Delete) — not posts merely listed on a profile.
   const isOwnPost = post.author.id === user.id;
-
-  const handleLike = () => {
-    setLiked(!liked);
-    setLikeCount(liked ? likeCount - 1 : likeCount + 1);
-  };
+  const canSubmit = Boolean(comment.trim()) && !isSubmittingComment;
+  const menuComment = comments.find((c) => c.id === commentMenuId) ?? null;
+  const menuCanDelete = menuComment
+    ? Boolean(
+        menuComment.canDelete ||
+          menuComment.userId === user.id ||
+          post.author.id === user.id,
+      )
+    : false;
+  const menuCanReport = menuComment ? menuComment.userId !== user.id : false;
+  const reportTextTrimmed = reportText.trim();
+  const canSendReport =
+    reportTextTrimmed.length >= REPORT_MIN_CHARS && !reportBusy;
 
   const sharePost = async () => {
     setMenuOpen(false);
@@ -89,24 +264,35 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
       await Share.share(
         Platform.OS === 'ios'
           ? { message, url }
-          : { message: `${message}\n${url}`, title: 'Mawahib' }
+          : { message: `${message}\n${url}`, title: 'Mawahib' },
       );
     } catch {
       Alert.alert('Share unavailable', `${message}\n${url}`);
     }
   };
 
-  const confirmDelete = () => {
-    removePostId(post.id);
-    setDeleteOpen(false);
-    navigation.goBack();
+  const confirmDelete = async () => {
+    try {
+      await softDelete(post.id);
+      removePostId(post.id);
+      setDeleteOpen(false);
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert(
+        'Could not delete',
+        e instanceof Error ? e.message : 'Please try again',
+      );
+    }
   };
 
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.headerButton}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
@@ -120,7 +306,11 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
               <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.headerButton} onPress={sharePost} hitSlop={8}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => void sharePost()}
+              hitSlop={8}
+            >
               <Ionicons name="share-outline" size={22} color={colors.text} />
             </TouchableOpacity>
           )}
@@ -142,35 +332,55 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
               </Text>
             ) : null}
           </View>
-          {/* Follow/Connect lives on the profile — avoid a dead control here */}
         </TouchableOpacity>
 
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-            setActiveImage(index);
-          }}
-        >
-          {post.images.map((img, i) => (
-            <Image key={i} source={{ uri: img }} style={styles.postImage} contentFit="cover" />
-          ))}
-        </ScrollView>
+        {post.images.length > 0 ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(
+                e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+              );
+              setActiveImage(index);
+            }}
+          >
+            {post.images.map((img, i) => (
+              <Image
+                key={i}
+                source={{ uri: img }}
+                style={styles.postImage}
+                contentFit="cover"
+              />
+            ))}
+          </ScrollView>
+        ) : null}
 
-        {post.images.length > 1 && (
+        {post.images.length > 1 ? (
           <View style={styles.dots}>
             {post.images.map((_, i) => (
-              <View key={i} style={[styles.dot, i === activeImage && styles.dotActive]} />
+              <View
+                key={i}
+                style={[styles.dot, i === activeImage && styles.dotActive]}
+              />
             ))}
           </View>
-        )}
+        ) : null}
 
         <View style={styles.actions}>
           <View style={styles.actionsLeft}>
-            <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
-              <Ionicons name={liked ? 'heart' : 'heart-outline'} size={26} color={liked ? colors.primary : colors.text} />
+            <TouchableOpacity
+              onPress={() => {
+                void toggleLike(post.id);
+              }}
+              style={styles.actionBtn}
+            >
+              <Ionicons
+                name={post.isLiked ? 'heart' : 'heart-outline'}
+                size={26}
+                color={post.isLiked ? colors.primary : colors.text}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionBtn}
@@ -183,24 +393,39 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             >
               <Ionicons name="chatbubble-outline" size={24} color={colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={sharePost}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => void sharePost()}
+            >
               <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => setSaved((s) => !s)}>
+          <TouchableOpacity
+            onPress={() => {
+              void toggleSave(post.id);
+            }}
+          >
             <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
+              name={post.isSaved ? 'bookmark' : 'bookmark-outline'}
               size={24}
-              color={saved ? colors.primary : colors.text}
+              color={post.isSaved ? colors.primary : colors.text}
             />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.likes}>{likeCount.toLocaleString()} likes</Text>
-        <Text style={styles.caption}>
-          <Text style={styles.captionAuthor}>{post.author.name} </Text>
-          {post.caption}
-        </Text>
+        {post.likes > 0 ? (
+          <TouchableOpacity onPress={() => setLikesOpen(true)} hitSlop={6}>
+            <Text style={styles.likes}>{post.likes.toLocaleString()} likes</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.likes}>0 likes</Text>
+        )}
+        {post.caption ? (
+          <Text style={styles.caption}>
+            <Text style={styles.captionAuthor}>{post.author.name} </Text>
+            {post.caption}
+          </Text>
+        ) : null}
 
         <View
           style={styles.commentsSection}
@@ -208,7 +433,9 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             commentsY.current = e.nativeEvent.layout.y;
           }}
         >
-          <Text style={styles.commentsTitle}>Comments</Text>
+          <Text style={styles.commentsTitle}>
+            Comments{post.comments > 0 ? ` · ${post.comments}` : ''}
+          </Text>
           {comments.map((c) => (
             <View key={c.id} style={styles.comment}>
               <TouchableOpacity
@@ -219,12 +446,28 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
                 <UserAvatar uri={c.avatar} size={36} style={styles.commentAvatar} />
               </TouchableOpacity>
               <View style={styles.commentBody}>
-                <TouchableOpacity
-                  onPress={() => openUserProfile(navigation, c.userId, user.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.commentUser}>{c.user}</Text>
-                </TouchableOpacity>
+                <View style={styles.commentHeader}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      openUserProfile(navigation, c.userId, user.id)
+                    }
+                    activeOpacity={0.8}
+                    style={styles.commentUserWrap}
+                  >
+                    <Text style={styles.commentUser}>{c.user}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setCommentMenuId(c.id)}
+                    hitSlop={8}
+                    style={styles.commentMenuBtn}
+                  >
+                    <Ionicons
+                      name="ellipsis-horizontal"
+                      size={18}
+                      color={colors.textTertiary}
+                    />
+                  </TouchableOpacity>
+                </View>
                 <Text style={styles.commentText}>{c.text}</Text>
                 <Text style={styles.commentTime}>{c.time}</Text>
               </View>
@@ -241,26 +484,20 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
           placeholderTextColor={colors.textSecondary}
           value={comment}
           onChangeText={setComment}
+          editable={!isSubmittingComment}
         />
         <TouchableOpacity
-          disabled={!comment.trim()}
-          onPress={() => {
-            const text = comment.trim();
-            if (!text || !post) return;
-            const avatar =
-              typeof user.avatar === 'string' ? user.avatar : '';
-            const created = addComment(post.id, {
-              userId: user.id,
-              user: user.name,
-              avatar,
-              text,
-              time: 'Just now',
-            });
-            setComments((prev) => [...prev, created]);
-            setComment('');
-          }}
+          disabled={!canSubmit}
+          onPress={() => void submitComment()}
         >
-          <Text style={[styles.postComment, !comment.trim() && styles.postCommentDisabled]}>Post</Text>
+          <Text
+            style={[
+              styles.postComment,
+              !canSubmit && styles.postCommentDisabled,
+            ]}
+          >
+            {isSubmittingComment ? 'Posting…' : 'Post'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -272,7 +509,11 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
       >
         <Pressable style={styles.sheetBackdrop} onPress={() => setMenuOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.sheetRow} onPress={sharePost} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.sheetRow}
+              onPress={() => void sharePost()}
+              activeOpacity={0.85}
+            >
               <Ionicons name="share-outline" size={22} color={colors.text} />
               <Text style={styles.sheetRowText}>Share</Text>
             </TouchableOpacity>
@@ -285,11 +526,64 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
               activeOpacity={0.85}
             >
               <Ionicons name="trash-outline" size={22} color={colors.error} />
-              <Text style={[styles.sheetRowText, styles.sheetRowDanger]}>Delete</Text>
+              <Text style={[styles.sheetRowText, styles.sheetRowDanger]}>
+                Delete
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.sheetRow, styles.sheetCancel]}
               onPress={() => setMenuOpen(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={Boolean(commentMenuId && menuComment)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCommentMenuId(null)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setCommentMenuId(null)}
+        >
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            {menuCanDelete ? (
+              <TouchableOpacity
+                style={styles.sheetRow}
+                onPress={() => {
+                  if (!menuComment) return;
+                  setCommentMenuId(null);
+                  setCommentDeleteTarget(menuComment);
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="trash-outline" size={22} color={colors.error} />
+                <Text style={[styles.sheetRowText, styles.sheetRowDanger]}>
+                  Delete comment
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {menuCanReport ? (
+              <TouchableOpacity
+                style={styles.sheetRow}
+                onPress={() => {
+                  if (!menuComment) return;
+                  openCommentReport(menuComment);
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="flag-outline" size={22} color={colors.text} />
+                <Text style={styles.sheetRowText}>Report</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.sheetRow, styles.sheetCancel]}
+              onPress={() => setCommentMenuId(null)}
               activeOpacity={0.85}
             >
               <Text style={styles.sheetCancelText}>Cancel</Text>
@@ -304,7 +598,10 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
         animationType="fade"
         onRequestClose={() => setDeleteOpen(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setDeleteOpen(false)}>
+        <Pressable
+          style={styles.modalBackdropCentered}
+          onPress={() => setDeleteOpen(false)}
+        >
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Delete post?</Text>
             <Text style={styles.modalBody}>
@@ -312,7 +609,7 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             </Text>
             <TouchableOpacity
               style={styles.modalDangerBtn}
-              onPress={confirmDelete}
+              onPress={() => void confirmDelete()}
               activeOpacity={0.85}
             >
               <Text style={styles.modalDangerText}>Delete</Text>
@@ -320,13 +617,113 @@ export default function PostDetailScreen({ route, navigation }: ScreenProps<'Pos
             <TouchableOpacity
               style={styles.modalCancelBtn}
               onPress={() => setDeleteOpen(false)}
-              activeOpacity={0.85}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={Boolean(commentDeleteTarget)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCommentDeleteTarget(null)}
+      >
+        <Pressable
+          style={styles.modalBackdropCentered}
+          onPress={() => setCommentDeleteTarget(null)}
+        >
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Delete comment?</Text>
+            <Text style={styles.modalBody}>This comment will be removed.</Text>
+            <TouchableOpacity
+              style={styles.modalDangerBtn}
+              onPress={() => void confirmDeleteComment()}
+              activeOpacity={0.85}
+              disabled={isDeletingComment}
+            >
+              <Text style={styles.modalDangerText}>
+                {isDeletingComment ? 'Deleting…' : 'Delete'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setCommentDeleteTarget(null)}
+              disabled={isDeletingComment}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={Boolean(reportTarget)}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCommentReport}
+      >
+        <Pressable style={styles.modalBackdropSheet} onPress={closeCommentReport}>
+          <Pressable
+            style={styles.reportSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.modalTitle}>Report comment</Text>
+            <Text style={styles.reportDescription}>
+              What’s wrong with this comment?
+            </Text>
+            <TextInput
+              placeholder="Describe the issue..."
+              placeholderTextColor={colors.textSecondary}
+              style={styles.reportInput}
+              multiline
+              value={reportText}
+              onChangeText={setReportText}
+              editable={!reportBusy}
+              maxLength={REPORT_MAX_CHARS}
+            />
+            {reportTextTrimmed.length > 0 &&
+            reportTextTrimmed.length < REPORT_MIN_CHARS ? (
+              <Text style={styles.reportHint}>
+                Please enter at least {REPORT_MIN_CHARS} characters.
+              </Text>
+            ) : null}
+            <View style={styles.reportActions}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={styles.halfBtn}
+                disabled={reportBusy}
+                onPress={closeCommentReport}
+              />
+              <Button
+                title="Send Report"
+                style={styles.halfBtn}
+                disabled={!canSendReport}
+                onPress={() => void submitCommentReport()}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <PostLikesModal
+        visible={likesOpen}
+        postId={likesOpen ? post.id : null}
+        onClose={() => setLikesOpen(false)}
+        onOpenProfile={(userId) => openUserProfile(navigation, userId, user.id)}
+      />
+
+      <SuccessConfirmationModal
+        visible={reportSuccessOpen}
+        title="Report Submitted"
+        message={
+          'Thank you for your report.\n\nOur team has received it and will review it as soon as possible. If additional information is needed, someone from our team will contact you.'
+        }
+        onDone={() => setReportSuccessOpen(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -335,149 +732,188 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.screen,
     paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
   headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerRight: { minWidth: 40, alignItems: 'flex-end' },
-  headerTitle: { ...typography.h3, color: colors.text },
+  headerTitle: { ...typography.h3, color: colors.text, flex: 1, textAlign: 'center' },
+  headerRight: { width: 40, alignItems: 'flex-end' },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.screen,
+  },
+  avatar: { width: 44, height: 44, borderRadius: 22 },
+  authorInfo: { flex: 1 },
+  authorName: { ...typography.label, color: colors.text },
+  authorMeta: { ...typography.caption, color: colors.textSecondary },
+  postImage: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  dotActive: { backgroundColor: colors.primary },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screen,
+    marginTop: spacing.md,
+  },
+  actionsLeft: { flexDirection: 'row', gap: spacing.md },
+  actionBtn: { padding: 4 },
+  likes: {
+    ...typography.label,
+    color: colors.text,
+    paddingHorizontal: spacing.screen,
+    marginTop: spacing.sm,
+  },
+  caption: {
+    ...typography.bodySmall,
+    color: colors.text,
+    paddingHorizontal: spacing.screen,
+    marginTop: spacing.xs,
+  },
+  captionAuthor: { fontWeight: '700' },
+  commentsSection: {
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
+    paddingBottom: 100,
+  },
+  commentsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.md },
+  comment: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  commentAvatar: { width: 36, height: 36, borderRadius: 18 },
+  commentBody: { flex: 1 },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  commentUserWrap: { flexShrink: 1 },
+  commentMenuBtn: { padding: 2 },
+  commentUser: { ...typography.label, color: colors.text },
+  commentText: { ...typography.bodySmall, color: colors.text },
+  commentTime: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.screen,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.white,
+  },
+  inputAvatar: { width: 32, height: 32, borderRadius: 16 },
+  commentInput: {
+    flex: 1,
+    ...typography.bodySmall,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+  },
+  postComment: { ...typography.label, color: colors.primary },
+  postCommentDisabled: { color: colors.textTertiary },
+  missingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  missingText: { ...typography.body, color: colors.textSecondary },
+  missingBack: { padding: spacing.sm },
+  missingBackText: { ...typography.label, color: colors.primary },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: colors.white,
     borderTopLeftRadius: radius.card,
     borderTopRightRadius: radius.card,
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
   },
   sheetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    padding: spacing.lg,
   },
-  sheetRowText: { ...typography.bodyMedium, color: colors.text },
+  sheetRowText: { ...typography.body, color: colors.text },
   sheetRowDanger: { color: colors.error },
-  sheetCancel: {
-    borderBottomWidth: 0,
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-  },
-  sheetCancelText: {
-    ...typography.button,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    width: '100%',
-  },
-  modalBackdrop: {
+  sheetCancel: { justifyContent: 'center' },
+  sheetCancelText: { ...typography.label, color: colors.textSecondary },
+  modalBackdropCentered: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    padding: spacing.xl,
+  },
+  modalBackdropSheet: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: colors.white,
     borderRadius: radius.card,
     padding: spacing.xl,
+    width: '100%',
   },
   modalTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.sm },
-  modalBody: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: spacing.lg,
-  },
+  modalBody: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.lg },
   modalDangerBtn: {
     backgroundColor: colors.error,
     borderRadius: radius.button,
-    paddingVertical: spacing.md,
+    padding: spacing.md,
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  modalDangerText: { ...typography.button, color: colors.white },
-  modalCancelBtn: {
-    borderRadius: radius.button,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
+  modalDangerText: { ...typography.label, color: colors.white },
+  modalCancelBtn: { padding: spacing.md, alignItems: 'center' },
+  modalCancelText: { ...typography.label, color: colors.textSecondary },
+  reportSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.screen,
+    paddingBottom: spacing.xxl,
+    gap: spacing.sm,
+    maxHeight: '88%',
+    width: '100%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  reportDescription: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  reportInput: {
+    minHeight: 120,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    ...typography.bodySmall,
+    color: colors.text,
+    textAlignVertical: 'top',
   },
-  modalCancelText: { ...typography.button, color: colors.text },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.screen,
-    paddingBottom: spacing.md,
-    gap: spacing.md,
-  },
-  avatar: { width: 44, height: 44, borderRadius: radius.avatar },
-  authorInfo: { flex: 1 },
-  authorName: { ...typography.label, color: colors.text },
-  authorMeta: { ...typography.caption, color: colors.textSecondary },
-  followButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.button,
-    backgroundColor: colors.primary,
-  },
-  followText: { ...typography.label, color: colors.white, fontSize: 13 },
-  postImage: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: spacing.sm },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
-  dotActive: { backgroundColor: colors.primary, width: 18 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen,
-    paddingVertical: spacing.sm,
-  },
-  actionsLeft: { flexDirection: 'row', gap: spacing.lg },
-  actionBtn: { padding: 2 },
-  likes: { ...typography.label, color: colors.text, paddingHorizontal: spacing.screen },
-  caption: { ...typography.body, color: colors.text, paddingHorizontal: spacing.screen, paddingTop: spacing.sm, lineHeight: 22 },
-  captionAuthor: { fontFamily: typography.label.fontFamily },
-  commentsSection: { padding: spacing.screen, paddingTop: spacing.xl },
-  commentsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.lg },
-  comment: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
-  commentAvatar: { width: 36, height: 36, borderRadius: 18 },
-  commentBody: { flex: 1 },
-  commentUser: { ...typography.label, color: colors.text, fontSize: 13 },
-  commentText: { ...typography.bodySmall, color: colors.text, marginTop: 2 },
-  commentTime: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.screen,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.white,
-    gap: spacing.md,
-  },
-  inputAvatar: { width: 32, height: 32, borderRadius: 16 },
-  commentInput: { flex: 1, ...typography.bodySmall, color: colors.text },
-  postComment: { ...typography.label, color: colors.primary },
-  postCommentDisabled: { opacity: 0.4 },
-  missingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.lg,
-  },
-  missingText: { ...typography.body, color: colors.text, textAlign: 'center' },
-  missingBack: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radius.button,
-    backgroundColor: colors.primary,
-  },
-  missingBackText: { ...typography.button, color: colors.white },
+  reportHint: { ...typography.caption, color: colors.error },
+  reportActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  halfBtn: { flex: 1 },
 });

@@ -11,7 +11,7 @@ import {
 
 export interface ApiUser {
   id: string;
-  email: string;
+  email?: string;
   accountType: AccountType;
   displayName: string;
   username: string;
@@ -30,9 +30,9 @@ export interface ApiUser {
   defaultCurrency?: CurrencyCode | string | null;
   avatarUrl: string | null;
   coverUrl: string | null;
-  phoneE164: string | null;
-  phoneVerified: boolean;
-  emailVerified: boolean;
+  phoneE164?: string | null;
+  phoneVerified?: boolean;
+  emailVerified?: boolean;
   skills: string[];
   about?: {
     languages: Array<{
@@ -70,6 +70,7 @@ export interface ApiUser {
   createdAt: string;
   updatedAt: string;
 }
+
 
 export interface BootstrapPayload {
   accountType: AccountType;
@@ -150,7 +151,7 @@ export const authApi = {
   },
 
   getById(userId: string): Promise<ApiUser> {
-    return apiRequest<ApiUser>(`/users/${userId}`);
+    return apiRequest<ApiUser>(`/users/${userId}/public`);
   },
 
   updateMe(payload: UpdateMePayload, accessToken?: string): Promise<ApiUser> {

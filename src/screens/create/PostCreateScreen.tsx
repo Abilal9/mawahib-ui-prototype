@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,23 +18,62 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { usePosts } from '../../context/PostsContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { pickAndUploadImage } from '../../lib/uploadMedia';
 
-const PLACEHOLDER_IMAGES = [
-  'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1558655146-d09347e92766?w=200&h=200&fit=crop',
-];
+type LocalMedia = { uri: string; mediaAssetId: string };
 
 export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate'>) {
   const { createPost } = usePosts();
-  const { user, addPostId } = useMyProfile();
+  const { addPostId } = useMyProfile();
   const [caption, setCaption] = useState('');
-  const [media, setMedia] = useState(PLACEHOLDER_IMAGES);
+  const [media, setMedia] = useState<LocalMedia[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const postingRef = useRef(false);
 
-  const handlePost = () => {
-    if (!caption.trim()) return;
-    const post = createPost(user, caption.trim(), media);
-    addPostId(post.id);
-    navigation.goBack();
+  const canPost =
+    (caption.trim().length > 0 || media.length > 0) && !uploading && !posting;
+
+  const handleAddMedia = async () => {
+    if (media.length >= 10) return;
+    setUploading(true);
+    try {
+      const uploaded = await pickAndUploadImage('post');
+      if (!uploaded) return;
+      setMedia((prev) => [
+        ...prev,
+        { uri: uploaded.uri, mediaAssetId: uploaded.mediaAssetId },
+      ]);
+    } catch (e) {
+      Alert.alert(
+        'Upload failed',
+        e instanceof Error ? e.message : 'Could not upload image',
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePost = async () => {
+    if (!canPost || postingRef.current) return;
+    postingRef.current = true;
+    setPosting(true);
+    try {
+      const post = await createPost({
+        text: caption.trim() || undefined,
+        mediaAssetIds: media.map((m) => m.mediaAssetId),
+      });
+      addPostId(post.id);
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert(
+        'Could not create post',
+        e instanceof Error ? e.message : 'Please try again',
+      );
+    } finally {
+      postingRef.current = false;
+      setPosting(false);
+    }
   };
 
   return (
@@ -43,7 +84,12 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
           <Text style={styles.cancelBtn}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Post</Text>
-        <Button title="Post" size="sm" onPress={handlePost} disabled={!caption.trim()} />
+        <Button
+          title={posting ? '…' : 'Post'}
+          size="sm"
+          onPress={() => void handlePost()}
+          disabled={!canPost}
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -58,29 +104,36 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
         />
 
         <View style={styles.mediaGrid}>
-          {media.map((uri, i) => (
-            <View key={i} style={styles.mediaSlot}>
-              <Image source={{ uri }} style={styles.mediaImage} contentFit="cover" />
+          {media.map((item) => (
+            <View key={item.mediaAssetId} style={styles.mediaSlot}>
+              <Image source={{ uri: item.uri }} style={styles.mediaImage} contentFit="cover" />
               <TouchableOpacity
                 style={styles.removeMedia}
-                onPress={() => setMedia(media.filter((_, idx) => idx !== i))}
+                onPress={() =>
+                  setMedia((prev) =>
+                    prev.filter((m) => m.mediaAssetId !== item.mediaAssetId),
+                  )
+                }
               >
                 <Ionicons name="close-circle" size={22} color={colors.white} />
               </TouchableOpacity>
             </View>
           ))}
-          {media.length < 10 && (
+          {media.length < 10 ? (
             <TouchableOpacity
               style={styles.addMedia}
-              onPress={() => navigation.navigate('PhotoCapture')}
+              onPress={() => void handleAddMedia()}
               activeOpacity={0.8}
+              disabled={uploading}
             >
-              <Ionicons name="add" size={32} color={colors.primary} />
+              {uploading ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Ionicons name="add" size={32} color={colors.primary} />
+              )}
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
-
-        <Text style={styles.charCount}>{caption.length}/2200</Text>
       </ScrollView>
     </ScreenContainer>
   );
@@ -98,22 +151,30 @@ const styles = StyleSheet.create({
   },
   cancelBtn: { ...typography.body, color: colors.textSecondary },
   headerTitle: { ...typography.h3, color: colors.text },
-  content: { padding: spacing.screen },
-  caption: { ...typography.body, color: colors.text, minHeight: 100, textAlignVertical: 'top', marginBottom: spacing.xl },
+  content: { padding: spacing.screen, gap: spacing.lg },
+  caption: {
+    ...typography.body,
+    color: colors.text,
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
   mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  mediaSlot: { width: '31%', aspectRatio: 1, position: 'relative' },
-  mediaImage: { width: '100%', height: '100%', borderRadius: radius.button },
+  mediaSlot: {
+    width: 100,
+    height: 100,
+    borderRadius: radius.card,
+    overflow: 'hidden',
+  },
+  mediaImage: { width: '100%', height: '100%' },
   removeMedia: { position: 'absolute', top: 4, right: 4 },
   addMedia: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: radius.button,
-    borderWidth: 2,
+    width: 100,
+    height: 100,
+    borderRadius: radius.card,
+    borderWidth: 1,
     borderColor: colors.primary,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary + '08',
   },
-  charCount: { ...typography.caption, color: colors.textSecondary, textAlign: 'right', marginTop: spacing.lg },
 });

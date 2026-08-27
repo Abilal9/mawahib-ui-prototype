@@ -28,9 +28,10 @@ interface ConnectionsContextValue {
   refresh: () => Promise<void>;
   getRelation: (userId: string) => ConnectionRelation;
   isConnected: (userId: string) => boolean;
-  requestConnect: (userId: string) => void;
+  requestConnect: (userId: string) => Promise<string | null>;
   cancelOutgoing: (userId: string) => void;
-  acceptRequest: (userId: string) => void;
+  /** Optional requestId from feed DTO when ConnectionsContext map is stale. */
+  acceptRequest: (userId: string, requestIdOverride?: string | null) => void;
   denyRequest: (userId: string) => void;
   disconnect: (userId: string) => void;
   /** Conversation id for a connected peer (connection chat). */
@@ -160,27 +161,27 @@ export function ConnectionsProvider({
       refresh,
       getRelation,
       isConnected: (userId) => getRelation(userId) === 'connected',
-      requestConnect: (userId) => {
-        if (!me || userId === me) return;
-        if (getRelation(userId) !== 'none') return;
+      requestConnect: async (userId) => {
+        if (!me || userId === me) return null;
+        if (getRelation(userId) !== 'none') return null;
         setOutgoingIds((prev) =>
           prev.includes(userId) ? prev : [...prev, userId],
         );
-        void (async () => {
-          try {
-            const created = await connectionService.requestConnect(userId);
-            setOutgoingRequestByUser((prev) => ({
-              ...prev,
-              [userId]: created.id,
-            }));
-          } catch (e) {
-            setOutgoingIds((prev) => prev.filter((id) => id !== userId));
-            Alert.alert(
-              'Could not send request',
-              errMessage(e, 'Please try again.'),
-            );
-          }
-        })();
+        try {
+          const created = await connectionService.requestConnect(userId);
+          setOutgoingRequestByUser((prev) => ({
+            ...prev,
+            [userId]: created.id,
+          }));
+          return created.id;
+        } catch (e) {
+          setOutgoingIds((prev) => prev.filter((id) => id !== userId));
+          Alert.alert(
+            'Could not send request',
+            errMessage(e, 'Please try again.'),
+          );
+          return null;
+        }
       },
       cancelOutgoing: (userId) => {
         const requestId = outgoingRequestByUser[userId];
@@ -203,8 +204,9 @@ export function ConnectionsProvider({
           }
         })();
       },
-      acceptRequest: (userId) => {
-        const requestId = incomingRequestByUser[userId];
+      acceptRequest: (userId, requestIdOverride) => {
+        const requestId =
+          requestIdOverride?.trim() || incomingRequestByUser[userId];
         const incomingUser = incomingUsers.find((u) => u.id === userId);
         setIncomingUsers((prev) => prev.filter((u) => u.id !== userId));
         setIncomingRequestByUser((prev) => {
@@ -230,7 +232,10 @@ export function ConnectionsProvider({
                 [userId]: connection.conversationId!,
               }));
             }
-            // Conversation is created lazily on Message — no poll on accept.
+            // Keep peer list accurate when Accept came from feed without incomingUsers cache.
+            if (!incomingUser) {
+              void refresh();
+            }
           } catch (e) {
             Alert.alert(
               'Could not accept request',

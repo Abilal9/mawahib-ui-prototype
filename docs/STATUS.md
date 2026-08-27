@@ -1,6 +1,6 @@
 # Frontend status
 
-**Last reviewed:** 2026-08-21
+**Last reviewed:** 2026-08-27
 
 ## Env / API target
 
@@ -45,8 +45,9 @@ Canonical behavior: [`AUTH.md`](./AUTH.md).
 | Jobs inbox / work requests / listings | Nest |
 | Messaging / connections / notifications | Nest |
 | Media uploads | Nest upload-sessions + Supabase Storage |
-| **Home Feed / Posts / Comments** | **Mock** (`PostsContext` → `postService` → `mockPostRepository`) |
-| Stories | Stubbed empty (`catalogService.listStories()` → `[]`) |
+| **Home Feed / Posts / Comments / Likes / Saves** | **Nest-backed** (`PostsContext` → `postService` → `postsApi` → `/feed`, `/posts`, likes list, comments). Hybrid self/connection/discovery. Comment Report UI is deferred (no report API). |
+| Social notifications | Nest `post_liked` / `post_commented` mapped in Notifications UI; Expo tap-nav E2E pending |
+| Stories | Deferred — Home Stories row **hidden** (style stub only; not rendered) |
 | Payments UI shells | Placeholder; no Nest payments |
 
 Money display helpers: `src/utils/money.ts`. Commercial rules live in the backend:
@@ -63,8 +64,13 @@ Profile is opened from the header/sidebar stack, not as a main tab.
 
 ## Next FE work (aligned with backend roadmap)
 
-1. Home Feed / Posts (replace mock)
+1. Profile Reviews / rating aggregation
 2. Profile completion / visitor polish
 3. Explore / Jobs / Marketplace polish
+4. Stories (product decision still deferred)
+5. Search polish / Explore ranking
+6. Block / mute / report (**comment report UI** shipped deferred like Jobs; persistence/moderation still deferred)
+7. **Manual Expo E2E** for Home/Posts/Notifications freeze gate (API E2E already pass 2026-08-27)
+8. Notification polish (grouping / push)
 
 See `mawahib-backend/docs/ROADMAP.md`. Auth remains frozen; keep marketplace/messaging contracts untouched unless product requires a deliberate change.

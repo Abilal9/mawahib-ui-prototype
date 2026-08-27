@@ -36,7 +36,14 @@ export interface Post {
   location?: string;
   role?: string;
   timeAgo?: string;
+  feedSource?: 'self' | 'connection' | 'discovery';
+  relationship?: {
+    status: 'self' | 'none' | 'outgoing' | 'incoming' | 'connected';
+    connectionRequestId: string | null;
+  };
+  visibility?: string;
 }
+
 
 export interface Comment {
   id: string;
@@ -45,6 +52,8 @@ export interface Comment {
   avatar: string;
   text: string;
   time: string;
+  /** Server-computed: comment author or post owner. */
+  canDelete?: boolean;
 }
 
 export interface Story {

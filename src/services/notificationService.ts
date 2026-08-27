@@ -17,6 +17,10 @@ function mapType(type: ApiNotificationType): UiNotificationType {
     case 'engagement_status':
     case 'work_request_event':
       return 'job';
+    case 'post_liked':
+      return 'like';
+    case 'post_commented':
+      return 'comment';
     case 'system':
     default:
       return 'system';
@@ -115,6 +119,22 @@ function eventCopy(api: ApiNotification): {
         title: actorName || api.title || 'Connection',
         message: 'accepted your connection request',
       };
+    case 'post_liked':
+      return {
+        title: actorName || api.title || 'Someone',
+        message: 'liked your post',
+      };
+    case 'post_commented': {
+      const preview =
+        typeof params.commentPreview === 'string' && params.commentPreview.trim()
+          ? params.commentPreview.trim()
+          : undefined;
+      return {
+        title: actorName || api.title || 'Someone',
+        message: 'commented on your post',
+        context: preview,
+      };
+    }
     case 'engagement_status':
     case 'work_request_event': {
       const body = api.body.trim();

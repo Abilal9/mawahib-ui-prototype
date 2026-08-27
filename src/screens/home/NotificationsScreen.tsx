@@ -262,6 +262,25 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     }
 
     if (
+      apiType === 'post_liked' ||
+      apiType === 'post_commented' ||
+      deepScreen === 'post' ||
+      deepScreen === 'PostDetail'
+    ) {
+      const postId =
+        (typeof params.postId === 'string' && params.postId) || item.postId;
+      if (postId) {
+        navigation.navigate('PostDetail', { postId });
+      } else {
+        Alert.alert(
+          'Post unavailable',
+          'This post is no longer available.',
+        );
+      }
+      return;
+    }
+
+    if (
       apiType === 'work_request_event' ||
       deepScreen === 'work_request' ||
       deepScreen === 'WorkRequestDetail'
@@ -311,6 +330,11 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
       case 'comment':
         if (item.postId) {
           navigation.navigate('PostDetail', { postId: item.postId });
+        } else {
+          Alert.alert(
+            'Post unavailable',
+            'This post is no longer available.',
+          );
         }
         break;
       default:

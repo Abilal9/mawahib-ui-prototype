@@ -6,7 +6,9 @@ export type ApiNotificationType =
   | 'message_received'
   | 'engagement_status'
   | 'work_request_event'
-  | 'system';
+  | 'system'
+  | 'post_liked'
+  | 'post_commented';
 
 export interface NotificationActor {
   id: string;

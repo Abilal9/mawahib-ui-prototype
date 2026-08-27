@@ -21,45 +21,21 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
+import { useConnections } from '../../context/ConnectionsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
 import MoneyAmount from '../../components/ui/MoneyAmount';
+import PostLikesModal from '../../components/ui/PostLikesModal';
 import { stripCurrencyCodeTokens } from '../../utils/money';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
-import { Post, Job, Story, Service, Talent } from '../../data/types';
+import { Post, Job, Service, Talent } from '../../data/types';
 import { toImageSource } from '../../utils/image';
 
 const REFRESH_DELAY_MS = 450;
 
 function imageSource(src: string | number) {
   return toImageSource(src);
-}
-
-function StoryItem({
-  story,
-  onPress,
-}: {
-  story: Story;
-  onPress: () => void;
-}) {
-  const isOwn = story.isOwn;
-
-  return (
-    <TouchableOpacity style={styles.storyItem} onPress={onPress} activeOpacity={0.8}>
-      <View style={[styles.storyCard, !story.seen && !isOwn && styles.storyCardActive]}>
-        <UserAvatar uri={story.user.avatar} fill style={styles.storyImage} />
-        {isOwn && (
-          <View style={styles.storyAddButton}>
-            <Ionicons name="add" size={16} color={colors.white} />
-          </View>
-        )}
-      </View>
-      <Text style={styles.storyName} numberOfLines={1}>
-        {isOwn ? 'Your story' : story.user.name.split(' ')[0]}
-      </Text>
-    </TouchableOpacity>
-  );
 }
 
 function FeedPostCard({
@@ -70,6 +46,9 @@ function FeedPostCard({
   onShare,
   onBookmark,
   onAuthorPress,
+  onConnect,
+  onAccept,
+  onPressLikes,
 }: {
   post: Post;
   onPress: () => void;
@@ -78,40 +57,69 @@ function FeedPostCard({
   onShare: () => void;
   onBookmark: () => void;
   onAuthorPress: () => void;
+  onConnect?: () => void;
+  onAccept?: () => void;
+  onPressLikes?: () => void;
 }) {
   const truncated =
     post.caption.length > 120 ? `${post.caption.slice(0, 120)}...` : post.caption;
+  const isDiscovery = post.feedSource === 'discovery';
+  const rel = post.relationship?.status;
+  const showConnect = isDiscovery && rel === 'none';
+  const showRequested = isDiscovery && rel === 'outgoing';
+  const showAccept = isDiscovery && rel === 'incoming';
 
   return (
     <TouchableOpacity style={styles.feedCard} onPress={onPress} activeOpacity={0.95}>
-      <TouchableOpacity
-        style={styles.feedHeader}
-        onPress={onAuthorPress}
-        activeOpacity={0.85}
-      >
-        <UserAvatar
-          uri={post.author.avatar}
-          size={40}
-          style={styles.feedAvatar}
-        />
-        <View style={styles.feedAuthor}>
-          <View style={styles.feedAuthorRow}>
-            <Text style={styles.feedAuthorName}>{post.author.name}</Text>
-            {post.author.isVerified && (
-              <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
-            )}
+      <View style={styles.feedHeader}>
+        <TouchableOpacity
+          style={styles.feedHeaderMain}
+          onPress={onAuthorPress}
+          activeOpacity={0.85}
+        >
+          <UserAvatar
+            uri={post.author.avatar}
+            size={40}
+            style={styles.feedAvatar}
+          />
+          <View style={styles.feedAuthor}>
+            <View style={styles.feedAuthorRow}>
+              <Text style={styles.feedAuthorName}>{post.author.name}</Text>
+              {post.author.isVerified && (
+                <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+              )}
+            </View>
+            {post.role ? <Text style={styles.feedRole}>{post.role}</Text> : null}
+            {isDiscovery ? (
+              <Text style={styles.discoveryLabel}>Discovery</Text>
+            ) : null}
           </View>
-          {post.role && <Text style={styles.feedRole}>{post.role}</Text>}
-        </View>
-        <Text style={styles.feedTime}>{post.timeAgo ?? '2h'}</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.feedCaption}>
-        {truncated}
-        {post.caption.length > 120 && (
-          <Text style={styles.seeMore}> See more</Text>
+        </TouchableOpacity>
+        {showConnect ? (
+          <TouchableOpacity style={styles.connectBtn} onPress={onConnect} hitSlop={8}>
+            <Text style={styles.connectBtnText}>Connect</Text>
+          </TouchableOpacity>
+        ) : showRequested ? (
+          <View style={styles.connectBtnMuted}>
+            <Text style={styles.connectBtnMutedText}>Requested</Text>
+          </View>
+        ) : showAccept ? (
+          <TouchableOpacity style={styles.connectBtn} onPress={onAccept} hitSlop={8}>
+            <Text style={styles.connectBtnText}>Accept</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.feedTime}>{post.timeAgo ?? ''}</Text>
         )}
-      </Text>
+      </View>
+
+      {post.caption ? (
+        <Text style={styles.feedCaption}>
+          {truncated}
+          {post.caption.length > 120 && (
+            <Text style={styles.seeMore}> See more</Text>
+          )}
+        </Text>
+      ) : null}
 
       {post.images[0] ? (
         <Image
@@ -122,18 +130,22 @@ function FeedPostCard({
       ) : null}
 
       <View style={styles.feedActions}>
-        <TouchableOpacity
-          style={styles.feedAction}
-          onPress={onLike}
-          hitSlop={8}
-        >
-          <Ionicons
-            name={post.isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-            size={20}
-            color={post.isLiked ? colors.primary : colors.textTertiary}
-          />
-          <Text style={styles.feedActionCount}>{post.likes}</Text>
-        </TouchableOpacity>
+        <View style={styles.feedAction}>
+          <TouchableOpacity onPress={onLike} hitSlop={8}>
+            <Ionicons
+              name={post.isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
+              size={20}
+              color={post.isLiked ? colors.primary : colors.textTertiary}
+            />
+          </TouchableOpacity>
+          {post.likes > 0 && onPressLikes ? (
+            <TouchableOpacity onPress={onPressLikes} hitSlop={8}>
+              <Text style={styles.feedActionCount}>{post.likes}</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.feedActionCount}>{post.likes}</Text>
+          )}
+        </View>
         <TouchableOpacity
           style={styles.feedAction}
           onPress={onComment}
@@ -268,11 +280,13 @@ function ServiceMatchCard({
           <Text style={styles.jobTitle} numberOfLines={1}>
             {service.title}
           </Text>
-          <View style={styles.ratingInline}>
-            <Ionicons name="star" size={12} color={colors.warning} />
-            <Text style={styles.ratingInlineText}>{service.rating.toFixed(1)}</Text>
-            <Text style={styles.ratingCountText}>({service.reviewCount})</Text>
-          </View>
+          {(service.reviewCount ?? 0) > 0 ? (
+            <View style={styles.ratingInline}>
+              <Ionicons name="star" size={12} color={colors.warning} />
+              <Text style={styles.ratingInlineText}>{service.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingCountText}>({service.reviewCount})</Text>
+            </View>
+          ) : null}
           <Text style={styles.jobCompany} numberOfLines={1}>
             {service.provider.name}
           </Text>
@@ -326,11 +340,13 @@ function TalentMatchCard({
           <Text style={styles.jobCompany} numberOfLines={1}>
             {talent.user.title ?? talent.category}
           </Text>
-          <View style={styles.ratingInline}>
-            <Ionicons name="star" size={12} color={colors.warning} />
-            <Text style={styles.ratingInlineText}>{talent.rating.toFixed(1)}</Text>
-            <Text style={styles.ratingCountText}>({talent.reviewCount ?? 0})</Text>
-          </View>
+          {(talent.reviewCount ?? 0) > 0 ? (
+            <View style={styles.ratingInline}>
+              <Ionicons name="star" size={12} color={colors.warning} />
+              <Text style={styles.ratingInlineText}>{talent.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingCountText}>({talent.reviewCount ?? 0})</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -353,34 +369,58 @@ function TalentMatchCard({
 export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const { open: openSidebar } = useSidebar();
   const { user: me } = useMyProfile();
-  const { posts } = usePosts();
+  const {
+    posts: feedPosts,
+    loading: feedLoading,
+    error: feedError,
+    hasMore,
+    loadingMore,
+    refresh: refreshFeed,
+    loadMore,
+    toggleLike,
+    toggleSave,
+    patchLocalPost,
+  } = usePosts();
+  const { requestConnect, acceptRequest, refresh: refreshConnections } =
+    useConnections();
   const { unreadCount } = useNotifications();
-  const stories = catalogService.listStories();
-  const [feedPosts, setFeedPosts] = useState(posts);
   const [jobList, setJobList] = useState<Job[]>([]);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [serviceList, setServiceList] = useState(() => catalogService.listServices());
   const [talentList, setTalentList] = useState(() => catalogService.listTalents());
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    setFeedPosts(posts);
-  }, [posts]);
+  const [likesPostId, setLikesPostId] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      try {
-        const [jobs, catalog] = await Promise.all([
-          jobService.refresh(),
-          catalogService.refresh(),
-        ]);
-        setJobList(jobs);
+      const jobsResult = await jobService.refresh().then(
+        (jobs) => ({ ok: true as const, jobs }),
+        (e) => ({
+          ok: false as const,
+          message: e instanceof Error ? e.message : 'Failed to load jobs',
+        }),
+      );
+      const catalogResult = await catalogService.refresh().then(
+        (catalog) => ({ ok: true as const, catalog }),
+        (e) => ({
+          ok: false as const,
+          message:
+            e instanceof Error ? e.message : 'Failed to load explore catalog',
+        }),
+      );
+
+      if (jobsResult.ok) {
+        setJobList(jobsResult.jobs);
         setJobsError(null);
-        setServiceList(catalog.services);
-        setTalentList(catalog.talents);
-      } catch (e) {
-        setJobsError(e instanceof Error ? e.message : 'Failed to load explore data');
+      } else {
+        setJobsError(jobsResult.message);
         setJobList([]);
+      }
+
+      if (catalogResult.ok) {
+        setServiceList(catalogResult.catalog.services);
+        setTalentList(catalogResult.catalog.talents);
+      } else {
         setServiceList([]);
         setTalentList([]);
       }
@@ -390,39 +430,34 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
   const onRefresh = async () => {
     setRefreshing(true);
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS));
-    setFeedPosts(posts.map((p) => ({ ...p })));
-    try {
-      const [jobs, catalog] = await Promise.all([
-        jobService.refresh(),
-        catalogService.refresh(),
-      ]);
-      setJobList(jobs);
-      setJobsError(null);
-      setServiceList(catalog.services);
-      setTalentList(catalog.talents);
-    } catch (e) {
-      setJobsError(e instanceof Error ? e.message : 'Failed to load explore data');
-      setJobList([]);
-      setServiceList([]);
-      setTalentList([]);
-    }
+    await Promise.all([
+      refreshFeed(),
+      refreshConnections().catch(() => undefined),
+      (async () => {
+        const jobsResult = await jobService.refresh().then(
+          (jobs) => ({ ok: true as const, jobs }),
+          (e) => ({
+            ok: false as const,
+            message: e instanceof Error ? e.message : 'Failed to load jobs',
+          }),
+        );
+        const catalogResult = await catalogService.refresh().then(
+          (catalog) => ({ ok: true as const, catalog }),
+          () => ({ ok: false as const }),
+        );
+        if (jobsResult.ok) {
+          setJobList(jobsResult.jobs);
+          setJobsError(null);
+        } else {
+          setJobsError(jobsResult.message);
+        }
+        if (catalogResult.ok) {
+          setServiceList(catalogResult.catalog.services);
+          setTalentList(catalogResult.catalog.talents);
+        }
+      })(),
+    ]);
     setRefreshing(false);
-  };
-
-  const toggleLike = (postId: string) => {
-    setFeedPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId
-          ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
-          : p
-      )
-    );
-  };
-
-  const toggleBookmark = (postId: string) => {
-    setFeedPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, isSaved: !p.isSaved } : p))
-    );
   };
 
   const sharePost = async (post: Post) => {
@@ -432,7 +467,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
       await Share.share(
         Platform.OS === 'ios'
           ? { message, url }
-          : { message: `${message}\n${url}`, title: 'Mawahib' }
+          : { message: `${message}\n${url}`, title: 'Mawahib' },
       );
     } catch {
       Alert.alert('Share unavailable', `${message}\n${url}`);
@@ -452,11 +487,50 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
       key={post.id}
       post={post}
       onPress={() => openPostDetail(post.id)}
-      onLike={() => toggleLike(post.id)}
+      onLike={() => {
+        void toggleLike(post.id);
+      }}
       onComment={() => openPostDetail(post.id, true)}
       onShare={() => sharePost(post)}
-      onBookmark={() => toggleBookmark(post.id)}
+      onBookmark={() => {
+        void toggleSave(post.id);
+      }}
       onAuthorPress={() => openUserProfile(navigation, post.author.id, me.id)}
+      onConnect={() => {
+        const previous = post.relationship;
+        patchLocalPost(post.id, {
+          relationship: {
+            status: 'outgoing',
+            connectionRequestId: previous?.connectionRequestId ?? null,
+          },
+        });
+        void requestConnect(post.author.id).then((requestId) => {
+          if (requestId) {
+            patchLocalPost(post.id, {
+              relationship: {
+                status: 'outgoing',
+                connectionRequestId: requestId,
+              },
+            });
+            return;
+          }
+          patchLocalPost(post.id, { relationship: previous });
+        });
+      }}
+      onAccept={() => {
+        acceptRequest(
+          post.author.id,
+          post.relationship?.connectionRequestId ?? undefined,
+        );
+        patchLocalPost(post.id, {
+          feedSource: 'connection',
+          relationship: {
+            status: 'connected',
+            connectionRequestId: null,
+          },
+        });
+      }}
+      onPressLikes={() => setLikesPostId(post.id)}
     />
   );
 
@@ -480,23 +554,49 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
             colors={[colors.primary]}
           />
         }
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const nearBottom =
+            layoutMeasurement.height + contentOffset.y >= contentSize.height - 240;
+          if (nearBottom && hasMore && !loadingMore) {
+            void loadMore();
+          }
+        }}
+        scrollEventThrottle={400}
       >
-        <FlatList
-          data={stories}
-          horizontal
-          scrollEnabled
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.storiesList}
-          renderItem={({ item }) => (
-            <StoryItem
-              story={item}
-              onPress={() =>
-                navigation.navigate('StoryViewer', { storyId: item.id })
-              }
-            />
-          )}
-        />
+        {feedLoading && feedPosts.length === 0 ? (
+          <View style={{ paddingHorizontal: spacing.screen, paddingVertical: spacing.lg }}>
+            <Text style={{ ...typography.bodySmall, color: colors.textSecondary }}>
+              Loading feed…
+            </Text>
+          </View>
+        ) : null}
+
+        {feedError && feedPosts.length === 0 ? (
+          <View style={{ paddingHorizontal: spacing.screen, marginBottom: spacing.lg }}>
+            <Text style={{ ...typography.bodySmall, color: colors.error }}>{feedError}</Text>
+            <TouchableOpacity onPress={() => void refreshFeed()}>
+              <Text
+                style={{
+                  ...typography.bodySmall,
+                  color: colors.primary,
+                  fontWeight: '600',
+                  marginTop: spacing.xs,
+                }}
+              >
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {!feedLoading && !feedError && feedPosts.length === 0 ? (
+          <View style={{ paddingHorizontal: spacing.screen, marginBottom: spacing.lg }}>
+            <Text style={{ ...typography.bodySmall, color: colors.textSecondary }}>
+              No posts yet. Follow people and share your work to fill Home.
+            </Text>
+          </View>
+        ) : null}
 
         {feedPosts[0] ? renderFeedPost(feedPosts[0]) : null}
 
@@ -622,7 +722,21 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
 
         {/* Any remaining posts after the suggested carousels */}
         {feedPosts.slice(3).map((post) => renderFeedPost(post))}
+        {loadingMore ? (
+          <View style={{ padding: spacing.lg, alignItems: 'center' }}>
+            <Text style={{ ...typography.bodySmall, color: colors.textSecondary }}>
+              Loading more…
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
+
+      <PostLikesModal
+        visible={Boolean(likesPostId)}
+        postId={likesPostId}
+        onClose={() => setLikesPostId(null)}
+        onOpenProfile={(userId) => openUserProfile(navigation, userId, me.id)}
+      />
     </ScreenContainer>
   );
 }
@@ -681,11 +795,45 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.screen,
   },
+  feedHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   feedAvatar: { width: 40, height: 40, borderRadius: radius.avatar },
   feedAuthor: { flex: 1 },
   feedAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   feedAuthorName: { ...typography.label, color: colors.text },
   feedRole: { ...typography.caption, color: colors.textSecondary },
+  discoveryLabel: {
+    ...typography.caption,
+    color: colors.primary,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  connectBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  connectBtnText: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: '700',
+  },
+  connectBtnMuted: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.button,
+    backgroundColor: colors.borderLight,
+  },
+  connectBtnMutedText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
   feedTime: { ...typography.caption, color: colors.textSecondary },
   feedCaption: {
     ...typography.bodySmall,

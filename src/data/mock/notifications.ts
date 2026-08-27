@@ -6,6 +6,7 @@ export type NotificationTab =
   | 'Jobs'
   | 'Messages'
   | 'Connections'
+  | 'Posts'
   | 'Platform Updates';
 
 export const NOTIFICATION_TABS: NotificationTab[] = [
@@ -13,6 +14,7 @@ export const NOTIFICATION_TABS: NotificationTab[] = [
   'Jobs',
   'Messages',
   'Connections',
+  'Posts',
   'Platform Updates',
 ];
 
@@ -24,10 +26,10 @@ export function tabForNotification(n: Notification): Exclude<NotificationTab, 'A
       return 'Messages';
     case 'follow':
       return 'Connections';
-    case 'system':
-      return 'Platform Updates';
     case 'like':
     case 'comment':
+      return 'Posts';
+    case 'system':
     default:
       return 'Platform Updates';
   }
