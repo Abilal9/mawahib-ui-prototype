@@ -19,6 +19,7 @@ import { ScreenProps } from '../../navigation/types';
 import { usePosts } from '../../context/PostsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
+import { MAX_POST_IMAGES } from '../../constants/posts';
 
 type LocalMedia = { uri: string; mediaAssetId: string };
 
@@ -35,15 +36,24 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
     (caption.trim().length > 0 || media.length > 0) && !uploading && !posting;
 
   const handleAddMedia = async () => {
-    if (media.length >= 10) return;
+    if (media.length >= MAX_POST_IMAGES) {
+      Alert.alert('Image limit', `You can add up to ${MAX_POST_IMAGES} images per post.`);
+      return;
+    }
     setUploading(true);
     try {
       const uploaded = await pickAndUploadImage('post');
       if (!uploaded) return;
-      setMedia((prev) => [
-        ...prev,
-        { uri: uploaded.uri, mediaAssetId: uploaded.mediaAssetId },
-      ]);
+      setMedia((prev) => {
+        if (prev.length >= MAX_POST_IMAGES) {
+          Alert.alert(
+            'Image limit',
+            `You can add up to ${MAX_POST_IMAGES} images per post.`,
+          );
+          return prev;
+        }
+        return [...prev, { uri: uploaded.uri, mediaAssetId: uploaded.mediaAssetId }];
+      });
     } catch (e) {
       Alert.alert(
         'Upload failed',
@@ -103,36 +113,43 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
           maxLength={2200}
         />
 
-        <View style={styles.mediaGrid}>
-          {media.map((item) => (
-            <View key={item.mediaAssetId} style={styles.mediaSlot}>
-              <Image source={{ uri: item.uri }} style={styles.mediaImage} contentFit="cover" />
+        <View style={styles.mediaSection}>
+          <View style={styles.counterChip} pointerEvents="none">
+            <Text style={styles.counterText}>
+              {media.length}/{MAX_POST_IMAGES}
+            </Text>
+          </View>
+          <View style={styles.mediaGrid}>
+            {media.map((item) => (
+              <View key={item.mediaAssetId} style={styles.mediaSlot}>
+                <Image source={{ uri: item.uri }} style={styles.mediaImage} contentFit="cover" />
+                <TouchableOpacity
+                  style={styles.removeMedia}
+                  onPress={() =>
+                    setMedia((prev) =>
+                      prev.filter((m) => m.mediaAssetId !== item.mediaAssetId),
+                    )
+                  }
+                >
+                  <Ionicons name="close-circle" size={22} color={colors.white} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {media.length < MAX_POST_IMAGES ? (
               <TouchableOpacity
-                style={styles.removeMedia}
-                onPress={() =>
-                  setMedia((prev) =>
-                    prev.filter((m) => m.mediaAssetId !== item.mediaAssetId),
-                  )
-                }
+                style={styles.addMedia}
+                onPress={() => void handleAddMedia()}
+                activeOpacity={0.8}
+                disabled={uploading}
               >
-                <Ionicons name="close-circle" size={22} color={colors.white} />
+                {uploading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Ionicons name="add" size={32} color={colors.primary} />
+                )}
               </TouchableOpacity>
-            </View>
-          ))}
-          {media.length < 10 ? (
-            <TouchableOpacity
-              style={styles.addMedia}
-              onPress={() => void handleAddMedia()}
-              activeOpacity={0.8}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color={colors.primary} />
-              ) : (
-                <Ionicons name="add" size={32} color={colors.primary} />
-              )}
-            </TouchableOpacity>
-          ) : null}
+            ) : null}
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -158,7 +175,31 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: 'top',
   },
-  mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  mediaSection: {
+    position: 'relative',
+    minHeight: 100,
+  },
+  counterChip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 2,
+    backgroundColor: 'rgba(14, 36, 58, 0.72)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  counterText: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: '600',
+  },
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingTop: 28,
+  },
   mediaSlot: {
     width: 100,
     height: 100,

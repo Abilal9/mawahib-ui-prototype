@@ -51,12 +51,9 @@ const BASE_ITEMS: MenuItem[] = [
   },
 ];
 
-/** Soft account-type emphasis: business leads with Post Job; talent with Post. */
+/** Soft account-type emphasis: business fans Job leftmost; talent leads with Post. */
 function menuItemsForAccount(accountType: 'talent' | 'business' | null): MenuItem[] {
-  const jobLabel = accountType === 'business' ? 'Post Job' : 'Job';
-  const items = BASE_ITEMS.map((item) =>
-    item.id === 'job' ? { ...item, label: jobLabel } : item
-  );
+  const items = BASE_ITEMS;
   if (accountType === 'business') {
     const job = items.find((i) => i.id === 'job')!;
     const rest = items.filter((i) => i.id !== 'job');

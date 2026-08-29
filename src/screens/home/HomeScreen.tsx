@@ -26,6 +26,7 @@ import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import PostLikesModal from '../../components/ui/PostLikesModal';
+import PostMediaPreview from '../../components/ui/PostMediaPreview';
 import { stripCurrencyCodeTokens } from '../../utils/money';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
@@ -121,13 +122,7 @@ function FeedPostCard({
         </Text>
       ) : null}
 
-      {post.images[0] ? (
-        <Image
-          source={{ uri: post.images[0] }}
-          style={styles.feedImage}
-          contentFit="cover"
-        />
-      ) : null}
+      <PostMediaPreview images={post.images} onPress={onPress} />
 
       <View style={styles.feedActions}>
         <View style={styles.feedAction}>
@@ -842,12 +837,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
   },
   seeMore: { color: colors.primary },
-  feedImage: {
-    width: '100%',
-    height: 220,
-    marginTop: spacing.md,
-    backgroundColor: colors.borderLight,
-  },
   feedActions: {
     flexDirection: 'row',
     alignItems: 'center',

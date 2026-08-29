@@ -46,4 +46,64 @@ assert.equal(relationship(viewer, 'D', connected, pending).status, 'none');
 // Pending does not flip source to connection
 assert.equal(mapFeedSource(viewer, 'C', connected, pending), 'discovery');
 
+/** Mirrors src/utils/postMediaPreview.ts — Home 1 primary + ≤3 thumbs. */
+const FEED_MEDIA_PREVIEW_MAX = 4;
+function getPostMediaPreviewLayout(images) {
+  const urls = images.filter((u) => Boolean(u && String(u).trim()));
+  const total = urls.length;
+  return {
+    primary: urls[0] ?? null,
+    thumbnails: urls.slice(1, FEED_MEDIA_PREVIEW_MAX),
+    remainingCount: Math.max(total - FEED_MEDIA_PREVIEW_MAX, 0),
+    total,
+  };
+}
+
+function assertPreview(total, expectedVisible, expectedRemaining) {
+  const images = Array.from({ length: total }, (_, i) => `https://img/${i}`);
+  const layout = getPostMediaPreviewLayout(images);
+  const visible =
+    (layout.primary ? 1 : 0) + layout.thumbnails.length;
+  assert.equal(visible, expectedVisible, `total=${total} visible`);
+  assert.equal(layout.remainingCount, expectedRemaining, `total=${total} remaining`);
+  if (total === 0) assert.equal(layout.primary, null);
+  if (total >= 1) assert.equal(layout.primary, images[0]);
+  if (total >= 2) assert.equal(layout.thumbnails[0], images[1]);
+}
+
+assertPreview(0, 0, 0);
+assertPreview(1, 1, 0);
+assertPreview(2, 2, 0);
+assertPreview(3, 3, 0);
+assertPreview(4, 4, 0);
+assertPreview(5, 4, 1);
+assertPreview(6, 4, 2);
+assertPreview(10, 4, 6);
+
+/** Post create image limit (mirrors src/constants/posts.ts). */
+const MAX_POST_IMAGES = 4;
+assert.equal(MAX_POST_IMAGES, 4);
+assert.ok(MAX_POST_IMAGES <= FEED_MEDIA_PREVIEW_MAX || FEED_MEDIA_PREVIEW_MAX === 4);
+
+function canAttachAnother(selectedCount) {
+  return selectedCount < MAX_POST_IMAGES;
+}
+assert.equal(canAttachAnother(0), true);
+assert.equal(canAttachAnother(3), true);
+assert.equal(canAttachAnother(4), false);
+assert.equal(canAttachAnother(5), false);
+
+function counterLabel(n) {
+  return `${n}/${MAX_POST_IMAGES}`;
+}
+assert.equal(counterLabel(0), '0/4');
+assert.equal(counterLabel(1), '1/4');
+assert.equal(counterLabel(4), '4/4');
+assert.equal(counterLabel(3), '3/4'); // after remove from 4
+
+/** Business create fan menu labels (mirrors CreateActionMenu BASE_ITEMS). */
+const businessCreateLabels = ['Job', 'Story', 'Post'];
+assert.deepEqual(businessCreateLabels, ['Job', 'Story', 'Post']);
+assert.ok(!businessCreateLabels.includes('Post Job'));
+
 console.log('posts-feed-selftest: ok');

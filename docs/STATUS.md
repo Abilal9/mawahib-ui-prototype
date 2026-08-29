@@ -45,7 +45,7 @@ Canonical behavior: [`AUTH.md`](./AUTH.md).
 | Jobs inbox / work requests / listings | Nest |
 | Messaging / connections / notifications | Nest |
 | Media uploads | Nest upload-sessions + Supabase Storage |
-| **Home Feed / Posts / Comments / Likes / Saves** | **Nest-backed** (`PostsContext` → `postService` → `postsApi` → `/feed`, `/posts`, likes list, comments). Hybrid self/connection/discovery. Comment Report UI is deferred (no report API). |
+| **Home Feed / Posts / Comments / Likes / Saves** | **Nest-backed** (`PostsContext` → `postService` → `postsApi` → `/feed`, `/posts`, likes list, comments). Hybrid self/connection/discovery. **Posts max 4 images** (`MAX_POST_IMAGES`) — Post-specific only; Portfolio/Services/Messages keep their own limits. Comment Report UI is deferred (no report API). |
 | Social notifications | Nest `post_liked` / `post_commented` mapped in Notifications UI; Expo tap-nav E2E pending |
 | Stories | Deferred — Home Stories row **hidden** (style stub only; not rendered) |
 | Payments UI shells | Placeholder; no Nest payments |
