@@ -83,10 +83,12 @@ export default function ServicesScreen({ route, navigation }: Props) {
                     })}
                   </Text>
                 </View>
-                <View style={styles.rating}>
-                  <Ionicons name="star" size={14} color={colors.warning} />
-                  <Text style={styles.ratingText}>{item.rating} ({item.reviewCount})</Text>
-                </View>
+                {(item.reviewCount ?? 0) > 0 ? (
+                  <View style={styles.rating}>
+                    <Ionicons name="star" size={14} color={colors.warning} />
+                    <Text style={styles.ratingText}>{item.rating} ({item.reviewCount})</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </TouchableOpacity>

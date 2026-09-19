@@ -32,6 +32,7 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { TabScreenProps } from '../../navigation/types';
 import { Post, Job, Service, Talent } from '../../data/types';
 import { toImageSource } from '../../utils/image';
+import { displayProfileTitle } from '../../constants/profile';
 
 const REFRESH_DELAY_MS = 450;
 
@@ -333,7 +334,7 @@ function TalentMatchCard({
             ) : null}
           </View>
           <Text style={styles.jobCompany} numberOfLines={1}>
-            {talent.user.title ?? talent.category}
+            {displayProfileTitle(talent.user.title)}
           </Text>
           {(talent.reviewCount ?? 0) > 0 ? (
             <View style={styles.ratingInline}>

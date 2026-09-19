@@ -6,6 +6,7 @@ import { toImageSource } from '../../utils/image';
 import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { Post } from '../../data/types';
+import { displayProfileTitle } from '../../constants/profile';
 
 type ProfileFeedPostProps = {
   post: Post;
@@ -33,7 +34,8 @@ export default function ProfileFeedPost({
         <View style={{ flex: 1 }}>
           <Text style={styles.feedName}>{post.author.name}</Text>
           <Text style={styles.feedMeta}>
-            {post.role ?? post.author.title ?? 'Creator'} · {post.timeAgo ?? '2h'}
+            {post.role ?? displayProfileTitle(post.author.title)} ·{' '}
+            {post.timeAgo ?? '2h'}
           </Text>
         </View>
       </TouchableOpacity>

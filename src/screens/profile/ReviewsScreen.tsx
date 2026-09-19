@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,20 +16,39 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ReviewItem } from '../../data/types';
-import { reviewService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { openUserProfile } from '../../utils/openUserProfile';
+import {
+  buildReviewsSummaryFromProfile,
+  hasRealReviews,
+} from '../../utils/profileRating';
 import { ScreenProps } from '../../navigation/types';
 
 type SortKey = 'newest' | 'highest' | 'lowest';
 
+/**
+ * Reviews UI shell — original layout, honest data only.
+ * Full Reviews product (list API + distribution aggregation) remains deferred.
+ * Never loads mockReviewRepository / fake review fixtures.
+ */
 export default function ReviewsScreen({ navigation, route }: ScreenProps<'Reviews'>) {
   const { user: me } = useMyProfile();
-  const bundle = reviewService.getForUser(route.params?.userId);
+  const targetId = route.params?.userId ?? me.id;
+  const isOwn = targetId === me.id;
+  const { user: visitor, loading: visitorLoading } = useVisitorUser(
+    isOwn ? undefined : targetId,
+  );
+  const user = isOwn ? me : visitor;
+
   const [sort, setSort] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [minStars, setMinStars] = useState<number | null>(null);
+
+  const bundle = useMemo(() => buildReviewsSummaryFromProfile(user), [user]);
+  const rated = hasRealReviews(user);
+  const filledStars = rated ? Math.round(bundle.average) : 0;
 
   const reviews = useMemo(() => {
     let list = [...bundle.reviews];
@@ -42,6 +62,32 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
     }
     return list;
   }, [bundle.reviews, minStars, sort]);
+
+  const emptyMessage =
+    bundle.total === 0
+      ? 'No reviews yet. Be the first to review this user after completing eligible work.'
+      : reviews.length === 0 && minStars != null
+        ? 'No reviews match this filter.'
+        : 'Individual reviews aren’t available yet. Summary ratings will list here once the Reviews product ships.';
+
+  if (!isOwn && visitorLoading && !user) {
+    return (
+      <ScreenContainer padded={false} backgroundColor={colors.white}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
+              <Ionicons name="chevron-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Reviews</Text>
+          </View>
+        </View>
+        <View style={styles.loadingBody}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer padded={false} backgroundColor={colors.white}>
@@ -85,24 +131,32 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
                   <Text style={styles.distLabel}>{row.stars}</Text>
                   <Ionicons name="star" size={10} color="#F5A623" />
                   <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { width: `${Math.max(row.percent * 100, 2)}%` }]} />
+                    {row.percent > 0 ? (
+                      <View
+                        style={[styles.barFill, { width: `${row.percent * 100}%` }]}
+                      />
+                    ) : null}
                   </View>
                 </View>
               ))}
             </View>
             <View style={styles.summaryRight}>
-              <Text style={styles.average}>{bundle.average.toFixed(1)}</Text>
+              <Text style={[styles.average, !rated && styles.averageUnrated]}>
+                {bundle.average.toFixed(1)}
+              </Text>
               <View style={styles.summaryStars}>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Ionicons
                     key={i}
-                    name={i < Math.round(bundle.average) ? 'star' : 'star-outline'}
+                    name={i < filledStars ? 'star' : 'star-outline'}
                     size={14}
-                    color={i < Math.round(bundle.average) ? '#F5A623' : colors.border}
+                    color={i < filledStars ? '#F5A623' : colors.border}
                   />
                 ))}
               </View>
-              <Text style={styles.summaryCount}>{bundle.total} Reviews</Text>
+              <Text style={styles.summaryCount}>
+                {bundle.total === 0 ? 'No reviews yet' : `${bundle.total} Reviews`}
+              </Text>
             </View>
           </View>
         }
@@ -112,9 +166,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
             onAuthorPress={() => openUserProfile(navigation, item.authorId, me.id)}
           />
         )}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No reviews match this filter.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.empty}>{emptyMessage}</Text>}
       />
 
       <ActionSheet
@@ -266,6 +318,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.white,
   },
+  loadingBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl,
+  },
   list: {
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xxxl,
@@ -323,6 +381,9 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     fontWeight: '700',
     color: colors.primary,
+  },
+  averageUnrated: {
+    color: colors.textSecondary,
   },
   summaryStars: {
     flexDirection: 'row',
@@ -404,6 +465,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xl,
+    lineHeight: 20,
+    paddingHorizontal: spacing.md,
   },
   sheetBackdrop: {
     flex: 1,

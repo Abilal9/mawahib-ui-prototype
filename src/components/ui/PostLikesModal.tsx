@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import UserAvatar from './UserAvatar';
 import { colors, radius, spacing, typography } from '../../theme';
 import type { User } from '../../data/types';
+import { displayProfileTitle } from '../../constants/profile';
 import { postService } from '../../services/postService';
 
 type Props = {
@@ -137,9 +138,9 @@ export default function PostLikesModal({
                   <UserAvatar uri={item.avatar} size={44} style={styles.avatar} />
                   <View style={styles.meta}>
                     <Text style={styles.name}>{item.name}</Text>
-                    {item.title?.trim() ? (
-                      <Text style={styles.subtitle}>{item.title.trim()}</Text>
-                    ) : null}
+                    <Text style={styles.subtitle}>
+                      {displayProfileTitle(item.title)}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               )}

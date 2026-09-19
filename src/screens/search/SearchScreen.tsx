@@ -32,6 +32,7 @@ import {
   normalizeExploreTab,
 } from '../../utils/explore';
 import { TabScreenProps } from '../../navigation/types';
+import { displayProfileTitle } from '../../constants/profile';
 import {
   Job,
   Service,
@@ -390,7 +391,7 @@ function TalentCard({
               <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
             ) : null}
           </View>
-          <Text style={styles.talentTitle}>{talent.user.title ?? talent.category}</Text>
+          <Text style={styles.talentTitle}>{displayProfileTitle(talent.user.title)}</Text>
           <View style={styles.metaRow}>
             <Ionicons name="location-outline" size={14} color={colors.text} />
             <Text style={styles.metaText}>{talent.user.location}</Text>
@@ -417,11 +418,13 @@ function TalentCard({
               </Text>
             </View>
           ) : null}
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={14} color={colors.warning} />
-            <Text style={styles.ratingValue}>{talent.rating.toFixed(1)}</Text>
-            <Text style={styles.ratingCount}>({talent.reviewCount ?? 0})</Text>
-          </View>
+          {(talent.reviewCount ?? 0) > 0 ? (
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={14} color={colors.warning} />
+              <Text style={styles.ratingValue}>{talent.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingCount}>({talent.reviewCount ?? 0})</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.talentActions}>
           <TouchableOpacity
@@ -470,11 +473,13 @@ function ServiceCard({
           <Text style={styles.serviceTitle} numberOfLines={1}>
             {service.title}
           </Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={14} color={colors.warning} />
-            <Text style={styles.ratingValue}>{service.rating.toFixed(1)}</Text>
-            <Text style={styles.ratingCount}>({service.reviewCount})</Text>
-          </View>
+          {(service.reviewCount ?? 0) > 0 ? (
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={14} color={colors.warning} />
+              <Text style={styles.ratingValue}>{service.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingCount}>({service.reviewCount})</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.serviceDesc} numberOfLines={2}>
           {service.description}

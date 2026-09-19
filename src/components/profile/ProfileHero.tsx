@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, typography } from '../../theme';
 import { User } from '../../data/types';
+import { displayProfileTitle } from '../../constants/profile';
+import { formatRatingValue, hasRealReviews } from '../../utils/profileRating';
 interface ProfileHeroProps {
   user: User;
   title: string;
@@ -30,7 +32,8 @@ export default function ProfileHero({
   onReviewsPress,
 }: ProfileHeroProps) {
   const insets = useSafeAreaInsets();
-  const rating = user.rating ?? 5;
+  const showRating = hasRealReviews(user);
+  const rating = user.rating ?? 0;
   const reviews = user.reviewCount ?? 0;
   const connections = connectionsLabel ?? `${user.followers ?? 0} connections`;
 
@@ -67,7 +70,7 @@ export default function ProfileHero({
             <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
           ) : null}
         </View>
-        <Text style={styles.role}>{user.title ?? 'Creative Professional'}</Text>
+        <Text style={styles.role}>{displayProfileTitle(user.title)}</Text>
         {user.location ? (
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
@@ -77,18 +80,22 @@ export default function ProfileHero({
 
         <View style={styles.metaBlock}>
           <TouchableOpacity style={styles.ratingRow} onPress={onReviewsPress} activeOpacity={0.8}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Ionicons
-                key={i}
-                name={i < Math.round(rating) ? 'star' : 'star-outline'}
-                size={14}
-                color="#F5A623"
-              />
-            ))}
-            <Text style={styles.ratingText}>
-              {rating.toFixed(rating % 1 === 0 ? 0 : 1)}{' '}
-            </Text>
-            <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+            {showRating ? (
+              <>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Ionicons
+                    key={i}
+                    name={i < Math.round(rating) ? 'star' : 'star-outline'}
+                    size={14}
+                    color="#F5A623"
+                  />
+                ))}
+                <Text style={styles.ratingText}>{formatRatingValue(rating)} </Text>
+                <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+              </>
+            ) : (
+              <Text style={styles.reviewsLink}>No reviews yet</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity onPress={onConnectionsPress} activeOpacity={0.8}>
             <Text style={styles.connectionsLink}>{connections}</Text>

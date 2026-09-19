@@ -20,8 +20,8 @@ export const currentUser: User = {
   posts: 156,
   isVerified: true,
   title: 'Event Photographer',
-  rating: 4,
-  reviewCount: 72,
+  rating: 0,
+  reviewCount: 0,
 };
 
 /** Alias — same person as currentUser (no Layla/Ahmad split). */

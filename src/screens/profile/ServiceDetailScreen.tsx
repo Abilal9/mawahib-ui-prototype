@@ -292,10 +292,16 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                 }
                 activeOpacity={0.8}
               >
-                <Ionicons name="star" size={14} color={colors.warning} />
-                <Text style={styles.rating}>
-                  {service.rating} ({service.reviewCount} reviews)
-                </Text>
+                {(service.reviewCount ?? 0) > 0 ? (
+                  <>
+                    <Ionicons name="star" size={14} color={colors.warning} />
+                    <Text style={styles.rating}>
+                      {service.rating} ({service.reviewCount} reviews)
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.rating}>No reviews yet</Text>
+                )}
               </TouchableOpacity>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={{ marginLeft: 'auto' }} />

@@ -20,6 +20,8 @@ import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useAuth } from '../../context/AuthContext';
 import { RootStackParamList } from '../../navigation/types';
+import { displayProfileTitle } from '../../constants/profile';
+import { formatRatingValue, hasRealReviews } from '../../utils/profileRating';
 const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.82;
 
 const PRIMARY_LINKS: {
@@ -109,8 +111,9 @@ export default function AppSidebar() {
     })();
   };
 
-  const rating = user.rating ?? 5;
-  const reviews = user.reviewCount ?? 106;
+  const showRating = hasRealReviews(user);
+  const rating = user.rating ?? 0;
+  const reviews = user.reviewCount ?? 0;
 
   return (
     <Modal visible={isOpen} transparent animationType="none" onRequestClose={close}>
@@ -148,18 +151,22 @@ export default function AppSidebar() {
                   ) : null}
                 </View>
                 <Text style={styles.role} numberOfLines={1}>
-                  {user.title ?? 'Event Photographer'}
+                  {displayProfileTitle(user.title)}
                 </Text>
                 <TouchableOpacity
                   style={styles.ratingRow}
                   onPress={() => handleNavigate('Reviews')}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="star" size={14} color="#F5A623" />
-                  <Text style={styles.ratingValue}>
-                    {rating % 1 === 0 ? rating.toFixed(0) : rating.toFixed(1)}
-                  </Text>
-                  <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+                  {showRating ? (
+                    <>
+                      <Ionicons name="star" size={14} color="#F5A623" />
+                      <Text style={styles.ratingValue}>{formatRatingValue(rating)}</Text>
+                      <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.reviewsLink}>No reviews yet</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
