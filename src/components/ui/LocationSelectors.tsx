@@ -26,6 +26,8 @@ type Props = {
   disabled?: boolean;
   countryLabel?: string;
   locationLabel?: string;
+  /** Tighter vertical gaps for dense forms (e.g. Edit Profile). */
+  compact?: boolean;
 };
 
 export default function LocationSelectors({
@@ -36,6 +38,7 @@ export default function LocationSelectors({
   disabled,
   countryLabel = 'Country',
   locationLabel = 'City / Emirate',
+  compact = false,
 }: Props) {
   const [countryOpen, setCountryOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -59,10 +62,14 @@ export default function LocationSelectors({
   };
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{countryLabel}</Text>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
+      <Text style={[styles.label, compact && styles.labelCompact]}>{countryLabel}</Text>
       <TouchableOpacity
-        style={[styles.selector, disabled && styles.selectorDisabled]}
+        style={[
+          styles.selector,
+          compact && styles.selectorCompact,
+          disabled && styles.selectorDisabled,
+        ]}
         onPress={() => !disabled && setCountryOpen(true)}
         activeOpacity={0.8}
         disabled={disabled}
@@ -78,10 +85,20 @@ export default function LocationSelectors({
         <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <Text style={[styles.label, styles.locationLabel]}>{locationLabel}</Text>
+      <Text
+        style={[
+          styles.label,
+          styles.locationLabel,
+          compact && styles.labelCompact,
+          compact && styles.locationLabelCompact,
+        ]}
+      >
+        {locationLabel}
+      </Text>
       <TouchableOpacity
         style={[
           styles.selector,
+          compact && styles.selectorCompact,
           (disabled || !countryCode) && styles.selectorDisabled,
         ]}
         onPress={() => !disabled && countryCode && setLocationOpen(true)}
@@ -168,13 +185,21 @@ export default function LocationSelectors({
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.lg },
+  wrapCompact: { marginBottom: spacing.sm },
   label: {
     ...typography.label,
     color: colors.text,
     marginBottom: spacing.sm,
   },
+  labelCompact: {
+    marginBottom: spacing.xs,
+    color: colors.textSecondary,
+  },
   locationLabel: {
     marginTop: spacing.md,
+  },
+  locationLabelCompact: {
+    marginTop: spacing.sm,
   },
   selector: {
     flexDirection: 'row',
@@ -186,6 +211,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 48,
     backgroundColor: colors.white,
+  },
+  selectorCompact: {
+    height: 42,
   },
   selectorDisabled: {
     opacity: 0.55,

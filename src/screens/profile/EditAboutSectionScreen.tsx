@@ -8,6 +8,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -45,13 +46,14 @@ export default function EditAboutSectionScreen({
   const [certOrg, setCertOrg] = useState('');
   const [certYear, setCertYear] = useState('');
 
-  const save = () => {
-    switch (section as AboutSectionKey) {
+  const save = async () => {
+    try {
+      switch (section as AboutSectionKey) {
       case 'bio':
-        profile.setBio(bio.trim());
+        await profile.setBio(bio.trim());
         break;
       case 'languages':
-        profile.setLanguages([
+        await profile.setLanguages([
           ...profile.content.languages.filter((l) => l.name !== languageName),
           {
             id: `lang-${Date.now()}`,
@@ -62,7 +64,7 @@ export default function EditAboutSectionScreen({
         ]);
         break;
       case 'talents':
-        profile.setTalents(
+        await profile.setTalents(
           talentsText
             .split(',')
             .map((t) => t.trim())
@@ -70,7 +72,7 @@ export default function EditAboutSectionScreen({
         );
         break;
       case 'education':
-        profile.setEducation([
+        await profile.setEducation([
           ...profile.content.education,
           {
             id: `edu-${Date.now()}`,
@@ -82,7 +84,7 @@ export default function EditAboutSectionScreen({
         ]);
         break;
       case 'experience':
-        profile.setExperience([
+        await profile.setExperience([
           ...profile.content.experience,
           {
             id: `exp-${Date.now()}`,
@@ -95,7 +97,7 @@ export default function EditAboutSectionScreen({
         ]);
         break;
       case 'certifications':
-        profile.setCertifications([
+        await profile.setCertifications([
           ...profile.content.certifications,
           {
             id: `cert-${Date.now()}`,
@@ -105,8 +107,14 @@ export default function EditAboutSectionScreen({
           },
         ]);
         break;
+      }
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert(
+        'Could not save',
+        err instanceof Error ? err.message : 'Please try again',
+      );
     }
-    navigation.goBack();
   };
 
   return (
@@ -190,7 +198,12 @@ export default function EditAboutSectionScreen({
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <Button title="Save" onPress={save} />
+          <Button
+            title="Save"
+            onPress={() => {
+              void save();
+            }}
+          />
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>

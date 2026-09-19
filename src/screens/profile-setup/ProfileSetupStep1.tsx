@@ -17,7 +17,7 @@ export default function ProfileSetupStep1({
   step,
   totalSteps,
 }: ProfileSetupStepProps) {
-  const { user, content, updateProfileBasics, setBio: saveBio } = useMyProfile();
+  const { user, content, saveProfileBasics, setBio: saveBio } = useMyProfile();
   const [name, setName] = useState(user.name ?? '');
   const [bio, setBio] = useState(content.bio ?? '');
   const [countryCode, setCountryCode] = useState<CountryCode | null>(
@@ -28,13 +28,13 @@ export default function ProfileSetupStep1({
   );
 
   const persist = () => {
-    updateProfileBasics({
+    void saveProfileBasics({
       name: name.trim(),
       ...(countryCode && locationCode
         ? { countryCode, locationCode }
         : {}),
     });
-    saveBio(bio.trim());
+    void saveBio(bio.trim());
   };
 
   const handleContinue = () => {

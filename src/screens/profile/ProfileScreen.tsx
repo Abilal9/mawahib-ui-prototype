@@ -105,6 +105,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
         onRightPress={() =>
           shareProfile({ userId: user.id, userName: user.name })
         }
+        coverUrl={user.coverImage}
       />
 
       <Animated.ScrollView
@@ -334,21 +335,23 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                     <View style={styles.serviceBody}>
                       <View style={styles.serviceTitleRow}>
                         <Text style={styles.serviceTitle}>{service.title}</Text>
-                        <TouchableOpacity
-                          style={styles.ratingInline}
-                          onPress={() =>
-                            navigation.navigate('Reviews', { userId: user.id })
-                          }
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="star" size={14} color="#F5A623" />
-                          <Text style={styles.ratingInlineText}>
-                            {service.rating.toFixed(1)}
-                          </Text>
-                          <Text style={styles.reviewCount}>
-                            ({service.reviewCount})
-                          </Text>
-                        </TouchableOpacity>
+                        {(service.reviewCount ?? 0) > 0 ? (
+                          <TouchableOpacity
+                            style={styles.ratingInline}
+                            onPress={() =>
+                              navigation.navigate('Reviews', { userId: user.id })
+                            }
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="star" size={14} color="#F5A623" />
+                            <Text style={styles.ratingInlineText}>
+                              {service.rating.toFixed(1)}
+                            </Text>
+                            <Text style={styles.reviewCount}>
+                              ({service.reviewCount})
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                       <Text style={styles.serviceDesc} numberOfLines={2}>
                         {service.description}

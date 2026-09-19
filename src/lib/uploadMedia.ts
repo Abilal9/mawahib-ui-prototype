@@ -111,7 +111,9 @@ export async function uploadLocalFile(input: {
   purpose: MediaPurpose;
   onProgress?: (ratio: number) => void;
 }): Promise<PickedUpload> {
-  const { uri, mimeType, byteSize, fileName, purpose, onProgress } = input;
+  const { uri, mimeType, fileName, purpose, onProgress } = input;
+  // Always measure the file being uploaded — never trust a stale/placeholder size.
+  const byteSize = await requireLocalFileByteSize(uri);
   onProgress?.(0.05);
   const session = await mediaApi.createUploadSession({
     purpose,
@@ -148,12 +150,23 @@ export async function uploadLocalFile(input: {
   };
 }
 
-async function fileSize(uri: string): Promise<number> {
+/**
+ * Truthful local file size for upload sessions.
+ * Throws when size cannot be determined — never invents placeholder `1`.
+ */
+export async function requireLocalFileByteSize(uri: string): Promise<number> {
   const info = await FileSystem.getInfoAsync(uri);
-  if (info.exists && 'size' in info && typeof info.size === 'number') {
-    return info.size;
+  if (!info.exists || !('size' in info) || typeof info.size !== 'number') {
+    throw new Error('Could not determine file size for upload');
   }
-  return 1;
+  if (!Number.isFinite(info.size) || info.size < 1 || !Number.isInteger(info.size)) {
+    throw new Error('Invalid file size for upload');
+  }
+  return info.size;
+}
+
+async function fileSize(uri: string): Promise<number> {
+  return requireLocalFileByteSize(uri);
 }
 
 function extensionForMime(mimeType: string): string {

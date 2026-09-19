@@ -46,7 +46,8 @@ export type RootStackParamList = {
   SignupSuccess: undefined;
   Profile: undefined;
   UserProfile: { userId: string };
-  EditProfile: undefined;
+  EditProfile: { coverDraftUri?: string } | undefined;
+  CoverReposition: { uri: string };
   EditAboutSection: {
     section: 'bio' | 'languages' | 'talents' | 'education' | 'experience' | 'certifications';
   };

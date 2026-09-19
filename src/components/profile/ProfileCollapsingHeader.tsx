@@ -10,9 +10,11 @@ import { Ionicons } from '@expo/vector-icons';
 import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, typography } from '../../theme';
 import { User } from '../../data/types';
+import { PROFILE_COVER_HEIGHT, displayProfileTitle } from '../../constants/profile';
+import { formatRatingValue, hasRealReviews } from '../../utils/profileRating';
 export const PROFILE_COLLAPSE_DISTANCE = 100;
-/** Pink strip under nav — tall enough for the avatar without clipping under the bar */
-export const PROFILE_WAVE_MAX = 64;
+/** Cover / pink strip under nav — matches Edit cover crop frame. */
+export const PROFILE_WAVE_MAX = PROFILE_COVER_HEIGHT;
 
 interface ProfileCollapsingHeaderProps {
   user: User;
@@ -31,7 +33,8 @@ export default function ProfileCollapsingHeader({
   onConnectionsPress,
   connectionsLabel,
 }: ProfileCollapsingHeaderProps) {
-  const rating = user.rating ?? 5;
+  const showRating = hasRealReviews(user);
+  const rating = user.rating ?? 0;
   const reviews = user.reviewCount ?? 0;
   const connections = connectionsLabel ?? `${user.followers ?? 0} connections`;
 
@@ -166,7 +169,7 @@ export default function ProfileCollapsingHeader({
             alignItems: 'center',
           }}
         >
-          <Text style={styles.role}>{user.title ?? 'Creative Professional'}</Text>
+          <Text style={styles.role}>{displayProfileTitle(user.title)}</Text>
           {user.location ? (
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
@@ -178,18 +181,22 @@ export default function ProfileCollapsingHeader({
             onPress={onReviewsPress}
             activeOpacity={0.8}
           >
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Ionicons
-                key={i}
-                name={i < Math.round(rating) ? 'star' : 'star-outline'}
-                size={14}
-                color="#F5A623"
-              />
-            ))}
-            <Text style={styles.ratingValue}>
-              {rating.toFixed(rating % 1 === 0 ? 0 : 1)}
-            </Text>
-            <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+            {showRating ? (
+              <>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Ionicons
+                    key={i}
+                    name={i < Math.round(rating) ? 'star' : 'star-outline'}
+                    size={14}
+                    color="#F5A623"
+                  />
+                ))}
+                <Text style={styles.ratingValue}>{formatRatingValue(rating)}</Text>
+                <Text style={styles.reviewsLink}>{reviews} reviews</Text>
+              </>
+            ) : (
+              <Text style={styles.reviewsLink}>No reviews yet</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity onPress={onConnectionsPress} activeOpacity={0.8}>
             <Text style={styles.connections}>{connections}</Text>

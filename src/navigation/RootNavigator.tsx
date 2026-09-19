@@ -28,6 +28,7 @@ import {
   ProfileScreen,
   UserProfileScreen,
   EditProfileScreen,
+  CoverRepositionScreen,
   EditAboutSectionScreen,
   AddPortfolioProjectScreen,
   AddProfileServiceScreen,
@@ -137,6 +138,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="CoverReposition" component={CoverRepositionScreen} />
       <Stack.Screen name="EditAboutSection" component={EditAboutSectionScreen} />
       <Stack.Screen name="AddPortfolioProject" component={AddPortfolioProjectScreen} />
       <Stack.Screen name="AddProfileService" component={AddProfileServiceScreen} />

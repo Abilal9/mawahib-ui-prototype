@@ -54,6 +54,7 @@ export { default as ArchivedConversationsScreen } from './messages/ArchivedConve
 export { default as ProfileScreen } from './profile/ProfileScreen';
 export { default as UserProfileScreen } from './profile/UserProfileScreen';
 export { default as EditProfileScreen } from './profile/EditProfileScreen';
+export { default as CoverRepositionScreen } from './profile/CoverRepositionScreen';
 export { default as EditAboutSectionScreen } from './profile/EditAboutSectionScreen';
 export { default as AddPortfolioProjectScreen } from './profile/AddPortfolioProjectScreen';
 export { default as AddProfileServiceScreen } from './profile/AddProfileServiceScreen';

@@ -37,11 +37,12 @@ import {
   normalizeCountryCode,
   type CountryCode,
 } from '../data/location/geo';
+import { DEFAULT_PROFILE_TITLE } from '../constants/profile';
 
 /**
  * Signed-in user's editable profile.
- * Identity + portfolio/services hydrate from Nest only (no mock fallback).
- * About list sections (education/experience/…) remain local until a later API.
+ * Identity + About + portfolio/services hydrate from Nest only (no mock fallback).
+ * Edit Profile / Edit About mutate the DB only on explicit Save.
  */
 
 /** Real empty about shell — not a mock “filled” demo profile. */
@@ -68,7 +69,7 @@ const emptyUser = (): User => ({
   following: 0,
   posts: 0,
   isVerified: false,
-  title: '',
+  title: DEFAULT_PROFILE_TITLE,
   rating: 0,
   reviewCount: 0,
 });
@@ -87,20 +88,22 @@ interface ProfileContextValue {
   }) => void;
   hydrateFromApiUser: (apiUser: ApiUser) => void;
   clearLocalProfile: () => void;
-  updateProfileBasics: (patch: {
+  /** Persist profile basics after Edit Profile Save (not while drafting). */
+  saveProfileBasics: (patch: {
     name?: string;
-    title?: string;
+    title?: string | null;
     location?: string;
     countryCode?: CountryCode | null;
     locationCode?: string | null;
-    avatar?: string | number;
-  }) => void;
-  setBio: (bio: string) => void;
-  setLanguages: (languages: ProfileLanguage[]) => void;
-  setTalents: (talents: string[]) => void;
-  setEducation: (education: ProfileEducation[]) => void;
-  setExperience: (experience: ProfileExperience[]) => void;
-  setCertifications: (certifications: ProfileCertification[]) => void;
+    avatarUrl?: string | null;
+    coverUrl?: string | null;
+  }) => Promise<void>;
+  setBio: (bio: string) => Promise<void>;
+  setLanguages: (languages: ProfileLanguage[]) => Promise<void>;
+  setTalents: (talents: string[]) => Promise<void>;
+  setEducation: (education: ProfileEducation[]) => Promise<void>;
+  setExperience: (experience: ProfileExperience[]) => Promise<void>;
+  setCertifications: (certifications: ProfileCertification[]) => Promise<void>;
   addPortfolioProject: (input: {
     title: string;
     description: string;
@@ -210,8 +213,22 @@ function locationPartsFromPatch(patch: {
   return {};
 }
 
+function aboutPayloadFromContent(content: ProfileContent): NonNullable<UpdateMePayload['about']> {
+  return {
+    languages: content.languages.map((l) => ({
+      id: l.id,
+      name: l.name,
+      level: l.level,
+      ...(l.flag ? { flag: l.flag } : {}),
+    })),
+    education: content.education,
+    experience: content.experience,
+    certifications: content.certifications,
+  };
+}
+
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const { apiUser, mappedUser, isSignedIn, accessToken } = useAuth();
+  const { apiUser, mappedUser, isSignedIn, accessToken, refreshMe } = useAuth();
   const [content, setContent] = useState<ProfileContent>(emptyProfileContent);
   const [user, setUser] = useState<User>(emptyUser);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -282,10 +299,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const persistMe = useCallback(
     async (payload: UpdateMePayload) => {
       if (!accessToken || !isSignedIn) return;
-      const updated = await authApi.updateMe(payload);
-      hydrateFromApiUser(updated);
+      await authApi.updateMe(payload);
+      // Canonical hydrate from Nest so Auth + Profile stay aligned.
+      const refreshed = await refreshMe();
+      hydrateFromApiUser(refreshed);
     },
-    [accessToken, hydrateFromApiUser, isSignedIn],
+    [accessToken, hydrateFromApiUser, isSignedIn, refreshMe],
+  );
+
+  const persistAboutLists = useCallback(
+    async (next: ProfileContent) => {
+      await persistMe({ about: aboutPayloadFromContent(next) });
+    },
+    [persistMe],
   );
 
   const value = useMemo<ProfileContextValue>(
@@ -307,49 +333,50 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       },
       hydrateFromApiUser,
       clearLocalProfile,
-      updateProfileBasics: (patch) => {
+      saveProfileBasics: async (patch) => {
         const locationPayload = locationPartsFromPatch(patch);
-        const nextLocation =
-          locationPayload.locationCity != null
-            ? [locationPayload.locationCity, locationPayload.locationCountry]
-                .filter(Boolean)
-                .join(', ')
-            : typeof patch.location === 'string'
-              ? patch.location
-              : undefined;
-        setUser((prev) => ({
-          ...prev,
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.title !== undefined ? { title: patch.title } : {}),
-          ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
-          ...(nextLocation !== undefined ? { location: nextLocation } : {}),
-          ...(locationPayload.countryCode !== undefined
-            ? { countryCode: locationPayload.countryCode }
+        await persistMe({
+          ...(patch.name !== undefined ? { displayName: patch.name } : {}),
+          ...(patch.title !== undefined
+            ? {
+                title: patch.title?.trim()
+                  ? patch.title.trim()
+                  : DEFAULT_PROFILE_TITLE,
+              }
             : {}),
-          ...(locationPayload.locationCode !== undefined
-            ? { locationCode: locationPayload.locationCode }
-            : {}),
-        }));
-        void persistMe({
-          displayName: patch.name,
-          title: typeof patch.title === 'string' ? patch.title : undefined,
           ...locationPayload,
-          avatarUrl: typeof patch.avatar === 'string' ? patch.avatar : undefined,
+          ...(patch.avatarUrl !== undefined ? { avatarUrl: patch.avatarUrl } : {}),
+          ...(patch.coverUrl !== undefined ? { coverUrl: patch.coverUrl } : {}),
         });
       },
-      setBio: (bio) => {
+      setBio: async (bio) => {
         setContent((prev) => ({ ...prev, bio }));
-        void persistMe({ bio });
+        await persistMe({ bio });
       },
-      setLanguages: (languages) => setContent((prev) => ({ ...prev, languages })),
-      setTalents: (talents) => {
+      setLanguages: async (languages) => {
+        const next = { ...content, languages };
+        setContent(next);
+        await persistAboutLists(next);
+      },
+      setTalents: async (talents) => {
         setContent((prev) => ({ ...prev, talents }));
-        void persistMe({ skills: talents });
+        await persistMe({ skills: talents });
       },
-      setEducation: (education) => setContent((prev) => ({ ...prev, education })),
-      setExperience: (experience) => setContent((prev) => ({ ...prev, experience })),
-      setCertifications: (certifications) =>
-        setContent((prev) => ({ ...prev, certifications })),
+      setEducation: async (education) => {
+        const next = { ...content, education };
+        setContent(next);
+        await persistAboutLists(next);
+      },
+      setExperience: async (experience) => {
+        const next = { ...content, experience };
+        setContent(next);
+        await persistAboutLists(next);
+      },
+      setCertifications: async (certifications) => {
+        const next = { ...content, certifications };
+        setContent(next);
+        await persistAboutLists(next);
+      },
       addPortfolioProject: async (input) => {
         const created = mapPortfolioProject(
           await portfolioApi.create({
@@ -449,6 +476,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       hydrateFromApiUser,
       clearLocalProfile,
       persistMe,
+      persistAboutLists,
     ],
   );
 
