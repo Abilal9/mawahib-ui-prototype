@@ -115,7 +115,7 @@ export default function ConnectionsScreen({
             <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
           ) : null}
         </View>
-        <Text style={styles.username}>@{item.username}</Text>
+        {item.title ? <Text style={styles.subtitle}>{item.title}</Text> : null}
         {item.location ? <Text style={styles.location}>{item.location}</Text> : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
@@ -137,10 +137,8 @@ export default function ConnectionsScreen({
               <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
             ) : null}
           </View>
-          <Text style={styles.username}>@{item.username}</Text>
-          {item.title || item.location ? (
-            <Text style={styles.location}>{item.title ?? item.location}</Text>
-          ) : null}
+          {item.title ? <Text style={styles.subtitle}>{item.title}</Text> : null}
+          {item.location ? <Text style={styles.location}>{item.location}</Text> : null}
         </View>
       </TouchableOpacity>
       <View style={styles.requestActions}>
@@ -265,7 +263,7 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   name: { ...typography.label, color: colors.text },
-  username: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   location: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   requestActions: { flexDirection: 'row', gap: spacing.sm },
   acceptBtn: {

@@ -1,17 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ProfileContent, User } from '../data/types';
 import { emptyProfileContent } from '../context/ProfileContext';
 import { authApi, mapApiUserToUser } from '../services/authApi';
 
 /**
- * Loads another user's public profile header from Nest (`GET /users/:id`).
+ * Loads another user's public profile header from Nest (`GET /users/:id/public`).
  * Includes structured about sections when present on the API user.
+ * Call `refresh` on screen focus so visitor sees latest cover/About after owner edits.
  */
 export function useVisitorUser(userId: string | undefined) {
   const [user, setUser] = useState<User | null>(null);
   const [about, setAbout] = useState<ProfileContent>(emptyProfileContent());
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+
+  const refresh = useCallback(() => {
+    setVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => {
     if (!userId) {
@@ -55,7 +61,7 @@ export function useVisitorUser(userId: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, version]);
 
-  return { user, about, loading, error };
+  return { user, about, loading, error, refresh };
 }

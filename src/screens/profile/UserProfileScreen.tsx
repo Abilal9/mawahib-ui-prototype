@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import MoneyAmount from '../../components/ui/MoneyAmount';
@@ -33,11 +34,14 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { postService } from '../../services/postService';
+import { displayProfileTitle } from '../../constants/profile';
 import { ScreenProps } from '../../navigation/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MEDIA = (SCREEN_WIDTH - spacing.screen * 2 - spacing.sm * 2) / 3;
 const TABS_FALLBACK = 56;
+/** Extra touch padding so compact ~43px CTAs stay easy to tap. */
+const ACTION_HIT_SLOP = { top: 6, bottom: 6, left: 2, right: 2 } as const;
 
 export default function UserProfileScreen({ route, navigation }: ScreenProps<'UserProfile'>) {
   const [activeTab, setActiveTab] = useState<ProfileTab>('About');
@@ -60,6 +64,12 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const visitorUser = useVisitorUser(route.params.userId);
   const user = visitorUser.user;
   const [userPosts, setUserPosts] = useState<Post[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      visitorUser.refresh();
+    }, [visitorUser.refresh]),
+  );
 
   useEffect(() => {
     if (!user?.id || user.id === me.id) {
@@ -126,7 +136,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   const relation = getRelation(user.id);
   const profileUser = {
     ...user,
-    title: user.title || 'Creative Professional',
+    title: displayProfileTitle(user.title),
     rating: user.rating ?? 0,
     reviewCount: user.reviewCount ?? 0,
   };
@@ -198,6 +208,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
         onRightPress={() =>
           shareProfile({ userId: user.id, userName: user.name })
         }
+        coverUrl={user.coverImage}
       />
 
       <Animated.ScrollView
@@ -229,16 +240,18 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                 style={styles.connectBtn}
                 onPress={() => acceptRequest(user.id)}
                 activeOpacity={0.85}
+                hitSlop={ACTION_HIT_SLOP}
               >
-                <Ionicons name="checkmark" size={18} color={colors.white} />
+                <Ionicons name="checkmark" size={19} color={colors.white} />
                 <Text style={styles.connectText}>Accept</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.messageBtn}
                 onPress={() => denyRequest(user.id)}
                 activeOpacity={0.85}
+                hitSlop={ACTION_HIT_SLOP}
               >
-                <Ionicons name="close" size={18} color={colors.primary} />
+                <Ionicons name="close" size={19} color={colors.primary} />
                 <Text style={styles.messageText}>Deny</Text>
               </TouchableOpacity>
             </View>
@@ -252,6 +265,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                 ]}
                 onPress={onConnectPress}
                 activeOpacity={0.85}
+                hitSlop={ACTION_HIT_SLOP}
               >
                 <Ionicons name={connectIcon} size={18} color={colors.white} />
                 <Text style={styles.connectText}>{connectLabel}</Text>
@@ -260,6 +274,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                 style={[styles.messageBtn, relation !== 'connected' && styles.messageBtnDisabled]}
                 onPress={onMessagePress}
                 activeOpacity={0.85}
+                hitSlop={ACTION_HIT_SLOP}
               >
                 <Ionicons
                   name="chatbubble-outline"
@@ -285,8 +300,9 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                 navigation.navigate('DirectRequest', { userId: user.id })
               }
               activeOpacity={0.85}
+              hitSlop={ACTION_HIT_SLOP}
             >
-              <Ionicons name="briefcase-outline" size={18} color={colors.primary} />
+              <Ionicons name="briefcase-outline" size={17} color={colors.primary} />
               <Text style={styles.hireText}>Request Work</Text>
             </TouchableOpacity>
           </View>
@@ -437,21 +453,23 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                     <View style={styles.serviceBody}>
                       <View style={styles.serviceTitleRow}>
                         <Text style={styles.serviceTitle}>{service.title}</Text>
-                        <TouchableOpacity
-                          style={styles.ratingInline}
-                          onPress={() =>
-                            navigation.navigate('Reviews', { userId: user.id })
-                          }
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="star" size={14} color="#F5A623" />
-                          <Text style={styles.ratingInlineText}>
-                            {service.rating.toFixed(1)}
-                          </Text>
-                          <Text style={styles.reviewCount}>
-                            ({service.reviewCount})
-                          </Text>
-                        </TouchableOpacity>
+                        {(service.reviewCount ?? 0) > 0 ? (
+                          <TouchableOpacity
+                            style={styles.ratingInline}
+                            onPress={() =>
+                              navigation.navigate('Reviews', { userId: user.id })
+                            }
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="star" size={14} color="#F5A623" />
+                            <Text style={styles.ratingInlineText}>
+                              {service.rating.toFixed(1)}
+                            </Text>
+                            <Text style={styles.reviewCount}>
+                              ({service.reviewCount})
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                       <Text style={styles.serviceDesc} numberOfLines={2}>
                         {service.description}
@@ -586,11 +604,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 6,
     backgroundColor: colors.primary,
     borderRadius: radius.button,
-    paddingVertical: spacing.md,
-    minHeight: 48,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    minHeight: 43,
   },
   connectBtnDone: {
     backgroundColor: '#00A63E',
@@ -598,44 +617,46 @@ const styles = StyleSheet.create({
   connectBtnPending: {
     backgroundColor: '#627D98',
   },
-  connectText: { ...typography.button, color: colors.white },
+  connectText: { ...typography.button, fontSize: 15, lineHeight: 18, color: colors.white },
   messageBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 6,
     backgroundColor: colors.white,
     borderRadius: radius.button,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.primary,
-    paddingVertical: spacing.md,
-    minHeight: 48,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    minHeight: 43,
   },
   messageBtnDisabled: {
     borderColor: colors.border,
     backgroundColor: colors.background,
   },
-  messageText: { ...typography.button, color: colors.primary },
+  messageText: { ...typography.button, fontSize: 15, lineHeight: 18, color: colors.primary },
   messageTextDisabled: { color: colors.textSecondary },
   hireRow: {
     paddingHorizontal: spacing.screen,
     marginTop: spacing.sm,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   hireBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 6,
     backgroundColor: colors.white,
     borderRadius: radius.button,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.primary,
-    paddingVertical: spacing.md,
-    minHeight: 48,
+    paddingVertical: 5,
+    paddingHorizontal: spacing.sm,
+    minHeight: 41,
   },
-  hireText: { ...typography.button, color: colors.primary },
+  hireText: { ...typography.button, fontSize: 15, lineHeight: 18, color: colors.primary },
   modalBackdrop: {
     flex: 1,
     backgroundColor: colors.overlay,
