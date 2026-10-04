@@ -9,6 +9,7 @@ import {
   LayoutAnimation,
   UIManager,
   Platform,
+  Dimensions,
   type PanResponderInstance,
   type GestureResponderEvent,
   type PanResponderGestureState,
@@ -27,6 +28,9 @@ if (
 
 const COLS = 3;
 const GAP = spacing.sm;
+/** Pixel-square cell (percentage width + aspectRatio collapses height for the empty add slot). */
+const CELL_SIZE =
+  (Dimensions.get('window').width - spacing.screen * 2 - GAP * (COLS - 1)) / COLS;
 
 function reorder<T>(list: T[], from: number, to: number): T[] {
   if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
@@ -346,8 +350,8 @@ const styles = StyleSheet.create({
     gap: GAP,
   },
   slot: {
-    width: '31%',
-    aspectRatio: 1,
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     borderRadius: radius.button,
     overflow: 'hidden',
     backgroundColor: colors.borderLight,
@@ -413,8 +417,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addSlot: {
-    width: '31%',
-    aspectRatio: 1,
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     borderRadius: radius.button,
     borderWidth: 1.5,
     borderColor: colors.border,
