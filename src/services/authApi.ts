@@ -1,4 +1,10 @@
 import { User } from '../data/types';
+import type {
+  ProfileCertification,
+  ProfileEducation,
+  ProfileExperience,
+  ProfileLanguage,
+} from '../data/types';
 import { AccountType } from '../context/AuthContext';
 import { apiRequest } from '../lib/apiClient';
 import {
@@ -35,37 +41,10 @@ export interface ApiUser {
   emailVerified?: boolean;
   skills: string[];
   about?: {
-    languages: Array<{
-      id: string;
-      name: string;
-      level: string;
-      flag?: string;
-    }>;
-    education: Array<{
-      id: string;
-      school: string;
-      degree: string;
-      field: string;
-      years: string;
-      gpa?: string;
-      description?: string;
-      logoColor?: string;
-    }>;
-    experience: Array<{
-      id: string;
-      title: string;
-      company: string;
-      type: string;
-      years: string;
-      description: string;
-      logoColor?: string;
-    }>;
-    certifications: Array<{
-      id: string;
-      name: string;
-      org: string;
-      year: string;
-    }>;
+    languages: ProfileLanguage[];
+    education: ProfileEducation[];
+    experience: ProfileExperience[];
+    certifications: ProfileCertification[];
   } | null;
   createdAt: string;
   updatedAt: string;
@@ -97,37 +76,12 @@ export interface UpdateMePayload {
   coverUrl?: string | null;
   skills?: string[];
   about?: {
-    languages?: Array<{
-      id: string;
-      name: string;
-      level: string;
-      flag?: string;
-    }>;
-    education?: Array<{
-      id: string;
-      school: string;
-      degree: string;
-      field: string;
-      years: string;
-      gpa?: string;
-      description?: string;
-      logoColor?: string;
-    }>;
-    experience?: Array<{
-      id: string;
-      title: string;
-      company: string;
-      type: string;
-      years: string;
-      description: string;
-      logoColor?: string;
-    }>;
-    certifications?: Array<{
-      id: string;
-      name: string;
-      org: string;
-      year: string;
-    }>;
+    languages?: ProfileLanguage[];
+    education?: Array<Partial<ProfileEducation> & { id: string; school: string }>;
+    experience?: Array<Partial<ProfileExperience> & { id: string; title: string; company: string }>;
+    certifications?: Array<
+      Partial<ProfileCertification> & { id: string; name: string; issuingOrganization?: string }
+    >;
   } | null;
   phoneE164?: string | null;
 }

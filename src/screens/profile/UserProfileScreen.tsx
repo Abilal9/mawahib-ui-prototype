@@ -330,7 +330,8 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
               }}
               isOwn={false}
               onAdd={() => {}}
-              onEdit={() => {}}
+              onEditSection={() => {}}
+              onEditItem={() => {}}
             />
           )}
 

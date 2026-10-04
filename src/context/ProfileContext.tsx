@@ -77,6 +77,8 @@ const emptyUser = (): User => ({
 interface ProfileContextValue {
   user: User;
   content: ProfileContent;
+  /** True after Nest `/users/me` About fields have been applied at least once. */
+  aboutHydrated: boolean;
   profileLoading: boolean;
   profileError: string | null;
   refreshProfessionalProfile: () => Promise<void>;
@@ -219,11 +221,48 @@ function aboutPayloadFromContent(content: ProfileContent): NonNullable<UpdateMeP
       id: l.id,
       name: l.name,
       level: l.level,
+      ...(l.languageCode ? { languageCode: l.languageCode } : {}),
       ...(l.flag ? { flag: l.flag } : {}),
     })),
-    education: content.education,
-    experience: content.experience,
-    certifications: content.certifications,
+    education: content.education.map((e) => ({
+      id: e.id,
+      school: e.school,
+      ...(e.degree ? { degree: e.degree } : {}),
+      ...(e.field ? { field: e.field } : {}),
+      ...(e.startMonth != null ? { startMonth: e.startMonth } : {}),
+      ...(e.startYear != null ? { startYear: e.startYear } : {}),
+      ...(e.endMonth != null ? { endMonth: e.endMonth } : {}),
+      ...(e.endYear != null ? { endYear: e.endYear } : {}),
+      currentlyStudying: Boolean(e.currentlyStudying),
+      ...(e.grade ? { grade: e.grade } : e.gpa ? { grade: e.gpa } : {}),
+      ...(e.description ? { description: e.description } : {}),
+    })),
+    experience: content.experience.map((e) => ({
+      id: e.id,
+      title: e.title,
+      company: e.company,
+      ...(e.employmentType ? { employmentType: e.employmentType } : {}),
+      ...(e.location ? { location: e.location } : {}),
+      ...(e.locationType ? { locationType: e.locationType } : {}),
+      ...(e.startMonth != null ? { startMonth: e.startMonth } : {}),
+      ...(e.startYear != null ? { startYear: e.startYear } : {}),
+      ...(e.endMonth != null ? { endMonth: e.endMonth } : {}),
+      ...(e.endYear != null ? { endYear: e.endYear } : {}),
+      currentlyWorking: Boolean(e.currentlyWorking),
+      ...(e.description ? { description: e.description } : {}),
+    })),
+    certifications: content.certifications.map((c) => ({
+      id: c.id,
+      name: c.name,
+      issuingOrganization: c.issuingOrganization || c.org || '',
+      ...(c.issueMonth != null ? { issueMonth: c.issueMonth } : {}),
+      ...(c.issueYear != null ? { issueYear: c.issueYear } : {}),
+      ...(c.expirationMonth != null ? { expirationMonth: c.expirationMonth } : {}),
+      ...(c.expirationYear != null ? { expirationYear: c.expirationYear } : {}),
+      doesNotExpire: Boolean(c.doesNotExpire),
+      ...(c.credentialId ? { credentialId: c.credentialId } : {}),
+      ...(c.credentialUrl ? { credentialUrl: c.credentialUrl } : {}),
+    })),
   };
 }
 
@@ -231,6 +270,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { apiUser, mappedUser, isSignedIn, accessToken, refreshMe } = useAuth();
   const [content, setContent] = useState<ProfileContent>(emptyProfileContent);
   const [user, setUser] = useState<User>(emptyUser);
+  const [aboutHydrated, setAboutHydrated] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
@@ -250,11 +290,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       experience: next.about?.experience ?? prev.experience,
       certifications: next.about?.certifications ?? prev.certifications,
     }));
+    setAboutHydrated(true);
   }, []);
 
   const clearLocalProfile = useCallback(() => {
     setContent(emptyProfileContent());
     setUser(emptyUser());
+    setAboutHydrated(false);
     setProfileError(null);
   }, []);
 
@@ -318,6 +360,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     () => ({
       user: mappedUser ?? user,
       content,
+      aboutHydrated,
       profileLoading,
       profileError,
       refreshProfessionalProfile,
@@ -470,6 +513,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       content,
       user,
       mappedUser,
+      aboutHydrated,
       profileLoading,
       profileError,
       refreshProfessionalProfile,

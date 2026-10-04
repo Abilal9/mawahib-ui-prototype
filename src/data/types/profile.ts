@@ -4,23 +4,36 @@
  * profile offerings use `ServiceOffering` (ProfileService alias).
  */
 
+import type { LanguageLevelCode } from '../../constants/languageLevels';
+import type { EmploymentType, LocationType } from '../../constants/aboutOptions';
+
 export type ProfileTab = 'About' | 'Portfolio' | 'Services' | 'Posts';
 
 export interface ProfileLanguage {
   id: string;
   name: string;
-  level: string;
-  flag: string;
+  /** Canonical: A1–C2 | NATIVE. Legacy free-text may still appear on read. */
+  level: LanguageLevelCode | string;
+  languageCode?: string;
+  flag?: string;
 }
 
 export interface ProfileEducation {
   id: string;
   school: string;
-  degree: string;
-  field: string;
-  years: string;
+  degree?: string;
+  field?: string;
+  startMonth?: number;
+  startYear?: number;
+  endMonth?: number;
+  endYear?: number;
+  currentlyStudying?: boolean;
+  grade?: string;
+  /** @deprecated Prefer grade */
   gpa?: string;
   description?: string;
+  /** @deprecated Legacy display range */
+  years?: string;
   logoColor?: string;
 }
 
@@ -28,9 +41,19 @@ export interface ProfileExperience {
   id: string;
   title: string;
   company: string;
-  type: string;
-  years: string;
-  description: string;
+  employmentType?: EmploymentType | string;
+  location?: string;
+  locationType?: LocationType | string;
+  startMonth?: number;
+  startYear?: number;
+  endMonth?: number;
+  endYear?: number;
+  currentlyWorking?: boolean;
+  description?: string;
+  /** @deprecated Prefer employmentType */
+  type?: string;
+  /** @deprecated Legacy display range */
+  years?: string;
   logoColor?: string;
   logoInitials?: string;
 }
@@ -38,8 +61,18 @@ export interface ProfileExperience {
 export interface ProfileCertification {
   id: string;
   name: string;
-  org: string;
-  year: string;
+  issuingOrganization?: string;
+  /** @deprecated Prefer issuingOrganization */
+  org?: string;
+  issueMonth?: number;
+  issueYear?: number;
+  expirationMonth?: number;
+  expirationYear?: number;
+  doesNotExpire?: boolean;
+  credentialId?: string;
+  credentialUrl?: string;
+  /** @deprecated Prefer issueYear */
+  year?: string;
 }
 
 export interface PortfolioProject {

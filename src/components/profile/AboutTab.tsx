@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Linking,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
@@ -11,6 +18,18 @@ import {
   TALENT_CHIP_STYLES,
   isAboutSectionFilled,
 } from '../../data/types';
+import {
+  certificationExpiryLabel,
+  certificationIssueLabel,
+  certificationIssuer,
+  educationDateLabel,
+  experienceDateLabel,
+  experienceTypeLabel,
+  languageSubtitle,
+  sortCertificationsForDisplay,
+  sortEducationForDisplay,
+  sortExperienceForDisplay,
+} from '../../utils/aboutFormat';
 
 /** Display-only preview length (~2–3 lines on typical phone widths). */
 const BIO_PREVIEW_CHARS = 150;
@@ -19,7 +38,10 @@ interface AboutTabProps {
   content: ProfileContent;
   isOwn: boolean;
   onAdd: (key: AboutSectionKey) => void;
-  onEdit: (key: AboutSectionKey) => void;
+  /** Section-level edit (Bio / Talents). */
+  onEditSection: (key: AboutSectionKey) => void;
+  /** Structured item edit by stable id. */
+  onEditItem: (key: AboutSectionKey, itemId: string) => void;
 }
 
 function ExpandableBio({ text }: { text: string }) {
@@ -61,10 +83,15 @@ function ExpandableBio({ text }: { text: string }) {
   );
 }
 
-export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProps) {
+export default function AboutTab({
+  content,
+  isOwn,
+  onAdd,
+  onEditSection,
+  onEditItem,
+}: AboutTabProps) {
   const anyFilled = ABOUT_SECTION_KEYS.some((key) => isAboutSectionFilled(content, key));
 
-  // Visitor with nothing filled: labels only (no add CTAs)
   if (!anyFilled && !isOwn) {
     return (
       <View style={styles.list}>
@@ -77,11 +104,19 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
     );
   }
 
+  const education = sortEducationForDisplay(content.education);
+  const experience = sortExperienceForDisplay(content.experience);
+  const certifications = sortCertificationsForDisplay(content.certifications);
+
   return (
     <View style={styles.filled}>
       {content.bio ? (
         <View style={styles.section}>
-          <SectionHeader title="Bio" isOwn={isOwn} onEdit={() => onEdit('bio')} />
+          <SectionHeader
+            title="Bio"
+            isOwn={isOwn}
+            onEdit={() => onEditSection('bio')}
+          />
           <ExpandableBio text={content.bio} />
         </View>
       ) : null}
@@ -91,21 +126,28 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
           <SectionHeader
             title="Languages"
             isOwn={isOwn}
-            onEdit={() => onEdit('languages')}
             onAdd={() => onAdd('languages')}
           />
           {content.languages.map((lang, index) => (
             <View key={lang.id}>
               {index > 0 ? <View style={styles.separator} /> : null}
-              <View style={styles.langRow}>
+              <TouchableOpacity
+                style={styles.langRow}
+                disabled={!isOwn}
+                activeOpacity={isOwn ? 0.8 : 1}
+                onPress={() => isOwn && onEditItem('languages', lang.id)}
+              >
                 <View style={styles.flagCircle}>
-                  <Text style={styles.flag}>{lang.flag}</Text>
+                  <Text style={styles.flag}>{lang.flag || '🌐'}</Text>
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.langName}>{lang.name}</Text>
-                  <Text style={styles.langLevel}>{lang.level}</Text>
+                  <Text style={styles.langLevel}>{languageSubtitle(lang)}</Text>
                 </View>
-              </View>
+                {isOwn ? (
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                ) : null}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -116,14 +158,14 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
           <SectionHeader
             title="Talents"
             isOwn={isOwn}
-            onEdit={() => onEdit('talents')}
+            onEdit={() => onEditSection('talents')}
             onAdd={() => onAdd('talents')}
           />
           <View style={styles.chipWrap}>
             {content.talents.map((talent, index) => {
               const tone = TALENT_CHIP_STYLES[index % TALENT_CHIP_STYLES.length];
               return (
-                <View key={talent} style={[styles.chip, { backgroundColor: tone.bg }]}>
+                <View key={`${talent}-${index}`} style={[styles.chip, { backgroundColor: tone.bg }]}>
                   <Text style={[styles.chipText, { color: tone.text }]}>{talent}</Text>
                 </View>
               );
@@ -132,57 +174,72 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
         </View>
       ) : null}
 
-      {content.education.length > 0 ? (
+      {education.length > 0 ? (
         <View style={styles.section}>
           <SectionHeader
             title="Education"
             isOwn={isOwn}
-            onEdit={() => onEdit('education')}
             onAdd={() => onAdd('education')}
           />
-          {content.education.map((item, index) => (
+          {education.map((item, index) => (
             <View key={item.id}>
               {index > 0 ? <View style={styles.separator} /> : null}
-              <View style={styles.timelineRow}>
+              <TouchableOpacity
+                style={styles.timelineRow}
+                disabled={!isOwn}
+                activeOpacity={isOwn ? 0.8 : 1}
+                onPress={() => isOwn && onEditItem('education', item.id)}
+              >
                 <View
                   style={[
                     styles.orgLogo,
                     { backgroundColor: (item.logoColor ?? '#3B82F6') + '22' },
                   ]}
                 >
-                  <Ionicons
-                    name="shield"
-                    size={18}
-                    color={item.logoColor ?? '#3B82F6'}
-                  />
+                  <Ionicons name="school" size={18} color={item.logoColor ?? '#3B82F6'} />
                 </View>
                 <View style={styles.timelineBody}>
-                  <Text style={styles.cardTitle}>{item.degree}</Text>
-                  <Text style={styles.cardSub}>{item.school}</Text>
-                  <Text style={styles.cardMeta}>{item.years}</Text>
-                  {item.gpa ? <Text style={styles.cardMeta}>GPA: {item.gpa}</Text> : null}
+                  <Text style={styles.cardTitle}>{item.school}</Text>
+                  {[item.degree, item.field].filter(Boolean).length ? (
+                    <Text style={styles.cardSub}>
+                      {[item.degree, item.field].filter(Boolean).join(' · ')}
+                    </Text>
+                  ) : null}
+                  {educationDateLabel(item) ? (
+                    <Text style={styles.cardMeta}>{educationDateLabel(item)}</Text>
+                  ) : null}
+                  {(item.grade || item.gpa) ? (
+                    <Text style={styles.cardMeta}>GPA: {item.grade || item.gpa}</Text>
+                  ) : null}
                   {item.description ? (
                     <Text style={styles.cardDesc}>{item.description}</Text>
                   ) : null}
                 </View>
-              </View>
+                {isOwn ? (
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                ) : null}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
       ) : null}
 
-      {content.experience.length > 0 ? (
+      {experience.length > 0 ? (
         <View style={styles.section}>
           <SectionHeader
             title="Experience"
             isOwn={isOwn}
-            onEdit={() => onEdit('experience')}
             onAdd={() => onAdd('experience')}
           />
-          {content.experience.map((item, index) => (
+          {experience.map((item, index) => (
             <View key={item.id}>
               {index > 0 ? <View style={styles.separator} /> : null}
-              <View style={styles.timelineRow}>
+              <TouchableOpacity
+                style={styles.timelineRow}
+                disabled={!isOwn}
+                activeOpacity={isOwn ? 0.8 : 1}
+                onPress={() => isOwn && onEditItem('experience', item.id)}
+              >
                 <View
                   style={[
                     styles.orgLogo,
@@ -194,47 +251,89 @@ export default function AboutTab({ content, isOwn, onAdd, onEdit }: AboutTabProp
                   </Text>
                 </View>
                 <View style={styles.timelineBody}>
-                  <Text style={styles.cardTitle}>{item.company}</Text>
-                  <Text style={styles.cardSub}>{item.title}</Text>
-                  <Text style={styles.cardMeta}>{item.years}</Text>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardSub}>
+                    {[item.company, experienceTypeLabel(item)].filter(Boolean).join(' · ')}
+                  </Text>
+                  {experienceDateLabel(item) ? (
+                    <Text style={styles.cardMeta}>{experienceDateLabel(item)}</Text>
+                  ) : null}
+                  {[item.location, item.locationType].filter(Boolean).length ? (
+                    <Text style={styles.cardMeta}>
+                      {[item.location, item.locationType].filter(Boolean).join(' · ')}
+                    </Text>
+                  ) : null}
                   {item.description ? (
                     <Text style={styles.cardDesc}>{item.description}</Text>
                   ) : null}
                 </View>
-              </View>
+                {isOwn ? (
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                ) : null}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
       ) : null}
 
-      {content.certifications.length > 0 ? (
+      {certifications.length > 0 ? (
         <View style={styles.section}>
           <SectionHeader
             title="Certifications"
             isOwn={isOwn}
-            onEdit={() => onEdit('certifications')}
             onAdd={() => onAdd('certifications')}
           />
-          {content.certifications.map((item, index) => (
+          {certifications.map((item, index) => (
             <View key={item.id}>
               {index > 0 ? <View style={styles.separator} /> : null}
-              <View style={styles.timelineBody}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.cardSub}>{item.org}</Text>
-                <Text style={styles.cardMeta}>{item.year}</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.timelineRow}
+                disabled={!isOwn}
+                activeOpacity={isOwn ? 0.8 : 1}
+                onPress={() => isOwn && onEditItem('certifications', item.id)}
+              >
+                <View style={styles.timelineBody}>
+                  <Text style={styles.cardTitle}>{item.name}</Text>
+                  {certificationIssuer(item) ? (
+                    <Text style={styles.cardSub}>{certificationIssuer(item)}</Text>
+                  ) : null}
+                  {certificationIssueLabel(item) ? (
+                    <Text style={styles.cardMeta}>{certificationIssueLabel(item)}</Text>
+                  ) : null}
+                  {certificationExpiryLabel(item) ? (
+                    <Text style={styles.cardMeta}>{certificationExpiryLabel(item)}</Text>
+                  ) : null}
+                  {item.credentialId ? (
+                    <Text style={styles.cardMeta}>ID: {item.credentialId}</Text>
+                  ) : null}
+                  {item.credentialUrl ? (
+                    <Text
+                      style={styles.link}
+                      onPress={() => {
+                        Linking.openURL(item.credentialUrl!).catch(() => {
+                          Alert.alert('Could not open link');
+                        });
+                      }}
+                    >
+                      View Credential
+                    </Text>
+                  ) : null}
+                </View>
+                {isOwn ? (
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                ) : null}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
       ) : null}
 
-      {/* Own profile: always show add rows for empty sections (even when all empty) */}
       {isOwn &&
         ABOUT_SECTION_KEYS.filter((key) => !isAboutSectionFilled(content, key)).map((key) => (
           <TouchableOpacity
             key={key}
             style={styles.emptyRow}
-            onPress={() => onAdd(key)}
+            onPress={() => (key === 'bio' || key === 'talents' ? onEditSection(key) : onAdd(key))}
             activeOpacity={0.8}
           >
             <Text style={styles.emptyLabel}>{ABOUT_SECTION_ADD_LABELS[key]}</Text>
@@ -379,6 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     paddingVertical: spacing.sm,
+    alignItems: 'flex-start',
   },
   orgLogo: {
     width: 40,
@@ -399,5 +499,16 @@ const styles = StyleSheet.create({
   cardTitle: { ...typography.label, color: colors.text },
   cardSub: { ...typography.caption, color: colors.text },
   cardMeta: { ...typography.caption, color: colors.textSecondary },
-  cardDesc: { ...typography.caption, color: colors.textTertiary, marginTop: 4, lineHeight: 18 },
+  cardDesc: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  link: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 4,
+  },
 });

@@ -50,6 +50,8 @@ export type RootStackParamList = {
   CoverReposition: { uri: string };
   EditAboutSection: {
     section: 'bio' | 'languages' | 'talents' | 'education' | 'experience' | 'certifications';
+    /** Structured list edit target. Absent = Add mode. Talents ignore this. */
+    itemId?: string;
   };
   AddPortfolioProject: { projectId?: string } | undefined;
   AddProfileService: { serviceId?: string } | undefined;

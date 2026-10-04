@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,19 +22,18 @@ import ProfileHeaderChrome, {
 import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
 import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
 import AboutTab from '../../components/profile/AboutTab';
+import AboutCompletionPrompt from '../../components/profile/AboutCompletionPrompt';
 import { shareProfile } from '../../utils/shareProfile';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { getAboutCompletionState } from '../../utils/aboutCompletion';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useConnections } from '../../context/ConnectionsContext';
-import { useAuth } from '../../context/AuthContext';
 import { postService } from '../../services/postService';
 import {
   Post,
   ProfileTab,
   AboutSectionKey,
-  ABOUT_SECTION_KEYS,
-  isAboutSectionFilled,
 } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 
@@ -45,11 +44,12 @@ const TABS_FALLBACK = 56;
 export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const [activeTab, setActiveTab] = React.useState<ProfileTab>('About');
   const [tabsHeight, setTabsHeight] = React.useState(TABS_FALLBACK);
+  const [completionPromptOpen, setCompletionPromptOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { user, content, profileError, refreshProfessionalProfile } = useMyProfile();
+  const { user, content, aboutHydrated, profileError, refreshProfessionalProfile } =
+    useMyProfile();
   const { connectedUsers } = useConnections();
-  const { accountType } = useAuth();
   const [userPosts, setUserPosts] = useState<Post[]>([]);
 
   useFocusEffect(
@@ -69,25 +69,31 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
     }, [user.id]),
   );
 
-  const completeBannerSub =
-    accountType === 'business'
-      ? 'Add services and details so you can post jobs and request talent confidently.'
-      : 'Complete your portfolio and services so clients can find you and send requests.';
-
-  const aboutIncomplete = ABOUT_SECTION_KEYS.some(
-    (key) => !isAboutSectionFilled(content, key)
+  const aboutCompletion = useMemo(
+    () => getAboutCompletionState(content),
+    [content],
   );
-  const profileNeedsWork =
-    aboutIncomplete ||
-    content.portfolio.length === 0 ||
-    content.services.length === 0 ||
-    userPosts.length === 0;
+  const showAboutCompletionBanner =
+    aboutHydrated && !aboutCompletion.complete;
 
   const fixedBarHeight = insets.top + PROFILE_FIXED_BAR_BODY;
   const scrollViewport = SCREEN_HEIGHT - fixedBarHeight;
   const tabContentMinHeight = Math.max(scrollViewport - tabsHeight, 240);
 
-  const openAbout = (key: AboutSectionKey) => {
+  const openAboutAdd = (key: AboutSectionKey) => {
+    navigation.navigate('EditAboutSection', { section: key });
+  };
+
+  const openAboutSection = (key: AboutSectionKey) => {
+    navigation.navigate('EditAboutSection', { section: key });
+  };
+
+  const openAboutItem = (key: AboutSectionKey, itemId: string) => {
+    navigation.navigate('EditAboutSection', { section: key, itemId });
+  };
+
+  const openCompletionSection = (key: AboutSectionKey) => {
+    setCompletionPromptOpen(false);
     navigation.navigate('EditAboutSection', { section: key });
   };
 
@@ -154,10 +160,10 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
         <View style={{ minHeight: tabContentMinHeight }}>
           {activeTab === 'About' && (
             <>
-              {profileNeedsWork ? (
+              {showAboutCompletionBanner ? (
                 <TouchableOpacity
                   style={styles.completeBanner}
-                  onPress={() => navigation.navigate('ProfileSetup', { step: 1 })}
+                  onPress={() => setCompletionPromptOpen(true)}
                   activeOpacity={0.85}
                 >
                   <View style={styles.completeBannerIcon}>
@@ -165,12 +171,20 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                   </View>
                   <View style={styles.completeBannerText}>
                     <Text style={styles.completeBannerTitle}>Complete your profile</Text>
-                    <Text style={styles.completeBannerSub}>{completeBannerSub}</Text>
+                    <Text style={styles.completeBannerSub}>
+                      Add your bio, languages, and talents so clients can understand your work.
+                    </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               ) : null}
-              <AboutTab content={content} isOwn onAdd={openAbout} onEdit={openAbout} />
+              <AboutTab
+                content={content}
+                isOwn
+                onAdd={openAboutAdd}
+                onEditSection={openAboutSection}
+                onEditItem={openAboutItem}
+              />
             </>
           )}
 
@@ -178,9 +192,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             (content.portfolio.length === 0 ? (
               <ProfileEmptyState
                 icon="briefcase-outline"
-                title="Complete your portfolio"
-                description="Add your first project so clients can see what you create."
-                cta="Add project"
+                title="No portfolio projects yet"
+                description="Showcase your work by adding your first portfolio project."
+                cta="Add Portfolio"
                 onPress={() => navigation.navigate('AddPortfolioProject')}
                 showHeaderAdd
                 headerTitle="Portfolio"
@@ -271,9 +285,9 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             (content.services.length === 0 ? (
               <ProfileEmptyState
                 icon="document-text-outline"
-                title="Add a service"
-                description="List what you offer so clients can send you requests."
-                cta="Add service"
+                title="No services yet"
+                description="Create a service to show what clients can book or request from you."
+                cta="Add Service"
                 onPress={() => navigation.navigate('AddProfileService')}
                 showHeaderAdd
                 headerTitle="Services"
@@ -432,6 +446,13 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
             ))}
         </View>
       </Animated.ScrollView>
+
+      <AboutCompletionPrompt
+        visible={completionPromptOpen}
+        state={aboutCompletion}
+        onClose={() => setCompletionPromptOpen(false)}
+        onSelect={openCompletionSection}
+      />
     </ScreenContainer>
   );
 }
