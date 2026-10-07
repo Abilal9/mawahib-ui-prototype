@@ -31,7 +31,8 @@
     "react-native-gesture-handler": "^3.0.2",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.26.0",
-    "react-native-url-polyfill": "^4.0.0"
+    "react-native-url-polyfill": "^4.0.0",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -44,7 +45,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "selftest": "node --no-warnings scripts/card-validation-selftest.mjs && node --no-warnings scripts/payments-money-selftest.mjs && node --no-warnings scripts/jobs-reviews-gap-selftest.mjs && node --no-warnings scripts/calendar-location-selftest.mjs && node --no-warnings scripts/deadline-maps-selftest.mjs"
   },
   "private": true
 }

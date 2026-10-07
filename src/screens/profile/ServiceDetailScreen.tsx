@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,78 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
+
+function ServiceHero({
+  images,
+  onBack,
+}: {
+  images: string[];
+  onBack: () => void;
+}) {
+  const width = Dimensions.get('window').width;
+  const slides = images.filter((uri) => uri.length > 0);
+  const [index, setIndex] = useState(0);
+  const [preview, setPreview] = useState<string | null>(null);
+  const page = slides.length > 1;
+
+  return (
+    <View style={styles.imageContainer}>
+      {slides.length === 0 ? (
+        <View style={[styles.heroImage, { backgroundColor: colors.borderLight }]} />
+      ) : page ? (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(event) => {
+            const next = Math.round(event.nativeEvent.contentOffset.x / width);
+            setIndex(Math.min(Math.max(next, 0), slides.length - 1));
+          }}
+        >
+          {slides.map((uri, slide) => (
+            <TouchableOpacity
+              key={`${uri}-${slide}`}
+              activeOpacity={0.95}
+              onPress={() => setPreview(uri)}
+            >
+              <Image
+                source={{ uri }}
+                style={{ width, height: 240 }}
+                contentFit="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : (
+        <TouchableOpacity activeOpacity={0.95} onPress={() => setPreview(slides[0])}>
+          <Image source={{ uri: slides[0] }} style={styles.heroImage} contentFit="cover" />
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <Ionicons name="arrow-back" size={24} color={colors.white} />
+      </TouchableOpacity>
+      {page ? (
+        <View style={styles.heroCount}>
+          <Text style={styles.heroCountText}>
+            {index + 1} / {slides.length}
+          </Text>
+        </View>
+      ) : null}
+      <Modal
+        visible={preview !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreview(null)}
+      >
+        <Pressable style={styles.previewBackdrop} onPress={() => setPreview(null)}>
+          {preview ? (
+            <Image source={{ uri: preview }} style={styles.previewImage} contentFit="contain" />
+          ) : null}
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
 import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
@@ -29,7 +102,7 @@ import { useVisitorUser } from '../../hooks/useVisitorUser';
  * Service detail with three data paths:
  * - Own profile service (`userId` omitted): edit/delete via ProfileContext.
  * - Visitor profile service (`userId` set): Apply → RequestService wizard (pending job).
- * - Catalog fallback: explore listing with Book Now → ConfirmPayment.
+ * - Catalog fallback: explore listing with Request Service → RequestService wizard.
  *
  * Currency icons use the service owner's location (visitor/catalog) or the signed-in user (own).
  */
@@ -103,16 +176,10 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
             paddingBottom: isVisitorView ? spacing.xxxl + 72 : spacing.xxxl,
           }}
         >
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: profileOffering.images[0] }}
-              style={styles.heroImage}
-              contentFit="cover"
-            />
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color={colors.white} />
-            </TouchableOpacity>
-          </View>
+          <ServiceHero
+            images={profileOffering.images}
+            onBack={() => navigation.goBack()}
+          />
 
           <View style={styles.content}>
             <View style={styles.titleRow}>
@@ -266,12 +333,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: service.images[0] }} style={styles.heroImage} contentFit="cover" />
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={colors.white} />
-          </TouchableOpacity>
-        </View>
+        <ServiceHero images={service.images} onBack={() => navigation.goBack()} />
 
         <View style={styles.content}>
           <Text style={styles.category}>{service.category}</Text>
@@ -329,11 +391,11 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
       <View style={styles.footer}>
         <Button
-          title="Book Now"
+          title="Request Service"
           onPress={() =>
-            navigation.navigate('ConfirmPayment', {
+            navigation.navigate('RequestService', {
+              userId: service.provider.id,
               serviceId: service.id,
-              amount: service.price,
             })
           }
           fullWidth
@@ -346,6 +408,27 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 const styles = StyleSheet.create({
   imageContainer: { height: 240, position: 'relative' },
   heroImage: { width: '100%', height: '100%' },
+  heroCount: {
+    position: 'absolute',
+    right: spacing.screen,
+    bottom: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  heroCountText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '80%' },
   backButton: {
     position: 'absolute', top: spacing.xl, left: spacing.screen,
     width: 40, height: 40, borderRadius: 20,

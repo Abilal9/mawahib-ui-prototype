@@ -20,6 +20,7 @@ import UserAvatar from '../../components/ui/UserAvatar';
 import {
   UserJob,
   UserJobSection,
+  jobRecencyTime,
   jobTotalPrice,
   resolveJobDetails,
 } from '../../data/types/userJobs';
@@ -27,6 +28,8 @@ import { TabScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { openEngagementReview } from '../../utils/openEngagementReview';
+import EngagementReviewPrompt from '../../components/job/EngagementReviewPrompt';
 
 type JobsTab = 'received' | 'sent';
 type SectionSort = 'most-recent' | 'oldest' | 'due-date';
@@ -112,9 +115,17 @@ const SENT_SECTIONS: SectionSpec[] = [
   },
 ];
 
-function sortJobs(items: UserJob[], sort: SectionSort) {
+function sortJobs(
+  items: UserJob[],
+  sort: SectionSort,
+  section?: UserJobSection,
+) {
   const copy = [...items];
   if (sort === 'most-recent') {
+    if (section === 'completed') {
+      // History: completedAt → updatedAt → createdAt, newest first.
+      return copy.sort((a, b) => jobRecencyTime(b) - jobRecencyTime(a));
+    }
     return copy.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
   if (sort === 'oldest') {
@@ -179,31 +190,13 @@ function JobFlowCard({
   showReviewPrompt?: boolean;
 }) {
   const tone = getStatusTone(job.status);
-  const showStars = showReviewPrompt || !!job.rating;
-  const [previewRating, setPreviewRating] = useState<number | null>(null);
-  const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (navigateTimer.current) clearTimeout(navigateTimer.current);
-    };
-  }, []);
-
-  const displayedRating = previewRating ?? job.rating ?? 0;
+  const showStars = !!showReviewPrompt;
   const details = resolveJobDetails(job);
   const total = jobTotalPrice(details);
   const showMoney =
     job.source !== 'posted_listing' &&
     total > 0 &&
     !!details.currencySymbol;
-
-  const handleStarPress = (value: number) => {
-    setPreviewRating(value);
-    if (navigateTimer.current) clearTimeout(navigateTimer.current);
-    navigateTimer.current = setTimeout(() => {
-      onStarPress?.(value);
-    }, 220);
-  };
 
   return (
     <TouchableOpacity
@@ -285,29 +278,12 @@ function JobFlowCard({
       {showStars ? (
         <>
           <View style={styles.metaSeparator} />
-          <View style={styles.reviewStars}>
-            {Array.from({ length: 5 }).map((_, i) => {
-              const value = i + 1;
-              const filled = displayedRating >= value;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  hitSlop={8}
-                  activeOpacity={0.75}
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    handleStarPress(value);
-                  }}
-                >
-                  <Ionicons
-                    name="star"
-                    size={22}
-                    color={filled ? colors.warning : colors.border}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <EngagementReviewPrompt
+            compact
+            otherName={job.counterpart.name}
+            existingRating={job.rating}
+            onSelectRating={(value) => onStarPress?.(value)}
+          />
         </>
       ) : null}
     </TouchableOpacity>
@@ -419,6 +395,7 @@ export default function JobsScreen({
       result[section.key] = sortJobs(
         scoped.filter((j) => j.section === section.key),
         sectionSort[section.key],
+        section.key,
       );
     });
     return result;
@@ -557,17 +534,23 @@ export default function JobsScreen({
                       job={job}
                       hideStatus={section.key === 'posted'}
                       showReviewPrompt={
-                        section.key === 'completed' && job.status === 'completed'
+                        section.key === 'completed' &&
+                        job.status === 'completed' &&
+                        (job.reviewState
+                          ? job.reviewState.canReview ||
+                            !!job.reviewState.myReview
+                          : true)
                       }
                       onPress={() => openJob(job)}
                       onCounterpartPress={() =>
                         openUserProfile(navigation, job.counterpart.id, me.id)
                       }
-                      onStarPress={() =>
-                        navigation.navigate('WriteReview', {
+                      onStarPress={(rating) =>
+                        openEngagementReview(navigation, {
                           jobId: job.id,
                           engagementId: job.engagementId,
                           workRequestId: job.requestId,
+                          initialRating: rating,
                         })
                       }
                     />

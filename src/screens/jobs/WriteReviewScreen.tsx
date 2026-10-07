@@ -9,33 +9,37 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
+import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
+import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
-import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ApiError } from '../../lib/apiClient';
 import { marketplaceApi } from '../../services/marketplaceApi';
+import { pickLocalImage, uploadLocalFile } from '../../lib/uploadMedia';
 import { ScreenProps } from '../../navigation/types';
 
-const MAX_IMAGES = 6;
+const MAX_REVIEW_IMAGES = 4;
+const REVIEW_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png'];
 
-const SAMPLE_IMAGES = [
-  'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1558655146-d09347e92766?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1542744094-24638eff58bb?w=400&h=400&fit=crop',
-];
+interface ReviewImageDraft {
+  /** Local key for list rendering / removal. */
+  key: string;
+  uri: string;
+  mimeType: string;
+  byteSize: number;
+  fileName: string;
+  /** Set once uploaded so a retry after a failed submit does not re-upload. */
+  mediaAssetId?: string;
+}
 
 export default function WriteReviewScreen({
   route,
@@ -57,9 +61,11 @@ export default function WriteReviewScreen({
 
   const [rating, setRating] = useState(initial);
   const [text, setText] = useState(job?.reviewText ?? '');
-  const [images, setImages] = useState<string[]>(job?.reviewImages ?? []);
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [images, setImages] = useState<ReviewImageDraft[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     setRating(initial);
@@ -86,14 +92,33 @@ export default function WriteReviewScreen({
     );
   }
 
-  const addImage = () => {
-    if (images.length >= MAX_IMAGES) return;
-    const next = SAMPLE_IMAGES[images.length % SAMPLE_IMAGES.length];
-    setImages((prev) => [...prev, next]);
+  const otherName = job?.counterpart.name;
+
+  const addImage = async () => {
+    if (submitting) return;
+    setImageError(null);
+    if (images.length >= MAX_REVIEW_IMAGES) {
+      setImageError(`You can add up to ${MAX_REVIEW_IMAGES} photos.`);
+      return;
+    }
+    try {
+      const picked = await pickLocalImage();
+      if (!picked) return;
+      if (!REVIEW_IMAGE_MIME_TYPES.includes(picked.mimeType.toLowerCase())) {
+        setImageError('Only JPG and PNG photos can be added.');
+        return;
+      }
+      setImages((prev) => [
+        ...prev,
+        { ...picked, key: `${Date.now()}-${prev.length}` },
+      ]);
+    } catch (e) {
+      setImageError(e instanceof Error ? e.message : 'Could not pick a photo.');
+    }
   };
 
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+  const removeImage = (key: string) => {
+    setImages((prev) => prev.filter((img) => img.key !== key));
   };
 
   const onSubmit = async () => {
@@ -104,23 +129,37 @@ export default function WriteReviewScreen({
     }
     setSubmitting(true);
     try {
+      // Upload each photo once; remember its asset id so retries are cheap.
+      const uploaded: ReviewImageDraft[] = [];
+      for (const img of images) {
+        if (img.mediaAssetId) {
+          uploaded.push(img);
+          continue;
+        }
+        const result = await uploadLocalFile({
+          uri: img.uri,
+          mimeType: img.mimeType,
+          byteSize: img.byteSize,
+          fileName: img.fileName,
+          purpose: 'review',
+        });
+        uploaded.push({ ...img, mediaAssetId: result.mediaAssetId });
+        setImages((prev) =>
+          prev.map((p) =>
+            p.key === img.key ? { ...p, mediaAssetId: result.mediaAssetId } : p,
+          ),
+        );
+      }
+      const mediaAssetIds = uploaded
+        .map((img) => img.mediaAssetId)
+        .filter((id): id is string => Boolean(id));
       await marketplaceApi.createEngagementReview(engagementId, {
         rating,
         body: text.trim() || undefined,
+        mediaAssetIds: mediaAssetIds.length > 0 ? mediaAssetIds : undefined,
       });
       void refresh();
-      Alert.alert('Review submitted', 'Thanks for your feedback.', [
-        {
-          text: 'OK',
-          onPress: () => {
-            if (route.params.conversationId) {
-              navigation.navigate('ArchivedConversations');
-            } else {
-              navigation.goBack();
-            }
-          },
-        },
-      ]);
+      setSubmitted(true);
     } catch (e) {
       Alert.alert(
         'Could not submit review',
@@ -160,10 +199,10 @@ export default function WriteReviewScreen({
         >
           {!canSubmit ? (
             <View style={styles.deferredBanner}>
-              <Text style={styles.deferredTitle}>Coming in a later phase</Text>
+              <Text style={styles.deferredTitle}>Review unavailable</Text>
               <Text style={styles.deferredBody}>
-                Reviews are not available yet for this job. You can preview this
-                screen, but nothing will be submitted.
+                This job is not linked to a completed engagement, so a review
+                cannot be submitted.
               </Text>
             </View>
           ) : null}
@@ -198,6 +237,11 @@ export default function WriteReviewScreen({
             </View>
           )}
 
+          <Text style={styles.promptText}>
+            {otherName
+              ? `How was it working with ${otherName}?`
+              : 'How was your experience?'}
+          </Text>
           <Text style={styles.sectionLabel}>Your rating</Text>
           <View style={styles.starsRow}>
             {Array.from({ length: 5 }).map((_, i) => {
@@ -237,69 +281,76 @@ export default function WriteReviewScreen({
           </View>
           <Text style={styles.charCount}>{text.length}/500</Text>
 
-          <View style={styles.photosHeader}>
-            <Text style={styles.sectionLabelInline}>Add photos</Text>
-            <Text style={styles.optionalHint}>
-              Optional · {images.length}/{MAX_IMAGES}
-            </Text>
-          </View>
-          <Text style={styles.photosHint}>
-            Optionally attach photos of the completed work.
+          <Text style={styles.sectionLabel}>
+            Photos (optional · up to {MAX_REVIEW_IMAGES})
           </Text>
-          <View style={styles.mediaGrid}>
-            {images.map((uri, i) => (
-              <View key={`${uri}-${i}`} style={styles.mediaSlot}>
+          <View style={styles.imagesRow}>
+            {images.map((img) => (
+              <View key={img.key} style={styles.thumbWrap}>
                 <Image
-                  source={{ uri }}
-                  style={styles.mediaImage}
+                  source={{ uri: img.uri }}
+                  style={styles.thumb}
                   contentFit="cover"
                 />
                 <TouchableOpacity
-                  style={styles.removeMedia}
-                  onPress={() => removeImage(i)}
+                  style={styles.thumbRemove}
                   hitSlop={6}
+                  disabled={submitting}
+                  accessibilityLabel="Remove photo"
+                  onPress={() => removeImage(img.key)}
                 >
-                  <Ionicons name="close-circle" size={22} color={colors.white} />
+                  <Ionicons name="close" size={14} color={colors.white} />
                 </TouchableOpacity>
               </View>
             ))}
-            {images.length < MAX_IMAGES ? (
+            {images.length < MAX_REVIEW_IMAGES ? (
               <TouchableOpacity
-                style={styles.addMedia}
-                onPress={addImage}
+                style={styles.addThumb}
                 activeOpacity={0.8}
+                disabled={submitting}
+                accessibilityLabel="Add photo"
+                onPress={() => void addImage()}
               >
-                <Ionicons name="images-outline" size={26} color={colors.primary} />
-                <Text style={styles.addMediaText}>Add</Text>
+                <Ionicons name="add" size={26} color={colors.primary} />
               </TouchableOpacity>
             ) : null}
           </View>
+          {imageError ? <Text style={styles.imageError}>{imageError}</Text> : null}
         </ScrollView>
 
         <View style={styles.footer}>
           {canSubmit ? (
             <Button
-              title={submitting ? 'Submitting…' : 'Submit review'}
+              title="Submit review"
               fullWidth
+              loading={submitting}
               disabled={submitting || rating < 1}
               onPress={() => void onSubmit()}
             />
           ) : (
             <Button
-              title="Reviews coming later"
+              title="Submit review"
               fullWidth
               disabled
               onPress={() => undefined}
             />
           )}
-          {submitting ? (
-            <ActivityIndicator
-              style={styles.footerSpinner}
-              color={colors.primary}
-            />
-          ) : null}
         </View>
       </KeyboardAvoidingView>
+      <ActionBusyOverlay visible={submitting} message="Submitting review…" />
+      <SuccessConfirmationModal
+        visible={submitted}
+        title="Review submitted"
+        message="Thanks for your feedback."
+        onDone={() => {
+          setSubmitted(false);
+          if (route.params.conversationId) {
+            navigation.navigate('ArchivedConversations');
+          } else {
+            navigation.goBack();
+          }
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -363,6 +414,46 @@ const styles = StyleSheet.create({
   personMeta: { flex: 1, gap: 4 },
   personName: { ...typography.label, color: colors.text },
   jobTitle: { ...typography.bodySmall, color: colors.textSecondary },
+  promptText: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  imagesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  thumbWrap: { width: 72, height: 72 },
+  thumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.button,
+    backgroundColor: colors.borderLight,
+  },
+  thumbRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageError: { ...typography.caption, color: colors.error },
   sectionLabel: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -402,65 +493,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.xl,
   },
-  photosHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
-  },
-  sectionLabelInline: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  optionalHint: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  photosHint: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  mediaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  mediaSlot: {
-    width: '31%',
-    aspectRatio: 1,
-    position: 'relative',
-  },
-  mediaImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: radius.button,
-    backgroundColor: colors.borderLight,
-  },
-  removeMedia: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-  },
-  addMedia: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: radius.button,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  addMediaText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: '600',
-  },
   footer: {
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.md,
@@ -469,7 +501,6 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
   },
-  footerSpinner: { marginTop: spacing.sm },
   missingWrap: {
     flex: 1,
     alignItems: 'center',

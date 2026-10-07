@@ -1,7 +1,14 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  isCalendarDayBlocked,
+  isCurrentLocalMonth,
+  isSameLocalDay,
+  startOfLocalDay,
+  startOfLocalMonth,
+} from '../../utils/calendarDay';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -15,6 +22,11 @@ interface Props {
   selected?: Date | null;
   rangeStart?: Date | null;
   rangeEnd?: Date | null;
+  /**
+   * Extra date-only floor, used while picking a range end.
+   * Days before this stay disabled. Today is always the other floor.
+   */
+  notBefore?: Date | null;
 }
 
 function sameDay(a: Date | null | undefined, b: Date | null | undefined) {
@@ -36,6 +48,7 @@ export default function CalendarPicker({
   selected,
   rangeStart,
   rangeEnd,
+  notBefore,
 }: Props) {
   const grid = useMemo(() => {
     const year = month.getFullYear();
@@ -53,19 +66,36 @@ export default function CalendarPicker({
     };
   }, [month]);
 
+  const today = useMemo(() => startOfLocalDay(new Date()), []);
+  const atCurrentMonth = isCurrentLocalMonth(month, today);
+
   const dayAt = (day: number) =>
     new Date(month.getFullYear(), month.getMonth(), day);
 
-  const shiftMonth = (delta: number) =>
-    onMonthChange(new Date(month.getFullYear(), month.getMonth() + delta, 1));
+  const shiftMonth = (delta: number) => {
+    const next = new Date(month.getFullYear(), month.getMonth() + delta, 1);
+    if (delta < 0 && startOfLocalMonth(next).getTime() < startOfLocalMonth(today).getTime()) {
+      return;
+    }
+    onMonthChange(next);
+  };
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.monthLabel}>{grid.label}</Text>
         <View style={styles.nav}>
-          <TouchableOpacity hitSlop={8} onPress={() => shiftMonth(-1)}>
-            <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+          <TouchableOpacity
+            hitSlop={8}
+            disabled={atCurrentMonth}
+            accessibilityState={{ disabled: atCurrentMonth }}
+            onPress={atCurrentMonth ? undefined : () => shiftMonth(-1)}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={18}
+              color={atCurrentMonth ? colors.border : colors.textSecondary}
+            />
           </TouchableOpacity>
           <TouchableOpacity hitSlop={8} onPress={() => shiftMonth(1)}>
             <Ionicons
@@ -102,27 +132,40 @@ export default function CalendarPicker({
             date.getTime() > rangeStart.getTime() &&
             date.getTime() < rangeEnd.getTime();
           const bothEnds = !!rangeStart && !!rangeEnd;
+          const blocked = isCalendarDayBlocked(date, today, notBefore);
+          const isToday = isSameLocalDay(date, today);
 
           return (
-            <TouchableOpacity
+            <Pressable
               key={day}
               style={[
                 styles.dayCell,
-                inRange && styles.dayCellInRange,
-                isStart && bothEnds && styles.dayCellRangeStart,
-                isEnd && bothEnds && styles.dayCellRangeEnd,
+                inRange && !blocked && styles.dayCellInRange,
+                isStart && bothEnds && !blocked && styles.dayCellRangeStart,
+                isEnd && bothEnds && !blocked && styles.dayCellRangeEnd,
               ]}
-              onPress={() => onPickDay(date)}
-              activeOpacity={0.8}
+              disabled={blocked}
+              accessibilityState={{ disabled: blocked }}
+              onPress={blocked ? undefined : () => onPickDay(date)}
             >
-              <View style={[styles.dayInner, isSelected && styles.daySelected]}>
+              <View
+                style={[
+                  styles.dayInner,
+                  isToday && !isSelected && styles.dayToday,
+                  isSelected && !blocked && styles.daySelected,
+                ]}
+              >
                 <Text
-                  style={[styles.dayText, isSelected && styles.dayTextSelected]}
+                  style={[
+                    styles.dayText,
+                    blocked && styles.dayTextDisabled,
+                    isSelected && !blocked && styles.dayTextSelected,
+                  ]}
                 >
                   {day}
                 </Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -183,6 +226,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   daySelected: { backgroundColor: colors.primary },
+  dayToday: { borderWidth: 1, borderColor: colors.primary },
   dayText: { ...typography.caption, color: colors.text },
+  dayTextDisabled: { color: colors.textSecondary, opacity: 0.35 },
   dayTextSelected: { color: colors.white, fontWeight: '600' },
 });

@@ -22,6 +22,15 @@ import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  isCalendarDayBlocked,
+  isBeforeCurrentMonth,
+  isCurrentLocalMonth,
+  isSameLocalDay,
+  startOfLocalDay,
+  startOfLocalMonth,
+} from '../../utils/calendarDay';
+import { acceptedGoogleMapsUrl } from '../../utils/googleMapsLink';
 import { ProfileService, ServicePackage } from '../../data/types';
 import {
   PACKAGE_TIER_BY_NAME,
@@ -36,6 +45,17 @@ import { ScreenProps } from '../../navigation/types';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
+import type { LocalPickedFile } from '../../lib/uploadMedia';
+import {
+  attachFilesToWorkRequest,
+  attachmentFailureMessage,
+  promptPickWorkRequestFile,
+} from '../../lib/workRequestAttachmentUpload';
+import {
+  attachmentIcon,
+  WORK_REQUEST_ATTACHMENT_MAX_COUNT,
+} from '../../utils/workRequestAttachments';
+import { formatBytes } from '../../utils/formatBytes';
 
 /**
  * Visitor multi-step flow to request a provider's service (no payment yet).
@@ -46,17 +66,11 @@ import { useVisitorUser } from '../../hooks/useVisitorUser';
  */
 const TOTAL_STEPS = 7;
 
-const MOCK_FILES = [
-  { name: 'Film1.pdf', size: '2.4 MB' },
-  { name: 'Brief.pdf', size: '1.2 MB' },
-  { name: 'Moodboard.pdf', size: '3.1 MB' },
-];
-
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type PackageName = ServicePackage['name'];
 type ScheduleMode = 'deadline' | 'duration';
-type Attachment = { id: string; name: string; size: string };
+type PendingAttachment = { id: string; file: LocalPickedFile };
 
 function packageAmount(pkg: ServicePackage | undefined): number {
   if (!pkg) return 0;
@@ -75,18 +89,6 @@ function formatDate(d: Date) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${mm}/${dd}/${d.getFullYear()}`;
-}
-
-function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function daysInMonth(year: number, month: number) {
@@ -152,7 +154,7 @@ export default function RequestServiceScreen({
   const [notes, setNotes] = useState('');
 
   // Step 4
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
 
   // Step 5
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('deadline');
@@ -160,7 +162,9 @@ export default function RequestServiceScreen({
   const [rangeFrom, setRangeFrom] = useState<Date | null>(null);
   const [rangeTo, setRangeTo] = useState<Date | null>(null);
   const [activeRangeField, setActiveRangeField] = useState<'from' | 'to'>('from');
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date(2025, 5, 1));
+  const [calendarMonth, setCalendarMonth] = useState(() =>
+    startOfLocalMonth(new Date()),
+  );
 
   // Step 6
   const [country, setCountry] = useState('');
@@ -186,6 +190,15 @@ export default function RequestServiceScreen({
         selectedService.packages.find((p) => p.name === selectedPackage),
       )
     : 0;
+  const selectedAddons = useMemo(() => {
+    const addons = selectedService?.addons ?? [];
+    return addons.filter((addon) => selectedAddonIds.includes(addon.id));
+  }, [selectedAddonIds, selectedService]);
+  const addonSubtotal = selectedAddons.reduce(
+    (sum, addon) => sum + addonAmount(addon),
+    0,
+  );
+  const requestTotal = packagePrice + addonSubtotal;
 
   const canNextStep1 = Boolean(selectedService && selectedPackage);
   const scheduleReady =
@@ -193,8 +206,13 @@ export default function RequestServiceScreen({
       ? Boolean(deadlineDate)
       : Boolean(rangeFrom && rangeTo);
 
+  const savedMapsUrl = acceptedGoogleMapsUrl(mapsLink);
+  const mapsInvalid = mapsLink.trim().length > 0 && !savedMapsUrl;
+
   const footerPrimaryDisabled =
-    (step === 1 && !canNextStep1) || (step === 5 && !scheduleReady);
+    (step === 1 && !canNextStep1) ||
+    (step === 5 && !scheduleReady) ||
+    (step === 6 && mapsInvalid);
 
   const showSkip = step >= 2 && step <= 6;
 
@@ -270,11 +288,26 @@ export default function RequestServiceScreen({
   };
 
   const addAttachment = () => {
-    const next = MOCK_FILES[attachments.length % MOCK_FILES.length];
-    setAttachments((prev) => [
-      ...prev,
-      { id: `att-${Date.now()}-${prev.length}`, name: next.name, size: next.size },
-    ]);
+    if (submitting) return;
+    if (attachments.length >= WORK_REQUEST_ATTACHMENT_MAX_COUNT) {
+      Alert.alert(
+        'Too many files',
+        `You can attach up to ${WORK_REQUEST_ATTACHMENT_MAX_COUNT} files.`,
+      );
+      return;
+    }
+    void (async () => {
+      const picked = await promptPickWorkRequestFile();
+      if (!picked) return;
+      if ('error' in picked) {
+        Alert.alert('Could not attach file', picked.error);
+        return;
+      }
+      setAttachments((prev) => [
+        ...prev,
+        { id: `att-${Date.now()}-${prev.length}`, file: picked.file },
+      ]);
+    })();
   };
 
   /**
@@ -282,8 +315,21 @@ export default function RequestServiceScreen({
    * Duration mode: first tap sets "from", second tap sets "to"; tapping an earlier
    * day restarts the range so from ≤ to always holds.
    */
+  const chooseScheduleMode = (mode: ScheduleMode) => {
+    if (mode === scheduleMode) return;
+    setScheduleMode(mode);
+    setDeadlineDate(null);
+    setRangeFrom(null);
+    setRangeTo(null);
+    setActiveRangeField('from');
+    setCalendarMonth(startOfLocalMonth(new Date()));
+  };
+
   const onPickCalendarDay = (day: number) => {
     const picked = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+    const floor =
+      scheduleMode === 'duration' && activeRangeField === 'to' ? rangeFrom : null;
+    if (isCalendarDayBlocked(picked, new Date(), floor)) return;
     if (scheduleMode === 'deadline') {
       setDeadlineDate(picked);
       return;
@@ -294,46 +340,58 @@ export default function RequestServiceScreen({
       setActiveRangeField('to');
       return;
     }
-    if (picked < startOfDay(rangeFrom)) {
-      setRangeFrom(picked);
-      setRangeTo(null);
-      setActiveRangeField('to');
-      return;
-    }
     setRangeTo(picked);
   };
 
   /**
-   * Creates a `service_request` work request. Location and attachments are not
-   * carried by the terms yet, so they are folded into the notes.
+   * Creates a `service_request` work request, then uploads each attachment
+   * (purpose `work_request`) and registers it on the new request — the create
+   * API carries no files. The place (city, country, details) is saved on the
+   * terms and also noted in plain text. A pasted maps URL is not opened.
    */
   const sendRequest = () => {
-    if (!provider || !selectedService || !selectedPackage) return;
+    if (!provider || !selectedService || !selectedPackage || submitting) return;
+    if (mapsLink.trim() && !savedMapsUrl) return;
 
-    const locationLine =
-      mapsLink.trim() ||
-      [city.trim(), country.trim()].filter(Boolean).join(', ') ||
-      locationDetails.trim();
+    const locationLine = [
+      [city.trim(), country.trim()].filter(Boolean).join(', '),
+      locationDetails.trim(),
+    ]
+      .filter(Boolean)
+      .join(' · ');
     const notesLines = [
       notes.trim(),
       locationLine ? `Location: ${locationLine}` : '',
-      attachments.length > 0
-        ? `Attachments: ${attachments
-            .map((a) => (a.size ? `${a.name} (${a.size})` : a.name))
-            .join(', ')}`
-        : '',
     ].filter(Boolean);
 
     void (async () => {
       setSubmitting(true);
       try {
-        await createServiceRequest({
+        const requestId = await createServiceRequest({
           serviceOfferingId: selectedService.id,
           packageTier: PACKAGE_TIER_BY_NAME[selectedPackage],
           addonIds: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
           notes: notesLines.join('\n') || undefined,
+          location: locationLine || undefined,
+          mapsUrl: savedMapsUrl ?? undefined,
           deadline: deadlineInput,
         });
+        const attach =
+          attachments.length > 0
+            ? await attachFilesToWorkRequest(
+                requestId,
+                attachments.map((a) => a.file),
+              )
+            : null;
+        setSubmitting(false);
+        if (attach && attach.failed.length > 0) {
+          Alert.alert(
+            'Some files were not attached',
+            attachmentFailureMessage(attach.failed),
+            [{ text: 'OK', onPress: () => showSuccess('serviceRequestSent') }],
+          );
+          return;
+        }
         showSuccess('serviceRequestSent');
       } catch (e) {
         Alert.alert(
@@ -535,14 +593,16 @@ export default function RequestServiceScreen({
                 </TouchableOpacity>
               </View>
               {attachments.length === 0 ? (
-                <Text style={styles.emptyHint}>Tap + to attach files (demo).</Text>
+                <Text style={styles.emptyHint}>
+                  Tap + to attach PDF, JPG or PNG files (up to 20 MB each).
+                </Text>
               ) : (
                 attachments.map((file) => (
                   <View key={file.id} style={styles.fileRow}>
-                    <Ionicons name="document-outline" size={22} color={colors.text} />
+                    <Ionicons name={attachmentIcon(file.file.mimeType)} size={22} color={colors.text} />
                     <View style={styles.fileMeta}>
-                      <Text style={styles.fileName}>{file.name}</Text>
-                      <Text style={styles.fileSize}>{file.size}</Text>
+                      <Text style={styles.fileName} numberOfLines={1}>{file.file.fileName}</Text>
+                      <Text style={styles.fileSize}>{formatBytes(file.file.byteSize)}</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() =>
@@ -568,7 +628,7 @@ export default function RequestServiceScreen({
                     <TouchableOpacity
                       key={mode}
                       style={[styles.segmentItem, active && styles.segmentItemActive]}
-                      onPress={() => setScheduleMode(mode)}
+                      onPress={() => chooseScheduleMode(mode)}
                       activeOpacity={0.85}
                     >
                       <Text
@@ -629,10 +689,27 @@ export default function RequestServiceScreen({
 
               <View style={styles.monthHeader}>
                 <TouchableOpacity
-                  onPress={() => setCalendarMonth(new Date(year, month - 1, 1))}
+                  disabled={
+                    isCurrentLocalMonth(calendarMonth) ||
+                    isBeforeCurrentMonth(calendarMonth)
+                  }
+                  onPress={() => {
+                    const previous = new Date(year, month - 1, 1);
+                    if (isBeforeCurrentMonth(previous)) return;
+                    setCalendarMonth(previous);
+                  }}
                   hitSlop={8}
                 >
-                  <Ionicons name="chevron-back" size={22} color={colors.text} />
+                  <Ionicons
+                    name="chevron-back"
+                    size={22}
+                    color={
+                      isCurrentLocalMonth(calendarMonth) ||
+                      isBeforeCurrentMonth(calendarMonth)
+                        ? colors.border
+                        : colors.text
+                    }
+                  />
                 </TouchableOpacity>
                 <Text style={styles.monthLabel}>{monthLabel}</Text>
                 <TouchableOpacity
@@ -656,45 +733,60 @@ export default function RequestServiceScreen({
                 ))}
                 {Array.from({ length: totalDays }, (_, i) => i + 1).map((day) => {
                   const current = new Date(year, month, day);
+                  const rangeFloor =
+                    scheduleMode === 'duration' && activeRangeField === 'to'
+                      ? rangeFrom
+                      : null;
+                  const blocked = isCalendarDayBlocked(current, new Date(), rangeFloor);
+                  const isToday = isSameLocalDay(current, new Date());
                   const isDeadline =
                     scheduleMode === 'deadline' &&
                     deadlineDate &&
-                    sameDay(current, deadlineDate);
-                  const from = rangeFrom ? startOfDay(rangeFrom) : null;
-                  const to = rangeTo ? startOfDay(rangeTo) : null;
-                  const isStart = from && sameDay(current, from);
-                  const isEnd = to && sameDay(current, to);
+                    isSameLocalDay(current, deadlineDate);
+                  const from =
+                    scheduleMode === 'duration' && rangeFrom
+                      ? startOfLocalDay(rangeFrom)
+                      : null;
+                  const to =
+                    scheduleMode === 'duration' && rangeTo
+                      ? startOfLocalDay(rangeTo)
+                      : null;
+                  const isStart = from && isSameLocalDay(current, from);
+                  const isEnd = to && isSameLocalDay(current, to);
                   const inRange =
                     scheduleMode === 'duration' &&
                     from &&
                     to &&
                     current >= from &&
                     current <= to;
-                  const selected = isDeadline || isStart || isEnd;
+                  const selected = !blocked && (isDeadline || isStart || isEnd);
                   return (
-                    <TouchableOpacity
+                    <Pressable
                       key={day}
                       style={styles.dayCell}
-                      onPress={() => onPickCalendarDay(day)}
-                      activeOpacity={0.8}
+                      disabled={blocked}
+                      accessibilityState={{ disabled: blocked }}
+                      onPress={blocked ? undefined : () => onPickCalendarDay(day)}
                     >
                       <View
                         style={[
                           styles.dayInner,
-                          inRange && styles.dayInRange,
+                          isToday && !selected && styles.dayToday,
+                          inRange && !blocked && styles.dayInRange,
                           selected && styles.daySelected,
                         ]}
                       >
                         <Text
                           style={[
                             styles.dayText,
-                            (selected || inRange) && styles.dayTextSelected,
+                            blocked && styles.dayTextDisabled,
+                            selected && styles.dayTextSelected,
                           ]}
                         >
                           {day}
                         </Text>
                       </View>
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -744,6 +836,11 @@ export default function RequestServiceScreen({
                   </TouchableOpacity>
                 ) : null}
               </View>
+              {mapsInvalid ? (
+                <Text style={styles.fieldError}>
+                  Please enter a valid Google Maps link.
+                </Text>
+              ) : null}
 
               <Text style={styles.label}>Location Details</Text>
               <TextInput
@@ -779,8 +876,45 @@ export default function RequestServiceScreen({
                   </View>
                 </View>
               </ReviewRow>
+              {selectedAddons.length > 0 ? (
+                <ReviewRow label="Add-ons" onEdit={() => setStep(2)}>
+                  {selectedAddons.map((addon) => (
+                    <View key={addon.id} style={styles.reviewPackageRow}>
+                      <Text style={styles.reviewValue}>{addon.title}</Text>
+                      <View style={styles.priceInline}>
+                        <MoneyAmount
+                          amount={addonAmount(addon)}
+                          currency={addon.currency ?? objectCurrency}
+                          size={14}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </ReviewRow>
+              ) : null}
+              <ReviewRow label="Base price">
+                <MoneyAmount
+                  amount={packagePrice}
+                  currency={objectCurrency}
+                  size={14}
+                />
+              </ReviewRow>
+              <ReviewRow label="Add-ons">
+                <MoneyAmount
+                  amount={addonSubtotal}
+                  currency={objectCurrency}
+                  size={14}
+                />
+              </ReviewRow>
+              <ReviewRow label="Total">
+                <MoneyAmount
+                  amount={requestTotal}
+                  currency={objectCurrency}
+                  size={16}
+                />
+              </ReviewRow>
               <ReviewRow
-                label="Date"
+                label={scheduleMode === 'deadline' ? 'Deadline' : 'Duration'}
                 onEdit={() => setStep(5)}
                 value={dateSummary || 'Not set'}
               />
@@ -796,7 +930,7 @@ export default function RequestServiceScreen({
                   attachments.map((f) => (
                     <View key={f.id} style={styles.reviewFile}>
                       <Ionicons name="document-outline" size={16} color={colors.text} />
-                      <Text style={styles.reviewValue}>{f.name}</Text>
+                      <Text style={styles.reviewValue}>{f.file.fileName}</Text>
                     </View>
                   ))
                 )}
@@ -805,10 +939,12 @@ export default function RequestServiceScreen({
                 label="Location"
                 onEdit={() => setStep(6)}
                 value={
-                  mapsLink.trim() ||
-                  [city, country].filter(Boolean).join(', ') ||
-                  locationDetails.trim() ||
-                  'Not set'
+                  [
+                    [city, country].filter(Boolean).join(', '),
+                    locationDetails.trim(),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'Not set'
                 }
               />
             </>
@@ -932,16 +1068,18 @@ function ReviewRow({
 }: {
   label: string;
   value?: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   children?: React.ReactNode;
 }) {
   return (
     <View style={styles.reviewSection}>
       <View style={styles.reviewHeader}>
         <Text style={styles.reviewLabel}>{label}</Text>
-        <TouchableOpacity onPress={onEdit} hitSlop={8}>
-          <Ionicons name="create-outline" size={18} color={colors.text} />
-        </TouchableOpacity>
+        {onEdit ? (
+          <TouchableOpacity onPress={onEdit} hitSlop={8}>
+            <Ionicons name="create-outline" size={18} color={colors.text} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {children ?? (
         <Text style={value === 'Not set' || value === 'No notes' || value === 'None' ? styles.reviewMuted : styles.reviewValue}>
@@ -1014,6 +1152,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
+  },
+  fieldError: {
+    ...typography.caption,
+    color: colors.error,
+    marginTop: spacing.xs,
   },
   selectField: {
     flexDirection: 'row',
@@ -1264,9 +1407,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     width: 36,
   },
+  dayToday: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 18,
+    width: 36,
+  },
   dayText: {
     ...typography.bodySmall,
     color: colors.text,
+  },
+  dayTextDisabled: {
+    color: colors.textSecondary,
   },
   dayTextSelected: {
     color: colors.white,

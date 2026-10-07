@@ -16,6 +16,7 @@ import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import { startOfLocalMonth } from '../../utils/calendarDay';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
@@ -37,22 +38,23 @@ import {
   normalizeMoneyInputEditing,
   parseMoneyInput,
 } from '../../utils/money';
+import type { LocalPickedFile } from '../../lib/uploadMedia';
+import {
+  attachFilesToWorkRequest,
+  attachmentFailureMessage,
+  promptPickWorkRequestFile,
+} from '../../lib/workRequestAttachmentUpload';
+import { attachmentIcon, WORK_REQUEST_ATTACHMENT_MAX_COUNT } from '../../utils/workRequestAttachments';
+import { formatBytes } from '../../utils/formatBytes';
 
 type DeadlineMode = 'exact_date' | 'duration' | 'flexible';
 
-type Attachment = { id: string; name: string; size: string };
+type PendingAttachment = { id: string; file: LocalPickedFile };
 
 const DEADLINE_MODES: { id: DeadlineMode; label: string }[] = [
   { id: 'exact_date', label: 'Exact date' },
   { id: 'duration', label: 'Duration' },
   { id: 'flexible', label: 'Flexible' },
-];
-
-/** Demo PDFs until file upload is wired to storage. */
-const MOCK_PDFS = [
-  { name: 'Brief.pdf', size: '1.2 MB' },
-  { name: 'Moodboard.pdf', size: '3.1 MB' },
-  { name: 'References.pdf', size: '2.4 MB' },
 ];
 
 function formatPickedDate(date: Date) {
@@ -89,12 +91,12 @@ export default function DirectRequestScreen({
   const [scope, setScope] = useState('');
   const [amountText, setAmountText] = useState('');
   const [message, setMessage] = useState('');
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>('flexible');
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfLocalMonth(new Date()));
   const [exactDate, setExactDate] = useState<Date | null>(null);
   const [durationValue, setDurationValue] = useState('2');
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('weeks');
@@ -116,33 +118,52 @@ export default function DirectRequestScreen({
     return { type: 'flexible' };
   };
 
+  const chooseDeadlineMode = (mode: DeadlineMode) => {
+    if (mode === deadlineMode) return;
+    setDeadlineMode(mode);
+    setExactDate(null);
+    setDurationValue('');
+    setDurationUnit('days');
+    setVisibleMonth(startOfLocalMonth(new Date()));
+  };
+
   const deadline = buildDeadline();
   const canSubmit =
     !submitting && !!title.trim() && !amountInvalid && deadline !== null;
 
-  const addPdf = () => {
-    const next = MOCK_PDFS[attachments.length % MOCK_PDFS.length];
-    setAttachments((prev) => [
-      ...prev,
-      { id: `pdf-${Date.now()}-${prev.length}`, name: next.name, size: next.size },
-    ]);
+  const addFile = () => {
+    if (submitting) return;
+    if (attachments.length >= WORK_REQUEST_ATTACHMENT_MAX_COUNT) {
+      Alert.alert(
+        'Too many files',
+        `You can attach up to ${WORK_REQUEST_ATTACHMENT_MAX_COUNT} files.`,
+      );
+      return;
+    }
+    void (async () => {
+      const picked = await promptPickWorkRequestFile();
+      if (!picked) return;
+      if ('error' in picked) {
+        Alert.alert('Could not attach file', picked.error);
+        return;
+      }
+      setAttachments((prev) => [
+        ...prev,
+        { id: `file-${Date.now()}-${prev.length}`, file: picked.file },
+      ]);
+    })();
   };
 
+  /**
+   * The create API carries no files, so: create the request first, then upload
+   * each file (purpose `work_request`) and register it on the new request.
+   */
   const submit = () => {
-    if (!deadline) return;
-    const attachmentLine =
-      attachments.length > 0
-        ? `Attachments: ${attachments
-            .map((a) => (a.size ? `${a.name} (${a.size})` : a.name))
-            .join(', ')}`
-        : '';
-    const combinedMessage = [message.trim(), attachmentLine]
-      .filter(Boolean)
-      .join('\n');
+    if (!deadline || submitting) return;
     void (async () => {
       setSubmitting(true);
       try {
-        await createDirectRequest({
+        const requestId = await createDirectRequest({
           recipientUserId: route.params.userId,
           title: title.trim(),
           scope: scope.trim() || undefined,
@@ -151,8 +172,24 @@ export default function DirectRequestScreen({
               ? { amount, currency: requestCurrency }
               : undefined,
           deadline,
-          message: combinedMessage || undefined,
+          message: message.trim() || undefined,
         });
+        const attach =
+          attachments.length > 0
+            ? await attachFilesToWorkRequest(
+                requestId,
+                attachments.map((a) => a.file),
+              )
+            : null;
+        setSubmitting(false);
+        if (attach && attach.failed.length > 0) {
+          Alert.alert(
+            'Some files were not attached',
+            attachmentFailureMessage(attach.failed),
+            [{ text: 'OK', onPress: () => showSuccess('directRequestSent') }],
+          );
+          return;
+        }
         showSuccess('directRequestSent');
       } catch (e) {
         Alert.alert(
@@ -236,7 +273,7 @@ export default function DirectRequestScreen({
                 <TouchableOpacity
                   key={mode.id}
                   style={[styles.modeBtn, active && styles.modeBtnActive]}
-                  onPress={() => setDeadlineMode(mode.id)}
+                  onPress={() => chooseDeadlineMode(mode.id)}
                   activeOpacity={0.85}
                 >
                   <Text
@@ -329,20 +366,20 @@ export default function DirectRequestScreen({
           </View>
 
           <View style={styles.attachmentsHeader}>
-            <Text style={styles.fieldLabelInline}>Attachments (PDF)</Text>
-            <TouchableOpacity onPress={addPdf} hitSlop={8} accessibilityLabel="Attach PDF">
+            <Text style={styles.fieldLabelInline}>Attachments</Text>
+            <TouchableOpacity onPress={addFile} hitSlop={8} accessibilityLabel="Attach file">
               <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
             </TouchableOpacity>
           </View>
           {attachments.length === 0 ? (
-            <Text style={styles.hintText}>Tap + to attach a PDF brief or references.</Text>
+            <Text style={styles.hintText}>Tap + to attach a PDF or image brief or references.</Text>
           ) : (
             attachments.map((file) => (
               <View key={file.id} style={styles.fileRow}>
-                <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+                <Ionicons name={attachmentIcon(file.file.mimeType)} size={22} color={colors.primary} />
                 <View style={styles.fileMeta}>
-                  <Text style={styles.fileName}>{file.name}</Text>
-                  <Text style={styles.fileSize}>{file.size}</Text>
+                  <Text style={styles.fileName} numberOfLines={1}>{file.file.fileName}</Text>
+                  <Text style={styles.fileSize}>{formatBytes(file.file.byteSize)}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() =>
@@ -359,7 +396,8 @@ export default function DirectRequestScreen({
 
         <View style={styles.footer}>
           <Button
-            title={submitting ? 'Sending…' : 'Send Request'}
+            title="Send Request"
+            loading={submitting}
             fullWidth
             disabled={!canSubmit}
             onPress={queueSend}

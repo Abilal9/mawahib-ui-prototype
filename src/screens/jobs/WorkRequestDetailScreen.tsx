@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,11 +16,22 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import CalendarPicker from '../../components/ui/CalendarPicker';
+import MapsLocationLink from '../../components/job/MapsLocationLink';
+import {
+  isPastLocalDay,
+  startOfLocalDay,
+  startOfLocalMonth,
+} from '../../utils/calendarDay';
+import { placeFromLocationNote } from '../../utils/googleMapsLink';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
+import DocumentViewerModal, {
+  type DocumentViewerSource,
+} from '../../components/media/DocumentViewerModal';
+import EngagementReviewPrompt from '../../components/job/EngagementReviewPrompt';
 import { colors, spacing, radius, typography } from '../../theme';
 import {
   normalizeMoneyInputEditing,
@@ -28,17 +39,21 @@ import {
 } from '../../utils/money';
 import {
   attachmentIcon,
-  parseAttachmentsFromNotes,
+  WORK_REQUEST_ATTACHMENT_MAX_COUNT,
 } from '../../utils/workRequestAttachments';
+import { formatBytes } from '../../utils/formatBytes';
+import {
+  promptPickWorkRequestFile,
+  uploadAndAttachFile,
+} from '../../lib/workRequestAttachmentUpload';
+import { invoicesApi, type ApiInvoice } from '../../services/invoicesApi';
 import { ApiError } from '../../lib/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import {
-  PAYMENTS_UNAVAILABLE_MESSAGE,
-  useUserJobs,
-} from '../../context/UserJobsContext';
+import { useUserJobs } from '../../context/UserJobsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { openEngagementReview } from '../../utils/openEngagementReview';
 import {
   jobsTabForViewer,
   MarketplaceSuccessKey,
@@ -65,6 +80,7 @@ import {
   WorkRequestTerms,
   effectiveTerms,
   formatDeadline,
+  formatMoney,
   fromIsoDate,
   summarizeTermsChange,
   termsAddonsSum,
@@ -73,7 +89,11 @@ import {
   toIsoDate,
   workRequestApi,
 } from '../../services/workRequestApi';
-import { marketplaceApi } from '../../services/marketplaceApi';
+import {
+  type ApiEngagement,
+  type ApiWorkRequestAttachment,
+  marketplaceApi,
+} from '../../services/marketplaceApi';
 import { messageService } from '../../services/messageService';
 
 const STATUS_TONE: Record<
@@ -136,6 +156,46 @@ function formatPickedDate(date: Date) {
   });
 }
 
+type EngagementEvent = ApiEngagement['events'][number];
+
+/** Real engagement transitions only; delivered → in_progress is a change request. */
+function engagementEventLabel(event: EngagementEvent): string {
+  if (event.fromStatus === 'delivered' && event.toStatus === 'in_progress') {
+    return 'Changes requested';
+  }
+  switch (event.toStatus) {
+    case 'pending_payment':
+      return 'Pending Payment';
+    case 'payment_failed':
+      return 'Payment Failed';
+    case 'in_progress':
+      return 'In Progress';
+    case 'delivered':
+      return 'Delivered';
+    case 'disputed':
+      return 'Delivery Declined';
+    case 'completed':
+      return 'Completed';
+    case 'cancelled':
+      return 'Engagement Cancelled';
+    case 'declined':
+      return 'Engagement Declined';
+    default:
+      return event.toStatus.replace(/_/g, ' ');
+  }
+}
+
+/** Request-level `accepted` already covers these two engagement statuses. */
+const ENGAGEMENT_EVENTS_SKIPPED = new Set<string>(['requested', 'accepted']);
+
+interface TimelineEntry {
+  key: string;
+  title: string;
+  summary?: string;
+  note?: string;
+  createdAt: string;
+}
+
 function moneyChanged(
   a: WorkRequestTerms['money'],
   b: WorkRequestTerms['money'],
@@ -150,6 +210,58 @@ function deadlineChanged(
   b: WorkRequestTerms['deadline'],
 ): boolean {
   return formatDeadline(a) !== formatDeadline(b);
+}
+
+/**
+ * Package/base + each add-on + total. A job posting with a single amount shows
+ * only the agreed total — no invented package rows.
+ */
+function PriceBreakdown({
+  terms,
+  isJobPosting,
+}: {
+  terms: WorkRequestTerms;
+  isJobPosting: boolean;
+}) {
+  const addons = terms.addons ?? [];
+  const total = termsTotal(terms);
+  if (!total) return null;
+  const hasPackage = !!(terms.packageName || terms.packageTier);
+  const singleAmount = isJobPosting && addons.length === 0 && !hasPackage;
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>Price breakdown</Text>
+      <View style={styles.termsCard}>
+        {singleAmount ? (
+          <MoneyRow label="Agreed total" money={total} fallback="—" />
+        ) : (
+          <>
+            {terms.money ? (
+              <MoneyRow
+                label={
+                  hasPackage
+                    ? `Package · ${terms.packageName || terms.packageTier}`
+                    : 'Base price'
+                }
+                money={terms.money}
+                fallback="—"
+              />
+            ) : null}
+            {addons.map((addon) => (
+              <MoneyRow
+                key={addon.id || addon.title}
+                label={`Add-on · ${addon.title}`}
+                money={addon.money}
+                fallback="—"
+              />
+            ))}
+            <MoneyRow label="Total" money={total} fallback="—" />
+          </>
+        )}
+      </View>
+    </>
+  );
 }
 
 function TermsBlock({
@@ -213,7 +325,15 @@ function TermsBlock({
       {showTotal ? (
         <MoneyRow label="Total" money={total} fallback="—" />
       ) : null}
-      {terms.location ? <Row label="Location" value={terms.location} /> : null}
+      {terms.location?.trim() ||
+      placeFromLocationNote(terms.notes) ||
+      terms.mapsUrl ? (
+        <MapsLocationLink
+          label={terms.location?.trim() || placeFromLocationNote(terms.notes)}
+          mapsUrl={terms.mapsUrl}
+          query={terms.location?.trim() || placeFromLocationNote(terms.notes)}
+        />
+      ) : null}
       {terms.scope ? <Block label="Scope" value={terms.scope} /> : null}
       {terms.notes ? <Block label="Notes" value={terms.notes} /> : null}
     </View>
@@ -311,6 +431,8 @@ export default function WorkRequestDetailScreen({
     markDelivered,
     markCompleted,
     markDisputed,
+    requestEngagementChanges,
+    getJobById,
     refresh,
     refreshUnread,
   } = useUserJobs();
@@ -329,7 +451,24 @@ export default function WorkRequestDetailScreen({
   const [workConversationId, setWorkConversationId] = useState<string | null>(
     null,
   );
-  const [devStarting, setDevStarting] = useState(false);
+  const [attachments, setAttachments] = useState<ApiWorkRequestAttachment[]>(
+    [],
+  );
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(
+    null,
+  );
+  const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
+  const [openingInvoiceId, setOpeningInvoiceId] = useState<string | null>(null);
+  const [viewerSource, setViewerSource] =
+    useState<DocumentViewerSource | null>(null);
+  /** Real engagement_events — drives the timeline and the dispute notice. */
+  const [engagementEvents, setEngagementEvents] = useState<EngagementEvent[]>(
+    [],
+  );
+  /** Job postings: the listing owner has selected this application. */
+  const [applicantSelected, setApplicantSelected] = useState(false);
+  const wasBlurred = useRef(false);
 
   const [confirm, setConfirm] = useState<{
     title: string;
@@ -347,7 +486,10 @@ export default function WorkRequestDetailScreen({
   const [reportOpen, setReportOpen] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
-  const [declineOpen, setDeclineOpen] = useState(false);
+  /** Client delivery note sheet: dispute (→ disputed) or request changes (→ in_progress). */
+  const [deliveryNoteMode, setDeliveryNoteMode] = useState<
+    'dispute' | 'changes' | null
+  >(null);
   const [declineText, setDeclineText] = useState('');
   /** Latest engagement_events.note for delivered → disputed (Marketplace SoT). */
   const [disputeNote, setDisputeNote] = useState<string | null>(null);
@@ -355,7 +497,9 @@ export default function WorkRequestDetailScreen({
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    startOfLocalMonth(new Date()),
+  );
   const [exactDate, setExactDate] = useState<Date | null>(null);
   const [rangeFrom, setRangeFrom] = useState<Date | null>(null);
   const [rangeTo, setRangeTo] = useState<Date | null>(null);
@@ -368,11 +512,20 @@ export default function WorkRequestDetailScreen({
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [proposalComment, setProposalComment] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setDisputeNote(null);
-    setDisputeAt(null);
+  /**
+   * `silent` refreshes in place (no spinner, keeps current data on failure) —
+   * used when returning from payment / attachment flows.
+   */
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+      setDisputeNote(null);
+      setDisputeAt(null);
+      setEngagementEvents([]);
+    }
     try {
       const fetched = await workRequestApi.get(requestId);
       setRequest(fetched);
@@ -381,7 +534,34 @@ export default function WorkRequestDetailScreen({
         .markViewed(requestId)
         .catch(() => null);
       if (viewed) setRequest(viewed);
+      const current = viewed ?? fetched;
+      setAttachments(current.attachments ?? []);
       await refreshUnread();
+
+      // Job postings: is this application the selected one?
+      if (
+        current.source === 'job_posting' &&
+        current.jobApplicationId &&
+        (current.status === 'pending' ||
+          current.status === 'changes_requested' ||
+          current.status === 'changes_declined')
+      ) {
+        const amSender = current.senderUserId === apiUser?.id;
+        const apps = amSender
+          ? await marketplaceApi.listMyApplications().catch(() => [])
+          : current.jobListingId
+            ? await marketplaceApi
+                .listApplicationsForListing(current.jobListingId)
+                .catch(() => [])
+            : [];
+        setApplicantSelected(
+          apps.some(
+            (a) => a.id === current.jobApplicationId && a.status === 'accepted',
+          ),
+        );
+      } else {
+        setApplicantSelected(false);
+      }
 
       const engagementId =
         viewed?.workEngagementId ?? fetched.workEngagementId;
@@ -406,37 +586,74 @@ export default function WorkRequestDetailScreen({
         setWorkConversationId(null);
       }
 
-      // Dispute reason lives on engagement_events — fetch only while disputed.
-      if (engagementId && engagementStatus === 'disputed') {
+      // Invoices exist once the engagement has been paid.
+      if (canOpenWorkChat && engagementId) {
+        setInvoices(
+          await invoicesApi.listForEngagement(engagementId).catch(() => []),
+        );
+      } else {
+        setInvoices([]);
+      }
+
+      // Engagement events feed the timeline (incl. "Changes requested") and the
+      // dispute reason; only fetched once an engagement exists.
+      if (engagementId) {
         const engagement = await marketplaceApi
           .getEngagement(engagementId)
           .catch(() => null);
-        const lastDispute = engagement
-          ? [...engagement.events]
-              .reverse()
-              .find((e) => e.toStatus === 'disputed' && e.note?.trim())
-          : undefined;
-        if (lastDispute) {
-          setDisputeNote(lastDispute.note.trim());
-          setDisputeAt(lastDispute.createdAt);
-        }
+        setEngagementEvents(engagement?.events ?? []);
+        const lastDispute =
+          engagementStatus === 'disputed' && engagement
+            ? [...engagement.events]
+                .reverse()
+                .find((e) => e.toStatus === 'disputed' && e.note?.trim())
+            : undefined;
+        setDisputeNote(lastDispute ? lastDispute.note.trim() : null);
+        setDisputeAt(lastDispute ? lastDispute.createdAt : null);
+      } else {
+        setEngagementEvents([]);
+        setDisputeNote(null);
+        setDisputeAt(null);
       }
     } catch (e) {
-      setError(
-        e instanceof ApiError ? e.message : 'Failed to load this request',
-      );
-      setRequest(null);
-      setWorkConversationId(null);
-      setDisputeNote(null);
-      setDisputeAt(null);
+      if (!silent) {
+        setError(
+          e instanceof ApiError ? e.message : 'Failed to load this request',
+        );
+        setRequest(null);
+        setWorkConversationId(null);
+        setDisputeNote(null);
+        setDisputeAt(null);
+        setAttachments([]);
+        setInvoices([]);
+        setEngagementEvents([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [requestId, refreshUnread]);
+    },
+    [requestId, refreshUnread, apiUser?.id],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Returning from the payment screens (or any pushed screen): refresh in place.
+  useEffect(() => {
+    const unsubBlur = navigation.addListener('blur', () => {
+      wasBlurred.current = true;
+    });
+    const unsubFocus = navigation.addListener('focus', () => {
+      if (!wasBlurred.current) return;
+      wasBlurred.current = false;
+      void load({ silent: true });
+    });
+    return () => {
+      unsubBlur();
+      unsubFocus();
+    };
+  }, [navigation, load]);
 
   const terms = useMemo(
     () => (request ? effectiveTerms(request) : null),
@@ -508,7 +725,7 @@ export default function WorkRequestDetailScreen({
   const isProvider = request.providerUserId === viewerId;
   const tone = STATUS_TONE[request.status];
 
-  const turn = getNegotiationTurn(request, viewerId);
+  const turn = getNegotiationTurn(request, viewerId, { applicantSelected });
   const overflow = getWorkRequestOverflowMenu(request, viewerId);
   const isPendingPayment =
     request.status === 'pending_payment' &&
@@ -535,11 +752,78 @@ export default function WorkRequestDetailScreen({
       : isProvider && request.workEngagementStatus === 'disputed'
         ? 'Waiting for the client to confirm delivery.'
         : null;
-  const showDevStartWork =
-    typeof __DEV__ !== 'undefined' &&
-    __DEV__ &&
-    isPendingPayment &&
-    !!request.workEngagementId;
+  /** Pay Now: the client, while the engagement waits for money. */
+  const canPay =
+    isPendingPayment && isClient && !!request.workEngagementId;
+  const attachmentsLocked =
+    request.workEngagementStatus === 'delivered' ||
+    request.workEngagementStatus === 'disputed' ||
+    request.workEngagementStatus === 'completed';
+  const requestOpenForAttachmentEdits =
+    !attachmentsLocked &&
+    (request.status === 'pending' ||
+      request.status === 'changes_requested' ||
+      request.status === 'changes_declined' ||
+      request.status === 'pending_payment');
+  const canAddAttachments =
+    (isSender || isRecipient) && requestOpenForAttachmentEdits;
+  const canRemoveAttachment = (file: ApiWorkRequestAttachment) =>
+    requestOpenForAttachmentEdits && file.uploadedByUserId === viewerId;
+
+  // Chronological, real events only: request negotiation + engagement transitions.
+  const timelineEntries: TimelineEntry[] = [
+    ...request.events.map((event): TimelineEntry => {
+      const change =
+        event.type === 'changes_requested' ||
+        event.type === 'changes_declined' ||
+        event.type === 'changes_cancelled'
+          ? termsChangeFromPayload(event.payload)
+          : null;
+      // Cancelled proposals: show the event, not the term diff.
+      const summary =
+        change && event.type !== 'changes_cancelled'
+          ? summarizeTermsChange(change)
+          : '';
+      return {
+        key: `req-${event.id}`,
+        title: EVENT_LABEL[event.type] ?? event.type,
+        summary: summary || undefined,
+        note: event.note || undefined,
+        createdAt: event.createdAt,
+      };
+    }),
+    ...engagementEvents
+      .filter((e) => !ENGAGEMENT_EVENTS_SKIPPED.has(e.toStatus))
+      .map(
+        (event): TimelineEntry => ({
+          key: `eng-${event.id}`,
+          title: engagementEventLabel(event),
+          note: event.note?.trim() || undefined,
+          createdAt: event.createdAt,
+        }),
+      ),
+  ].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const lastEngagementEvent =
+    engagementEvents.length > 0
+      ? engagementEvents[engagementEvents.length - 1]
+      : null;
+  const pendingChangesNote =
+    request.workEngagementStatus === 'in_progress' &&
+    lastEngagementEvent?.fromStatus === 'delivered' &&
+    lastEngagementEvent.toStatus === 'in_progress'
+      ? lastEngagementEvent
+      : null;
+  const reviewJob = getJobById(request.id);
+  const paymentWaitingMessage =
+    isPendingPayment && !isClient
+      ? 'Waiting for the client to complete payment.'
+      : null;
+  const ownerSelectedNotice =
+    request.source === 'job_posting' &&
+    isRecipient &&
+    applicantSelected &&
+    (request.status === 'pending' || request.status === 'changes_declined');
+  const documentedInvoices = invoices.filter((inv) => inv.hasDocument);
   const jobsTab = jobsTabForViewer(isSender);
 
   const openWorkChat = () => {
@@ -553,38 +837,115 @@ export default function WorkRequestDetailScreen({
     );
   };
 
-  const onDevStartWork = () => {
-    if (!request.workEngagementId || devStarting) return;
+  const openPayment = () => {
+    if (!request.workEngagementId) return;
+    navigation.navigate('ConfirmPayment', {
+      engagementId: request.workEngagementId,
+      requestId: request.id,
+    });
+  };
+
+  const openAttachment = (attachment: ApiWorkRequestAttachment) => {
+    if (openingAttachmentId) return;
     void (async () => {
-      setDevStarting(true);
+      setOpeningAttachmentId(attachment.id);
       try {
-        await marketplaceApi.devStartWork(request.workEngagementId!);
-        await load();
-        const workChats = await messageService
-          .listConversations('work')
-          .catch(() => []);
-        const match = messageService.findWorkConversation(
-          workChats,
-          request.workEngagementId!,
-        );
-        if (match) {
-          setWorkConversationId(match.id);
-          navigation.navigate('Chat', { conversationId: match.id });
-        } else {
-          Alert.alert(
-            'Work started',
-            'Engagement is in progress. Open Messages if the chat does not appear yet.',
+        const { url, originalFileName, mimeType } =
+          await marketplaceApi.getWorkRequestAttachmentUrl(
+            request.id,
+            attachment.id,
           );
-        }
+        setViewerSource({
+          title: originalFileName || attachment.originalFileName,
+          uri: url,
+          mimeType: mimeType || attachment.mimeType,
+        });
       } catch (e) {
         Alert.alert(
-          'Dev start work failed',
+          'Could not open file',
           e instanceof ApiError || e instanceof Error
             ? e.message
-            : 'Is ENABLE_DEV_START_WORK=true on the backend?',
+            : 'Please try again.',
         );
       } finally {
-        setDevStarting(false);
+        setOpeningAttachmentId(null);
+      }
+    })();
+  };
+
+  const addAttachment = () => {
+    if (uploadingAttachment || busy) return;
+    if (attachments.length >= WORK_REQUEST_ATTACHMENT_MAX_COUNT) {
+      Alert.alert(
+        'Too many files',
+        `A request can have up to ${WORK_REQUEST_ATTACHMENT_MAX_COUNT} files.`,
+      );
+      return;
+    }
+    void (async () => {
+      const picked = await promptPickWorkRequestFile();
+      if (!picked) return;
+      if ('error' in picked) {
+        Alert.alert('Could not attach file', picked.error);
+        return;
+      }
+      setUploadingAttachment(true);
+      try {
+        const created = await uploadAndAttachFile(request.id, picked.file);
+        setAttachments((prev) => [...prev, created]);
+      } catch (e) {
+        Alert.alert(
+          'Could not attach file',
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Please try again.',
+        );
+      } finally {
+        setUploadingAttachment(false);
+      }
+    })();
+  };
+
+  const queueRemoveAttachment = (file: ApiWorkRequestAttachment) => {
+    setConfirm({
+      title: 'Remove attachment?',
+      message: `Are you sure you want to remove "${file.originalFileName}"?`,
+      confirmLabel: 'Remove',
+      danger: true,
+      run: async () => {
+        await marketplaceApi.deleteWorkRequestAttachment(request.id, file.id);
+        setAttachments((prev) => prev.filter((a) => a.id !== file.id));
+        try {
+          setAttachments(
+            await marketplaceApi.listWorkRequestAttachments(request.id),
+          );
+        } catch {
+          // The local removal above already reflects the delete.
+        }
+      },
+    });
+  };
+
+  const openInvoice = (invoice: ApiInvoice) => {
+    if (openingInvoiceId) return;
+    void (async () => {
+      setOpeningInvoiceId(invoice.id);
+      try {
+        const doc = await invoicesApi.getDocument(invoice.id);
+        setViewerSource({
+          title: doc.originalFileName || invoice.invoiceNumber,
+          uri: doc.url,
+          mimeType: doc.mimeType || 'application/pdf',
+        });
+      } catch (e) {
+        Alert.alert(
+          'Could not open invoice',
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Please try again.',
+        );
+      } finally {
+        setOpeningInvoiceId(null);
       }
     })();
   };
@@ -603,9 +964,6 @@ export default function WorkRequestDetailScreen({
       deadline?.type === 'date_range' ? fromIsoDate(deadline.endDate) : null;
 
     setDeadlineMode(deadline?.type ?? 'exact_date');
-    setExactDate(deadline?.type === 'exact_date' ? start : null);
-    setRangeFrom(deadline?.type === 'date_range' ? start : null);
-    setRangeTo(end);
     setActiveRangeField('from');
     setDurationValue(
       deadline?.type === 'duration' && deadline.durationValue
@@ -617,8 +975,12 @@ export default function WorkRequestDetailScreen({
         ? deadline.durationUnit
         : 'weeks',
     );
-    const anchor = start ?? new Date();
-    setVisibleMonth(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+    const futureStart = start && !isPastLocalDay(start) ? start : null;
+    setExactDate(deadline?.type === 'exact_date' ? futureStart : null);
+    setRangeFrom(deadline?.type === 'date_range' ? futureStart : null);
+    setRangeTo(end && !isPastLocalDay(end) ? end : null);
+    const anchor = futureStart ?? new Date();
+    setVisibleMonth(startOfLocalMonth(anchor));
     setProposalComment('');
     setChangesOpen(true);
   };
@@ -740,17 +1102,33 @@ export default function WorkRequestDetailScreen({
     }
   };
 
-  const submitDecline = () => {
+  const submitDeliveryNote = () => {
+    const mode = deliveryNoteMode;
     const explanation = declineText.trim();
+    if (!mode) return;
     if (!explanation) {
-      Alert.alert('Explanation required', 'Please describe the issue.');
+      Alert.alert(
+        mode === 'changes' ? 'Note required' : 'Explanation required',
+        mode === 'changes'
+          ? 'Please describe what needs to change.'
+          : 'Please describe the issue.',
+      );
       return;
     }
     if (!request.workEngagementId || busy) return;
-    setDeclineOpen(false);
+    const engagementId = request.workEngagementId;
+    setDeliveryNoteMode(null);
     setDeclineText('');
+    if (mode === 'changes') {
+      void runAction(
+        () => requestEngagementChanges(engagementId, explanation),
+        'jobChangesRequested',
+        { tab: jobsTab, section: 'in-progress' },
+      );
+      return;
+    }
     void runAction(
-      () => markDisputed(request.workEngagementId!, explanation),
+      () => markDisputed(engagementId, explanation),
       'jobDisputed',
       { tab: jobsTab, section: 'in-progress' },
     );
@@ -781,7 +1159,9 @@ export default function WorkRequestDetailScreen({
         title: negotiationActionLabel(primaryNegotiation),
         onPress: () => queueNegotiationAction(primaryNegotiation),
       }
-    : canDeliver
+    : canPay
+      ? { title: 'Pay Now', onPress: openPayment }
+      : canDeliver
       ? {
           title: 'Mark as Delivered',
           onPress: () =>
@@ -807,19 +1187,32 @@ export default function WorkRequestDetailScreen({
 
   const hasSecondaryActions =
     secondaryNegotiation.length > 0 || canDeclineDelivery;
-  const waitingMessage = turn.waitingMessage ?? deliveryWaitingMessage;
+  const waitingMessage =
+    turn.waitingMessage ?? paymentWaitingMessage ?? deliveryWaitingMessage;
   const hasFooterActions =
     !!primaryAction ||
     hasSecondaryActions ||
     !!waitingMessage ||
-    isPendingPayment ||
     isCompletedEngagement ||
     canMessageWork ||
-    showDevStartWork;
+    canPay;
+
+  /** Switching mode drops the previous mode. Coming back starts clean. */
+  const chooseDeadlineMode = (mode: DeadlineType) => {
+    if (mode === deadlineMode) return;
+    setDeadlineMode(mode);
+    setExactDate(null);
+    setRangeFrom(null);
+    setRangeTo(null);
+    setActiveRangeField('from');
+    setDurationValue('');
+    setDurationUnit('days');
+    setVisibleMonth(startOfLocalMonth(new Date()));
+  };
 
   /**
-   * Exact mode picks a single day. Range mode fills `from` then `to`; tapping an
-   * earlier day restarts the range so `from ≤ to` always holds.
+   * Exact mode picks a single day. Range mode fills `from` then `to`.
+   * A day before the start is not selectable.
    */
   const onPickDay = (picked: Date) => {
     if (deadlineMode === 'exact_date') {
@@ -832,10 +1225,7 @@ export default function WorkRequestDetailScreen({
       setActiveRangeField('to');
       return;
     }
-    if (picked < rangeFrom) {
-      setRangeFrom(picked);
-      setRangeTo(null);
-      setActiveRangeField('to');
+    if (startOfLocalDay(picked).getTime() < startOfLocalDay(rangeFrom).getTime()) {
       return;
     }
     setRangeTo(picked);
@@ -1033,10 +1423,25 @@ export default function WorkRequestDetailScreen({
           </>
         ) : null}
 
+        <PriceBreakdown
+          terms={terms}
+          isJobPosting={request.source === 'job_posting'}
+        />
+
         {request.rejectionComment ? (
           <View style={[styles.commentCard, styles.rejectionCard]}>
             <Text style={styles.rowLabel}>Reason</Text>
             <Text style={styles.blockValue}>{request.rejectionComment}</Text>
+          </View>
+        ) : null}
+
+        {ownerSelectedNotice ? (
+          <View style={styles.noticeCard}>
+            <Ionicons name="checkmark-circle-outline" size={18} color="#2E6AC5" />
+            <Text style={styles.noticeText}>
+              You selected this applicant. They need to accept the request
+              before it moves to Pending Payment.
+            </Text>
           </View>
         ) : null}
 
@@ -1045,7 +1450,7 @@ export default function WorkRequestDetailScreen({
             <Ionicons name="time-outline" size={18} color="#2E6AC5" />
             <Text style={styles.noticeText}>
               {isClient
-                ? 'Pending Payment — payments are coming in a later phase.'
+                ? 'Pending Payment — complete payment to start the work.'
                 : 'Pending Payment — waiting for the client.'}
             </Text>
           </View>
@@ -1065,6 +1470,22 @@ export default function WorkRequestDetailScreen({
                 return last?.note ? `\n\n“${last.note}”` : '';
               })()}
             </Text>
+          </View>
+        ) : null}
+
+        {pendingChangesNote ? (
+          <View style={[styles.noticeCard, styles.declineNotice]}>
+            <Ionicons name="create-outline" size={18} color="#C2410C" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.noticeText, styles.declineNoticeText]}>
+                Changes requested
+              </Text>
+              {pendingChangesNote.note?.trim() ? (
+                <Text style={[styles.noticeText, styles.declineNoticeText]}>
+                  {'\n'}“{pendingChangesNote.note.trim()}”
+                </Text>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
@@ -1091,116 +1512,151 @@ export default function WorkRequestDetailScreen({
 
         <Text style={styles.sectionTitle}>Timeline</Text>
         <View style={styles.termsCard}>
-          {request.events.length === 0 && !disputeNote ? (
+          {timelineEntries.length === 0 ? (
             <Text style={styles.rowValue}>No activity yet.</Text>
           ) : (
-            <>
-              {request.events.map((event) => {
-                const change =
-                  event.type === 'changes_requested' ||
-                  event.type === 'changes_declined' ||
-                  event.type === 'changes_cancelled'
-                    ? termsChangeFromPayload(event.payload)
-                    : null;
-                // Cancelled proposals: show the event, not the term diff, so the
-                // counterparty isn't asked to review discarded numbers.
-                const summary =
-                  change && event.type !== 'changes_cancelled'
-                    ? summarizeTermsChange(change)
-                    : '';
-                return (
-                  <View key={event.id} style={styles.eventRow}>
-                    <View style={styles.eventDot} />
-                    <View style={styles.eventBody}>
-                      <Text style={styles.eventTitle}>
-                        {EVENT_LABEL[event.type] ?? event.type}
-                      </Text>
-                      {summary ? (
-                        <Text style={styles.eventSummary}>{summary}</Text>
-                      ) : null}
-                      {event.note ? (
-                        <Text style={styles.eventNote}>{event.note}</Text>
-                      ) : null}
-                      <Text style={styles.eventTime}>
-                        {formatDateTime(event.createdAt)}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-              {request.workEngagementStatus === 'disputed' && disputeNote ? (
-                <View style={styles.eventRow}>
-                  <View style={styles.eventDot} />
-                  <View style={styles.eventBody}>
-                    <Text style={styles.eventTitle}>Delivery Declined</Text>
-                    <Text style={styles.eventNote}>{disputeNote}</Text>
-                    {disputeAt ? (
-                      <Text style={styles.eventTime}>
-                        {formatDateTime(disputeAt)}
-                      </Text>
-                    ) : null}
-                  </View>
+            timelineEntries.map((entry) => (
+              <View key={entry.key} style={styles.eventRow}>
+                <View style={styles.eventDot} />
+                <View style={styles.eventBody}>
+                  <Text style={styles.eventTitle}>{entry.title}</Text>
+                  {entry.summary ? (
+                    <Text style={styles.eventSummary}>{entry.summary}</Text>
+                  ) : null}
+                  {entry.note ? (
+                    <Text style={styles.eventNote}>{entry.note}</Text>
+                  ) : null}
+                  <Text style={styles.eventTime}>
+                    {formatDateTime(entry.createdAt)}
+                  </Text>
                 </View>
-              ) : null}
-            </>
+              </View>
+            ))
           )}
         </View>
 
-        {(() => {
-          const files = [
-            ...parseAttachmentsFromNotes(request.terms.notes),
-            ...parseAttachmentsFromNotes(request.proposedTerms?.notes),
-            ...parseAttachmentsFromNotes(request.agreedTerms?.notes),
-          ];
-          const unique = files.filter(
-            (file, index, all) =>
-              all.findIndex((f) => f.name === file.name) === index,
-          );
-          if (unique.length === 0) return null;
-          return (
-            <>
-              <Text style={styles.sectionTitle}>Supporting documents</Text>
-              <Text style={styles.reviewPlaceholder}>
-                Reference files attached to this request. Upload, preview, and
-                download arrive in a later phase — these are not deliverables.
+        {attachments.length > 0 || canAddAttachments ? (
+          <>
+            <View style={styles.attachmentsHeader}>
+              <Text style={[styles.sectionTitle, styles.attachmentsTitle]}>
+                Supporting documents
               </Text>
-              {unique.map((file) => (
-                <View key={file.id} style={styles.attachmentRow}>
+              {canAddAttachments ? (
+                <TouchableOpacity
+                  onPress={addAttachment}
+                  disabled={uploadingAttachment || busy}
+                  hitSlop={8}
+                  accessibilityLabel="Add attachment"
+                >
+                  <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {attachments.length === 0 ? (
+              <Text style={styles.reviewPlaceholder}>
+                No files attached. Tap + to add a PDF, JPG or PNG.
+              </Text>
+            ) : (
+              attachments.map((file) => (
+                <TouchableOpacity
+                  key={file.id}
+                  style={styles.attachmentRow}
+                  activeOpacity={0.8}
+                  disabled={openingAttachmentId !== null}
+                  onPress={() => openAttachment(file)}
+                >
                   <Ionicons
-                    name={attachmentIcon(file.name)}
+                    name={attachmentIcon(file.mimeType || file.originalFileName)}
                     size={22}
                     color={colors.primary}
                   />
                   <View style={styles.attachmentMeta}>
-                    <Text style={styles.attachmentName}>{file.name}</Text>
-                    {file.size ? (
-                      <Text style={styles.attachmentSize}>{file.size}</Text>
-                    ) : null}
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {file.originalFileName}
+                    </Text>
+                    <Text style={styles.attachmentSize}>
+                      {formatBytes(file.byteSize)}
+                    </Text>
                   </View>
-                  <Text style={styles.attachmentLater}>Later</Text>
-                </View>
-              ))}
-            </>
-          );
-        })()}
+                  {openingAttachmentId === file.id ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.attachmentAction}>Open</Text>
+                  )}
+                  {canRemoveAttachment(file) ? (
+                    <TouchableOpacity
+                      hitSlop={8}
+                      disabled={busy}
+                      accessibilityLabel={`Remove ${file.originalFileName}`}
+                      onPress={() => queueRemoveAttachment(file)}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </TouchableOpacity>
+              ))
+            )}
+          </>
+        ) : null}
 
-        {isCompletedEngagement ? (
+        {documentedInvoices.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Invoice</Text>
+            {documentedInvoices.map((invoice) => (
+              <TouchableOpacity
+                key={invoice.id}
+                style={styles.attachmentRow}
+                activeOpacity={0.8}
+                disabled={openingInvoiceId !== null}
+                onPress={() => openInvoice(invoice)}
+              >
+                <Ionicons name="receipt-outline" size={22} color={colors.primary} />
+                <View style={styles.attachmentMeta}>
+                  <Text style={styles.attachmentName} numberOfLines={1}>
+                    {invoice.invoiceNumber}
+                  </Text>
+                  <Text style={styles.attachmentSize}>
+                    {invoice.isTestDocument ? 'Test document · ' : ''}
+                    {formatMoney({
+                      amount: Number(invoice.total),
+                      currency: invoice.currency,
+                    })}
+                  </Text>
+                </View>
+                {openingInvoiceId === invoice.id ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.attachmentAction}>View</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : null}
+
+        {isCompletedEngagement &&
+        request.workEngagementId &&
+        (request.reviewState
+          ? request.reviewState.canReview || !!request.reviewState.myReview
+          : true) ? (
           <View style={styles.reviewCard}>
-            <Text style={styles.sectionTitleInline}>Leave a review</Text>
-            <Text style={styles.reviewPlaceholder}>
-              Reviews are coming in a later phase. Submission is disabled for
-              now.
-            </Text>
-            <View style={styles.starsRow}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Ionicons
-                  key={i}
-                  name="star-outline"
-                  size={28}
-                  color={colors.border}
-                />
-              ))}
-            </View>
+            <EngagementReviewPrompt
+              otherName={request.counterparty?.displayName ?? 'the other party'}
+              existingRating={
+                request.reviewState?.myReview?.rating ?? reviewJob?.rating
+              }
+              onSelectRating={(rating) =>
+                openEngagementReview(navigation, {
+                  jobId: request.id,
+                  engagementId: request.workEngagementId!,
+                  workRequestId: request.id,
+                  initialRating: rating,
+                })
+              }
+            />
           </View>
         ) : null}
       </ScrollView>
@@ -1248,35 +1704,33 @@ export default function WorkRequestDetailScreen({
                 );
               })}
               {canDeclineDelivery ? (
-                <Button
-                  title="Decline"
-                  variant="secondary"
-                  style={styles.halfBtn}
-                  textStyle={styles.rejectBtnText}
-                  disabled={busy}
-                  onPress={() => {
-                    setDeclineText('');
-                    setDeclineOpen(true);
-                  }}
-                />
+                <>
+                  <Button
+                    title="Request changes"
+                    variant="secondary"
+                    style={styles.halfBtn}
+                    textStyle={styles.requestChangesText}
+                    numberOfLines={1}
+                    disabled={busy}
+                    onPress={() => {
+                      setDeclineText('');
+                      setDeliveryNoteMode('changes');
+                    }}
+                  />
+                  <Button
+                    title="Dispute"
+                    variant="secondary"
+                    style={styles.halfBtn}
+                    textStyle={styles.rejectBtnText}
+                    disabled={busy}
+                    onPress={() => {
+                      setDeclineText('');
+                      setDeliveryNoteMode('dispute');
+                    }}
+                  />
+                </>
               ) : null}
             </View>
-          ) : null}
-
-          {isPendingPayment && isClient ? (
-            <Text style={styles.footerHint}>{PAYMENTS_UNAVAILABLE_MESSAGE}</Text>
-          ) : null}
-
-          {showDevStartWork ? (
-            <Button
-              title={
-                devStarting ? 'Starting work…' : 'Start work (dev)'
-              }
-              fullWidth
-              variant="secondary"
-              disabled={busy || devStarting}
-              onPress={onDevStartWork}
-            />
           ) : null}
 
           {canMessageWork ? (
@@ -1287,7 +1741,7 @@ export default function WorkRequestDetailScreen({
                   : 'Message'
               }
               fullWidth
-              variant={showDevStartWork || primaryAction ? 'secondary' : 'primary'}
+              variant={primaryAction ? 'secondary' : 'primary'}
               disabled={busy || !workConversationId}
               onPress={openWorkChat}
             />
@@ -1325,7 +1779,7 @@ export default function WorkRequestDetailScreen({
                     <TouchableOpacity
                       key={mode.id}
                       style={[styles.modeBtn, active && styles.modeBtnActive]}
-                      onPress={() => setDeadlineMode(mode.id)}
+                      onPress={() => chooseDeadlineMode(mode.id)}
                       activeOpacity={0.85}
                     >
                       <Text
@@ -1410,6 +1864,13 @@ export default function WorkRequestDetailScreen({
                   selected={exactDate}
                   rangeStart={rangeFrom}
                   rangeEnd={rangeTo}
+                  notBefore={
+                    deadlineMode === 'date_range' &&
+                    activeRangeField === 'to' &&
+                    rangeFrom
+                      ? rangeFrom
+                      : null
+                  }
                 />
               ) : null}
 
@@ -1650,27 +2111,36 @@ export default function WorkRequestDetailScreen({
       </Modal>
 
       <Modal
-        visible={declineOpen}
+        visible={deliveryNoteMode !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => setDeclineOpen(false)}
+        onRequestClose={() => setDeliveryNoteMode(null)}
       >
         <Pressable
           style={styles.modalBackdrop}
-          onPress={() => setDeclineOpen(false)}
+          onPress={() => setDeliveryNoteMode(null)}
         >
           <Pressable
             style={styles.reportSheet}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={styles.sheetHandle} />
-            <Text style={styles.modalTitle}>Decline Delivery</Text>
+            <Text style={styles.modalTitle}>
+              {deliveryNoteMode === 'changes'
+                ? 'Request changes'
+                : 'Dispute Delivery'}
+            </Text>
             <Text style={styles.reportDescription}>
-              Explain what is wrong with the delivery so the provider can
-              address it.
+              {deliveryNoteMode === 'changes'
+                ? 'Tell the provider what to change. The job goes back to In Progress and they can deliver again.'
+                : 'Explain what is wrong with the delivery so the provider can address it.'}
             </Text>
             <TextInput
-              placeholder="Describe the issue..."
+              placeholder={
+                deliveryNoteMode === 'changes'
+                  ? 'What needs to change...'
+                  : 'Describe the issue...'
+              }
               placeholderTextColor={colors.textSecondary}
               style={styles.reportInput}
               multiline
@@ -1685,13 +2155,13 @@ export default function WorkRequestDetailScreen({
                 variant="secondary"
                 style={styles.halfBtn}
                 disabled={busy}
-                onPress={() => setDeclineOpen(false)}
+                onPress={() => setDeliveryNoteMode(null)}
               />
               <Button
                 title="Send"
                 style={styles.halfBtn}
                 disabled={busy || !declineText.trim()}
-                onPress={submitDecline}
+                onPress={submitDeliveryNote}
               />
             </View>
           </Pressable>
@@ -1721,7 +2191,15 @@ export default function WorkRequestDetailScreen({
         }}
       />
 
-      <ActionBusyOverlay visible={busy} message="Updating request…" />
+      <DocumentViewerModal
+        source={viewerSource}
+        onClose={() => setViewerSource(null)}
+      />
+
+      <ActionBusyOverlay
+        visible={busy || uploadingAttachment}
+        message={uploadingAttachment ? 'Uploading file…' : 'Updating request…'}
+      />
 
       <SuccessConfirmationModal
         visible={successVisible}
@@ -2011,11 +2489,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  attachmentLater: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: '600',
+  attachmentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
+  attachmentsTitle: { marginTop: 0, marginBottom: 0 },
   attachmentAction: {
     ...typography.caption,
     color: colors.primary,

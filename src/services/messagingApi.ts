@@ -29,6 +29,8 @@ export interface WorkContext {
   engagementId: string;
   /** Present after the viewer submitted a review (1–5). */
   viewerReviewRating?: number | null;
+  /** Server answer: this viewer may still submit their one review. */
+  canReview?: boolean;
 }
 
 export interface ApiConversation {

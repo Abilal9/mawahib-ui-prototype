@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
 import TextInput from '../../components/ui/TextInput';
+import MoneyAmountField from '../../components/ui/MoneyAmountField';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
@@ -13,12 +14,32 @@ import { ScreenProps } from '../../navigation/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ApiError } from '../../lib/apiClient';
+import { useMyProfile } from '../../context/ProfileContext';
+import type { ApiJobPricingType } from '../../services/marketplaceApi';
+import {
+  normalizeMoneyInputEditing,
+  parseMoneyInput,
+  toCurrencyCode,
+} from '../../utils/money';
 
 const JOB_TYPES = ['full-time', 'part-time', 'contract', 'freelance'] as const;
 const TOTAL_STEPS = 3;
 
+const PRICING_OPTIONS: { id: ApiJobPricingType; label: string; hint: string }[] = [
+  { id: 'fixed', label: 'Fixed', hint: 'A single agreed amount.' },
+  { id: 'range', label: 'Range', hint: 'Applicants negotiate within a range.' },
+  {
+    id: 'negotiable',
+    label: 'Negotiable',
+    hint: 'No amount yet — agree on one before work starts.',
+  },
+];
+
 export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJob'>) {
   const { createPostedJob, refresh } = useUserJobs();
+  const { user: me } = useMyProfile();
+  /** Listing currency is snapshotted server-side from the poster's profile. */
+  const currency = toCurrencyCode(me.defaultCurrency);
   const {
     successVisible,
     successTitle,
@@ -30,10 +51,27 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   const [title, setTitle] = useState('');
   const [type, setType] = useState<typeof JOB_TYPES[number]>('full-time');
   const [location, setLocation] = useState('');
-  const [salary, setSalary] = useState('');
+  const [pricingType, setPricingType] = useState<ApiJobPricingType>('negotiable');
+  const [fixedText, setFixedText] = useState('');
+  const [minText, setMinText] = useState('');
+  const [maxText, setMaxText] = useState('');
+  const [salaryLabel, setSalaryLabel] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
+
+  const fixedAmount = parseMoneyInput(fixedText);
+  const minAmount = parseMoneyInput(minText);
+  const maxAmount = parseMoneyInput(maxText);
+  const rangeInvalidOrder =
+    minAmount !== null && maxAmount !== null && maxAmount < minAmount;
+  const pricingValid =
+    pricingType === 'negotiable' ||
+    (pricingType === 'fixed' && fixedAmount !== null) ||
+    (pricingType === 'range' &&
+      minAmount !== null &&
+      maxAmount !== null &&
+      !rangeInvalidOrder);
 
   const publish = () => {
     void (async () => {
@@ -43,7 +81,14 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           title,
           description,
           location,
-          budget: salary,
+          pricingType,
+          fixedAmount:
+            pricingType === 'fixed' ? (fixedAmount ?? undefined) : undefined,
+          minAmount:
+            pricingType === 'range' ? (minAmount ?? undefined) : undefined,
+          maxAmount:
+            pricingType === 'range' ? (maxAmount ?? undefined) : undefined,
+          salaryLabel,
           jobType: type,
         });
         showSuccess('jobPosted');
@@ -59,6 +104,8 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   };
 
   const goNext = () => {
+    if (submitting) return;
+    if (step === 2 && !pricingValid) return;
     if (step < TOTAL_STEPS) {
       navigation.navigate('PostJob', { step: step + 1 });
       return;
@@ -108,7 +155,91 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           <>
             <Text style={styles.title}>Location & Compensation</Text>
             <TextInput label="Location" placeholder="City, Country or Remote" value={location} onChangeText={setLocation} />
-            <TextInput label="Salary Range" placeholder="e.g. 15,000 - 20,000/mo" value={salary} onChangeText={setSalary} />
+            <Text style={styles.label}>Compensation</Text>
+            <View style={styles.typeRow}>
+              {PRICING_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.typeChip,
+                    pricingType === option.id && styles.typeChipSelected,
+                  ]}
+                  onPress={() => setPricingType(option.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.typeText,
+                      pricingType === option.id && styles.typeTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.hint}>
+              {PRICING_OPTIONS.find((o) => o.id === pricingType)?.hint}
+              {currency ? ` Amounts are in ${currency}.` : ''}
+            </Text>
+
+            {pricingType === 'fixed' ? (
+              <MoneyAmountField
+                label="Amount"
+                placeholder="0.00"
+                currency={currency}
+                value={fixedText}
+                onChangeText={(t) => setFixedText(normalizeMoneyInputEditing(t))}
+                error={
+                  fixedText.trim() && fixedAmount === null
+                    ? 'Enter an amount greater than 0'
+                    : undefined
+                }
+              />
+            ) : null}
+
+            {pricingType === 'range' ? (
+              <>
+                <MoneyAmountField
+                  label="Minimum"
+                  placeholder="0.00"
+                  currency={currency}
+                  value={minText}
+                  onChangeText={(t) => setMinText(normalizeMoneyInputEditing(t))}
+                  error={
+                    minText.trim() && minAmount === null
+                      ? 'Enter an amount greater than 0'
+                      : undefined
+                  }
+                />
+                <MoneyAmountField
+                  label="Maximum"
+                  placeholder="0.00"
+                  currency={currency}
+                  value={maxText}
+                  onChangeText={(t) => setMaxText(normalizeMoneyInputEditing(t))}
+                  error={
+                    maxText.trim() && maxAmount === null
+                      ? 'Enter an amount greater than 0'
+                      : rangeInvalidOrder
+                        ? 'Maximum must be at least the minimum'
+                        : undefined
+                  }
+                />
+              </>
+            ) : null}
+
+            <TextInput
+              label="Display label (optional)"
+              placeholder="e.g. Paid per project"
+              value={salaryLabel}
+              onChangeText={setSalaryLabel}
+              maxLength={120}
+            />
+            <Text style={styles.hint}>
+              Shown on the listing only. The amounts above are what gets
+              charged — never this label.
+            </Text>
           </>
         )}
 
@@ -130,16 +261,15 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
 
       <View style={styles.footer}>
         <Button
-          title={
-            submitting
-              ? 'Publishing…'
-              : step === TOTAL_STEPS
-                ? 'Publish'
-                : 'Continue'
-          }
+          title={step === TOTAL_STEPS ? 'Publish' : 'Continue'}
           onPress={goNext}
           fullWidth
-          disabled={submitting || (step === 1 && !title.trim())}
+          loading={submitting}
+          disabled={
+            submitting ||
+            (step === 1 && !title.trim()) ||
+            (step === 2 && !pricingValid)
+          }
         />
       </View>
 
@@ -188,6 +318,7 @@ const styles = StyleSheet.create({
   typeChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   typeText: { ...typography.bodySmall, color: colors.text, textTransform: 'capitalize' },
   typeTextSelected: { color: colors.white },
+  hint: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.lg },
   descriptionInput: { minHeight: 160, textAlignVertical: 'top' },
   footer: { paddingBottom: spacing.lg },
 });

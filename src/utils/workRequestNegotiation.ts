@@ -1,4 +1,4 @@
-import { ApiWorkRequest } from '../services/workRequestApi';
+import type { ApiWorkRequest } from '../services/workRequestApi';
 
 /** Negotiation actions available on an open work request (pre–Pending Payment). */
 export type NegotiationAction =
@@ -68,12 +68,21 @@ export function overflowMenuActionLabel(action: OverflowMenuAction): string {
 export function getNegotiationTurn(
   request: Pick<
     ApiWorkRequest,
-    'status' | 'senderUserId' | 'recipientUserId'
+    'status' | 'senderUserId' | 'recipientUserId' | 'source'
   >,
   viewerId: string,
+  options?: {
+    /**
+     * Job-posting requests only: the listing owner has selected this applicant.
+     * Only then may the applicant (sender) accept the work.
+     */
+    applicantSelected?: boolean;
+  },
 ): NegotiationTurn {
   const isSender = request.senderUserId === viewerId;
   const isRecipient = request.recipientUserId === viewerId;
+  const jobPosting = request.source === 'job_posting';
+  const selected = options?.applicantSelected === true;
   const open =
     request.status === 'pending' ||
     request.status === 'changes_requested' ||
@@ -86,7 +95,7 @@ export function getNegotiationTurn(
     decisionMaker = 'sender';
   }
 
-  const isMyTurn =
+  let isMyTurn =
     decisionMaker === 'sender'
       ? isSender
       : decisionMaker === 'recipient'
@@ -95,23 +104,42 @@ export function getNegotiationTurn(
 
   let actions: NegotiationAction[] = [];
   if (isMyTurn && request.status === 'pending' && isRecipient) {
-    actions = ['accept', 'request_changes', 'reject_request'];
+    // Job postings: the owner SELECTS an applicant; the applicant accepts.
+    actions = jobPosting
+      ? ['request_changes', 'reject_request']
+      : ['accept', 'request_changes', 'reject_request'];
   } else if (isMyTurn && request.status === 'changes_requested' && isSender) {
-    actions = ['accept_changes', 'decline_changes'];
+    actions =
+      jobPosting && !selected
+        ? ['decline_changes']
+        : ['accept_changes', 'decline_changes'];
   } else if (isMyTurn && request.status === 'changes_declined' && isRecipient) {
+    actions = jobPosting
+      ? ['request_changes_again', 'reject_request']
+      : ['accept_original_terms', 'request_changes_again', 'reject_request'];
+  } else if (
+    jobPosting &&
+    selected &&
+    isSender &&
+    (request.status === 'pending' || request.status === 'changes_declined')
+  ) {
+    // Selected applicant accepts the original terms.
     actions = [
-      'accept_original_terms',
-      'request_changes_again',
-      'reject_request',
+      request.status === 'pending' ? 'accept' : 'accept_original_terms',
     ];
+    isMyTurn = true;
   }
 
   let waitingMessage: string | null = null;
   if (open && !isMyTurn) {
-    waitingMessage =
-      request.status === 'changes_requested' && isRecipient
-        ? 'Waiting for the requester to respond.'
-        : 'Waiting for the other user to respond.';
+    if (jobPosting && isSender && !selected) {
+      waitingMessage = 'Waiting for the listing owner to select you.';
+    } else {
+      waitingMessage =
+        request.status === 'changes_requested' && isRecipient
+          ? 'Waiting for the requester to respond.'
+          : 'Waiting for the other user to respond.';
+    }
   }
 
   return {

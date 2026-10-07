@@ -1,68 +1,54 @@
 /**
- * Attachments are stored on work-request terms notes until file storage ships.
- * Formats supported:
- * - `Attachments: Brief.pdf, Moodboard.pdf`
- * - `Attachments: Brief.pdf (1.2 MB), Moodboard.pdf (3.1 MB)`
+ * Work-request attachment helpers. Real files live in storage and are listed by
+ * `GET /work-requests/:id/attachments` — attachments are NEVER serialised into
+ * the notes / message text. Dependency-free (selftest imports it directly).
  */
 
-export type WorkRequestAttachment = {
-  id: string;
-  name: string;
-  size?: string;
-  /** Present only when a real URL was stored. */
-  url?: string;
-};
+/** Mirrors the backend `work_request` media purpose. */
+export const WORK_REQUEST_ATTACHMENT_MIME_TYPES: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+];
+export const WORK_REQUEST_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+export const WORK_REQUEST_ATTACHMENT_MAX_COUNT = 10;
 
-const ATTACHMENTS_LINE = /Attachments:\s*(.+)$/im;
-const NAMED_WITH_SIZE = /^(.+?)\s*\(([^)]+)\)\s*$/;
-
-export function parseAttachmentsFromNotes(
-  notes: string | null | undefined,
-): WorkRequestAttachment[] {
-  if (!notes?.trim()) return [];
-  const match = notes.match(ATTACHMENTS_LINE);
-  if (!match?.[1]) return [];
-
-  return match[1]
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part, index) => {
-      const sized = part.match(NAMED_WITH_SIZE);
-      if (sized) {
-        return {
-          id: `att-${index}-${sized[1].trim()}`,
-          name: sized[1].trim(),
-          size: sized[2].trim(),
-        };
-      }
-      return { id: `att-${index}-${part}`, name: part };
-    });
+export interface AttachmentCandidate {
+  mimeType: string;
+  byteSize: number;
+  fileName: string;
 }
 
-/** Strip the attachments line from notes for display as free text. */
-export function notesWithoutAttachments(
-  notes: string | null | undefined,
-): string {
-  if (!notes) return '';
-  return notes.replace(ATTACHMENTS_LINE, '').trim();
-}
-
-export function formatAttachmentsNoteLine(
-  files: Array<{ name: string; size?: string }>,
-): string {
-  if (files.length === 0) return '';
-  return `Attachments: ${files
-    .map((f) => (f.size ? `${f.name} (${f.size})` : f.name))
-    .join(', ')}`;
+/** Returns a user-facing problem with the file, or null when it can be uploaded. */
+export function validateWorkRequestAttachment(
+  file: AttachmentCandidate,
+): string | null {
+  const mime = file.mimeType.trim().toLowerCase();
+  if (!WORK_REQUEST_ATTACHMENT_MIME_TYPES.includes(mime)) {
+    return `${file.fileName}: only PDF, JPG and PNG files can be attached.`;
+  }
+  if (!(file.byteSize > 0)) {
+    return `${file.fileName}: the file is empty.`;
+  }
+  if (file.byteSize > WORK_REQUEST_ATTACHMENT_MAX_BYTES) {
+    return `${file.fileName}: files must be 20 MB or smaller.`;
+  }
+  return null;
 }
 
 export function attachmentIcon(
-  name: string,
+  nameOrMime: string,
 ): 'document-text-outline' | 'image-outline' | 'archive-outline' | 'document-outline' {
-  const lower = name.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|heic)$/.test(lower)) return 'image-outline';
+  const lower = nameOrMime.toLowerCase();
+  if (lower.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/.test(lower)) {
+    return 'image-outline';
+  }
   if (/\.(zip|rar|7z)$/.test(lower)) return 'archive-outline';
-  if (/\.(pdf|docx?|xlsx?|pptx?|txt)$/.test(lower)) return 'document-text-outline';
+  if (
+    lower === 'application/pdf' ||
+    /\.(pdf|docx?|xlsx?|pptx?|txt)$/.test(lower)
+  ) {
+    return 'document-text-outline';
+  }
   return 'document-outline';
 }

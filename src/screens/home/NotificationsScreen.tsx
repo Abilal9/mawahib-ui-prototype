@@ -32,6 +32,7 @@ import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { ApiError } from '../../lib/apiClient';
 import { messageService } from '../../services/messageService';
+import { openEngagementReview } from '../../utils/openEngagementReview';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -71,12 +72,14 @@ function NotificationIcon({ type }: { type: Notification['type'] }) {
 
 function NotificationItem({
   item,
+  showRating,
   onPress,
   onAccept,
   onReject,
   onRate,
 }: {
   item: Notification;
+  showRating?: boolean;
   onPress: () => void;
   onAccept?: () => void;
   onReject?: () => void;
@@ -117,7 +120,7 @@ function NotificationItem({
           </View>
         ) : null}
 
-        {item.showRating ? (
+        {showRating ? (
           <View style={styles.starsRow}>
             {Array.from({ length: 5 }).map((_, i) => {
               const value = i + 1;
@@ -420,9 +423,15 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
         style={styles.listFlex}
         data={filtered}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const linked = item.userJobId ? getJobById(item.userJobId) : undefined;
+          const showRating = linked?.reviewState
+            ? linked.reviewState.canReview
+            : !!item.showRating;
+          return (
           <NotificationItem
             item={item}
+            showRating={showRating}
             onPress={() => openNotification(item)}
             onAccept={() =>
               setConfirm({
@@ -460,7 +469,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
               const requestId = resolveRequestId(item);
               if (requestId) {
                 const job = getJobById(requestId);
-                navigation.navigate('WriteReview', {
+                openEngagementReview(navigation, {
                   jobId: requestId,
                   workRequestId: requestId,
                   engagementId: job?.engagementId,
@@ -469,7 +478,8 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
               }
             }}
           />
-        )}
+          );
+        }}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

@@ -81,6 +81,10 @@ export interface UserJob {
   counterpart: User;
   date: string;
   createdAt: string;
+  /** Last server update of the work request / listing (ISO). */
+  updatedAt?: string;
+  /** ISO time the engagement completed (from the engagement DTO). */
+  completedAt?: string;
   dueDate?: string;
   jobType?: string;
   unread?: boolean;
@@ -88,7 +92,21 @@ export interface UserJob {
   activityLabel?: string;
   activityValue?: string;
   details?: UserJobDetails;
-  /** Set after the user submits a job review */
+  /**
+   * Canonical review eligibility from the engagement. When present, screens
+   * must use `canReview` instead of inferring it from status and review lists.
+   */
+  reviewState?: {
+    canReview: boolean;
+    myReview: { id: string; rating: number; body: string; createdAt: string } | null;
+    otherPartyReview: {
+      id: string;
+      rating: number;
+      body: string;
+      createdAt: string;
+    } | null;
+  } | null;
+  /** The viewer's own review of the other party (set once it exists). */
   rating?: number;
   reviewText?: string;
   reviewImages?: string[];
@@ -130,4 +148,14 @@ export function formatMoney(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+/** Sort key for History "most recent": completedAt → updatedAt → createdAt. */
+export function jobRecencyTime(job: UserJob): number {
+  for (const iso of [job.completedAt, job.updatedAt, job.createdAt]) {
+    if (!iso) continue;
+    const t = Date.parse(iso);
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
 }

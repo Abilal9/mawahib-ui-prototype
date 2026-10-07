@@ -11,16 +11,22 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import MapsLocationLink from '../../components/job/MapsLocationLink';
 import Button from '../../components/ui/Button';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { toImageSource } from '../../utils/image';
+import { openUserProfile } from '../../utils/openUserProfile';
 import { colors, spacing, radius, typography } from '../../theme';
 import { MarketplaceSuccessKey } from '../../utils/marketplaceSuccess';
 import { jobService } from '../../services';
 import {
+  ApiApplication,
+  ApiApplicationStatus,
   ApiJobListing,
+  isAcceptApplicationResult,
   mapApiListingToJob,
   marketplaceApi,
 } from '../../services/marketplaceApi';
@@ -43,6 +49,7 @@ export default function JobListingDetailScreen({
     reopenListing,
     closeListing,
     deleteListing,
+    jobs,
     refresh,
   } = useUserJobs();
   const { apiUser } = useAuth();
@@ -64,6 +71,13 @@ export default function JobListingDetailScreen({
     danger?: boolean;
     run: () => void;
   } | null>(null);
+  const [applications, setApplications] = useState<ApiApplication[]>([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(false);
+  const [applicationsError, setApplicationsError] = useState<string | null>(
+    null,
+  );
+  const [applicantBusy, setApplicantBusy] = useState<string | null>(null);
+  const [applicantError, setApplicantError] = useState<string | null>(null);
   const {
     successVisible,
     successTitle,
@@ -96,6 +110,30 @@ export default function JobListingDetailScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const viewerOwnsListing = Boolean(
+    apiUser && apiListing && apiUser.id === apiListing.posterId,
+  );
+
+  const loadApplications = useCallback(async () => {
+    setApplicationsLoading(true);
+    setApplicationsError(null);
+    try {
+      setApplications(
+        await marketplaceApi.listApplicationsForListing(listingId),
+      );
+    } catch (e) {
+      setApplicationsError(
+        e instanceof ApiError ? e.message : 'Could not load applicants',
+      );
+    } finally {
+      setApplicationsLoading(false);
+    }
+  }, [listingId]);
+
+  useEffect(() => {
+    if (viewerOwnsListing) void loadApplications();
+  }, [viewerOwnsListing, loadApplications]);
 
   if (loading) {
     return (
@@ -187,6 +225,83 @@ export default function JobListingDetailScreen({
       danger,
       run: () => runOwnerAction(action, successKey),
     });
+  };
+
+  /** Work request carrying this applicant's application (owner's received side). */
+  const requestIdForApplicant = (applicantId: string): string | undefined =>
+    jobs.find(
+      (j) =>
+        j.source === 'job_posting' &&
+        j.type === 'received' &&
+        j.listingId === listingId &&
+        j.counterpart.id === applicantId,
+    )?.requestId;
+
+  const reviewApplicant = (
+    application: ApiApplication,
+    status: Exclude<ApiApplicationStatus, 'submitted' | 'withdrawn'>,
+  ) => {
+    if (applicantBusy) return;
+    void (async () => {
+      setApplicantBusy(
+        status === 'accepted' ? 'Selecting applicant…' : 'Updating applicant…',
+      );
+      setApplicantError(null);
+      try {
+        const result = await marketplaceApi.patchApplication(
+          application.id,
+          status,
+        );
+        if (status === 'accepted' && isAcceptApplicationResult(result)) {
+          // No engagement yet: the applicant still has to accept the request.
+          void refresh();
+          navigation.navigate('WorkRequestDetail', {
+            requestId: result.workRequest.id,
+          });
+          void loadApplications();
+          return;
+        }
+        await Promise.all([loadApplications(), refresh()]);
+      } catch (e) {
+        setApplicantError(
+          e instanceof ApiError || e instanceof Error
+            ? e.message
+            : 'Could not update this applicant',
+        );
+      } finally {
+        setApplicantBusy(null);
+      }
+    })();
+  };
+
+  const askReviewApplicant = (
+    application: ApiApplication,
+    status: 'under_review' | 'rejected' | 'accepted',
+  ) => {
+    const name = application.applicant.displayName;
+    if (status === 'accepted') {
+      setConfirm({
+        title: 'Select Applicant?',
+        message: `${name} will be asked to accept this job. Work and payment start only after they accept.`,
+        confirmLabel: 'Select Applicant',
+        run: () => reviewApplicant(application, 'accepted'),
+      });
+    } else if (status === 'rejected') {
+      setConfirm({
+        title: 'Reject Applicant?',
+        message: `${name}'s application will be rejected and closed.`,
+        confirmLabel: 'Reject',
+        danger: true,
+        run: () => reviewApplicant(application, 'rejected'),
+      });
+    } else {
+      setConfirm({
+        title: 'Mark Under Review?',
+        message: `${name} will see that you are reviewing their application.`,
+        confirmLabel: 'Under Review',
+        run: () => reviewApplicant(application, 'under_review'),
+      });
+    }
   };
 
   const deleteAction = {
@@ -308,10 +423,9 @@ export default function JobListingDetailScreen({
             </View>
           </View>
 
-          <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.metaText}>{job.location}</Text>
-          </View>
+          {job.location?.trim() ? (
+            <MapsLocationLink query={job.location} />
+          ) : null}
           <View style={styles.metaRow}>
             <MoneyAmount
               amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
@@ -334,6 +448,79 @@ export default function JobListingDetailScreen({
             </View>
           ))}
         </View>
+
+        {isOwner ? (
+          <View style={styles.applicantsSection}>
+            <Text style={styles.sectionTitle}>
+              Applicants{applications.length > 0 ? ` (${applications.length})` : ''}
+            </Text>
+            {applicantError ? (
+              <Text style={styles.applyError}>{applicantError}</Text>
+            ) : null}
+            {applicationsLoading && applications.length === 0 ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : applicationsError ? (
+              <View style={styles.applicantEmpty}>
+                <Text style={styles.applyHint}>{applicationsError}</Text>
+                <Button
+                  title="Retry"
+                  variant="secondary"
+                  onPress={() => void loadApplications()}
+                />
+              </View>
+            ) : applications.length === 0 ? (
+              <Text style={styles.applyHint}>No applicants yet.</Text>
+            ) : (
+              applications.map((application) => {
+                const requestId =
+                  application.status === 'accepted'
+                    ? requestIdForApplicant(application.applicantId)
+                    : undefined;
+                const canReview =
+                  apiListing?.status === 'open' &&
+                  (application.status === 'submitted' ||
+                    application.status === 'under_review');
+                return (
+                  <ApplicantCard
+                    key={application.id}
+                    application={application}
+                    disabled={applicantBusy !== null}
+                    onOpenProfile={() =>
+                      openUserProfile(
+                        navigation,
+                        application.applicantId,
+                        apiUser?.id ?? '',
+                      )
+                    }
+                    onUnderReview={
+                      canReview && application.status === 'submitted'
+                        ? () => askReviewApplicant(application, 'under_review')
+                        : undefined
+                    }
+                    onReject={
+                      canReview
+                        ? () => askReviewApplicant(application, 'rejected')
+                        : undefined
+                    }
+                    onSelect={
+                      canReview
+                        ? () => askReviewApplicant(application, 'accepted')
+                        : undefined
+                    }
+                    onViewRequest={
+                      requestId
+                        ? () =>
+                            navigation.navigate('WorkRequestDetail', {
+                              requestId,
+                            })
+                        : undefined
+                    }
+                  />
+                );
+              })
+            )}
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -406,7 +593,7 @@ export default function JobListingDetailScreen({
         message={confirm?.message ?? ''}
         confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
         danger={confirm?.danger}
-        busy={applying || ownerBusy}
+        busy={applying || ownerBusy || applicantBusy !== null}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           if (!confirm) return;
@@ -417,8 +604,11 @@ export default function JobListingDetailScreen({
       />
 
       <ActionBusyOverlay
-        visible={applying || ownerBusy}
-        message={applying ? 'Sending application…' : 'Updating listing…'}
+        visible={applying || ownerBusy || applicantBusy !== null}
+        message={
+          applicantBusy ??
+          (applying ? 'Sending application…' : 'Updating listing…')
+        }
       />
       <SuccessConfirmationModal
         visible={successVisible}
@@ -430,7 +620,169 @@ export default function JobListingDetailScreen({
   );
 }
 
+const APPLICATION_STATUS_LABEL: Record<ApiApplicationStatus, string> = {
+  submitted: 'New',
+  under_review: 'Under Review',
+  accepted: 'Selected',
+  rejected: 'Rejected',
+  withdrawn: 'Withdrawn',
+};
+
+const APPLICATION_STATUS_TONE: Record<
+  ApiApplicationStatus,
+  { bg: string; text: string }
+> = {
+  submitted: { bg: '#FCE7F3', text: '#BE185D' },
+  under_review: { bg: '#FEF9C3', text: '#8A6A16' },
+  accepted: { bg: '#DCFCE7', text: '#15803D' },
+  rejected: { bg: '#FEE2E2', text: '#B91C1C' },
+  withdrawn: { bg: '#EEF2F6', text: '#627D98' },
+};
+
+function formatApplicationDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function ApplicantCard({
+  application,
+  disabled,
+  onOpenProfile,
+  onUnderReview,
+  onReject,
+  onSelect,
+  onViewRequest,
+}: {
+  application: ApiApplication;
+  disabled: boolean;
+  onOpenProfile: () => void;
+  onUnderReview?: () => void;
+  onReject?: () => void;
+  onSelect?: () => void;
+  onViewRequest?: () => void;
+}) {
+  const tone = APPLICATION_STATUS_TONE[application.status];
+  const cover = application.coverLetter.trim();
+  return (
+    <View style={styles.applicantCard}>
+      <TouchableOpacity
+        style={styles.applicantTop}
+        onPress={onOpenProfile}
+        activeOpacity={0.8}
+      >
+        <UserAvatar uri={application.applicant.avatarUrl} size={44} />
+        <View style={styles.applicantInfo}>
+          <Text style={styles.applicantName} numberOfLines={1}>
+            {application.applicant.displayName}
+          </Text>
+          {application.applicant.title ? (
+            <Text style={styles.applicantTitle} numberOfLines={1}>
+              {application.applicant.title}
+            </Text>
+          ) : null}
+          <Text style={styles.applicantDate}>
+            Applied {formatApplicationDate(application.createdAt)}
+          </Text>
+        </View>
+        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.statusPillText, { color: tone.text }]}>
+            {APPLICATION_STATUS_LABEL[application.status]}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      {cover ? (
+        <Text style={styles.applicantCover} numberOfLines={3}>
+          {cover}
+        </Text>
+      ) : null}
+      {onUnderReview || onReject || onSelect || onViewRequest ? (
+        <View style={styles.applicantActions}>
+          {onUnderReview ? (
+            <Button
+              title="Under Review"
+              size="sm"
+              variant="secondary"
+              style={styles.applicantActionBtn}
+              numberOfLines={1}
+              disabled={disabled}
+              onPress={onUnderReview}
+            />
+          ) : null}
+          {onReject ? (
+            <Button
+              title="Reject"
+              size="sm"
+              variant="secondary"
+              style={styles.applicantActionBtn}
+              numberOfLines={1}
+              disabled={disabled}
+              onPress={onReject}
+            />
+          ) : null}
+          {onSelect ? (
+            <Button
+              title="Select Applicant"
+              size="sm"
+              style={styles.applicantActionBtn}
+              numberOfLines={1}
+              disabled={disabled}
+              onPress={onSelect}
+            />
+          ) : null}
+          {onViewRequest ? (
+            <Button
+              title="View Request"
+              size="sm"
+              style={styles.applicantActionBtn}
+              numberOfLines={1}
+              disabled={disabled}
+              onPress={onViewRequest}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  applicantsSection: { marginTop: spacing.xl, gap: spacing.md },
+  applicantEmpty: { gap: spacing.md },
+  applicantCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  applicantTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  applicantInfo: { flex: 1 },
+  applicantName: { ...typography.label, color: colors.text },
+  applicantTitle: { ...typography.caption, color: colors.textSecondary },
+  applicantDate: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  applicantCover: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  applicantActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  applicantActionBtn: { flexGrow: 1, flexBasis: '30%' },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  statusPillText: { ...typography.caption, fontWeight: '700' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

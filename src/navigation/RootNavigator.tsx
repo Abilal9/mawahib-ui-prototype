@@ -51,7 +51,7 @@ import {
   JobListingDetailScreen,
   ConfirmPaymentScreen,
   ApplePayScreen,
-  ScanCardScreen,
+  CardPaymentScreen,
   StoryViewerScreen,
   FullPhotoPreviewScreen,
 } from '../screens';
@@ -177,7 +177,7 @@ export default function RootNavigator() {
       <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
       <Stack.Screen name="ConfirmPayment" component={ConfirmPaymentScreen} />
       <Stack.Screen name="ApplePay" component={ApplePayScreen} />
-      <Stack.Screen name="ScanCard" component={ScanCardScreen} />
+      <Stack.Screen name="CardPayment" component={CardPaymentScreen} />
       <Stack.Screen
         name="StoryViewer"
         component={StoryViewerScreen}

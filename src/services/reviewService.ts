@@ -2,9 +2,9 @@ import { ReviewsBundle } from '../data/types';
 import { buildReviewsSummaryFromProfile } from '../utils/profileRating';
 
 /**
- * Reviews list product is deferred.
- * Returns an honest empty shell only — never mock review fixtures.
- * Prefer building from a loaded profile via buildReviewsSummaryFromProfile.
+ * Honest empty shell only — never mock review fixtures. The real list comes
+ * from `marketplaceApi.listReviewsForUser` (see ReviewsScreen +
+ * utils/reviewsMapping.ts).
  */
 export const reviewService = {
   getForUser(_userId?: string): ReviewsBundle {

@@ -50,6 +50,7 @@ import type {
 import { useMyProfile } from '../../context/ProfileContext';
 import { useMessagingUnread } from '../../context/MessagingUnreadContext';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { openEngagementReview } from '../../utils/openEngagementReview';
 import { ScreenProps } from '../../navigation/types';
 
 type PendingAttachment = LocalPickedFile & { id: string };
@@ -386,10 +387,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   }, [work, peer]);
 
   const showRateCta =
-    Boolean(work) &&
-    work?.status === 'completed' &&
-    !writable &&
-    work?.viewerReviewRating == null;
+    Boolean(work) && !writable && work?.canReview === true;
 
   const canSend =
     (text.trim().length > 0 || pendingAttachments.length > 0) && !sending;
@@ -398,7 +396,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
     if (!work) return;
     const workRequestId = work.workRequestId ?? undefined;
     const jobId = workRequestId ?? work.engagementId;
-    navigation.navigate('WriteReview', {
+    openEngagementReview(navigation, {
       jobId,
       workRequestId,
       engagementId: work.engagementId,

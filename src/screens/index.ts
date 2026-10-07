@@ -85,7 +85,7 @@ export { default as WriteReviewScreen } from './jobs/WriteReviewScreen';
 // Payments
 export { default as ConfirmPaymentScreen } from './payments/ConfirmPaymentScreen';
 export { default as ApplePayScreen } from './payments/ApplePayScreen';
-export { default as ScanCardScreen } from './payments/ScanCardScreen';
+export { default as CardPaymentScreen } from './payments/CardPaymentScreen';
 
 // Stories
 export { default as StoryViewerScreen } from './stories/StoryViewerScreen';

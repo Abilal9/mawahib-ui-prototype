@@ -8,6 +8,8 @@ export interface ReviewItem {
   serviceName: string;
   body: string;
   image?: string;
+  /** Review photos, original upload order, at most four. */
+  images?: string[];
 }
 
 /** Canonical review entity alias */

@@ -1,5 +1,6 @@
 import { JobListing } from '../data/types';
 import { apiRequest } from '../lib/apiClient';
+import { formatMoneyAmountDigits } from '../utils/money';
 import type { ApiWorkRequest } from './workRequestApi';
 
 export type ApiEmploymentType =
@@ -17,6 +18,8 @@ export type ApiJobListingStatus =
   | 'in_progress'
   | 'completed'
   | 'expired';
+
+export type ApiJobPricingType = 'fixed' | 'range' | 'negotiable';
 
 export type ApiApplicationStatus =
   | 'submitted'
@@ -56,6 +59,11 @@ export interface ApiJobListing {
   salaryLabel: string | null;
   /** Snapshotted poster default currency at create time. */
   currency: string;
+  /** Structured compensation — the only source for payable amounts. */
+  pricingType?: ApiJobPricingType;
+  fixedAmount?: number | null;
+  minAmount?: number | null;
+  maxAmount?: number | null;
   description: string;
   skills: string[];
   exploreTag: string | null;
@@ -98,8 +106,11 @@ export interface ApiApplication {
 export interface ApiEngagementDetail {
   serviceName: string;
   packageName: string;
+  /** Package/base price only — never the amount to charge when add-ons exist. */
   packagePrice: string;
   currency: string;
+  /** Canonical amount to charge (package + add-ons), decimal string e.g. "1250.00". */
+  chargeableTotal: string;
   addons: unknown;
   deadlineLabel: string | null;
   locationUrl: string | null;
@@ -120,6 +131,8 @@ export interface ApiEngagement {
   status: ApiEngagementStatus;
   source: string;
   dueAt: string | null;
+  /** ISO timestamp set when the engagement reaches `completed`. */
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   client: ApiParty;
@@ -133,12 +146,95 @@ export interface ApiEngagement {
     note: string;
     createdAt: string;
   }>;
+  reviewState?: ApiReviewState | null;
 }
 
 /** Applying creates the application *and* the work request that carries it. */
 export interface ApplyToListingResult {
   application: ApiApplication;
   workRequest: ApiWorkRequest;
+}
+
+/**
+ * Selecting an applicant does NOT create an engagement — the talent still has
+ * to accept the work request. `engagement` is therefore usually absent.
+ */
+export interface AcceptApplicationResult {
+  application: ApiApplication;
+  workRequest: ApiWorkRequest;
+  engagement?: ApiEngagement;
+}
+
+/** PATCH /applications/:id returns the bare application unless it was accepted. */
+export type PatchApplicationResult = ApiApplication | AcceptApplicationResult;
+
+export function isAcceptApplicationResult(
+  result: PatchApplicationResult,
+): result is AcceptApplicationResult {
+  return 'workRequest' in result && Boolean(result.workRequest);
+}
+
+export interface ApiWorkRequestAttachment {
+  id: string;
+  workRequestId: string;
+  mediaAssetId: string;
+  uploadedByUserId: string;
+  originalFileName: string;
+  mimeType: string;
+  byteSize: number;
+  createdAt: string;
+}
+
+export interface ApiWorkRequestAttachmentUrl {
+  url: string;
+  originalFileName: string;
+  mimeType: string;
+}
+
+export interface ApiUserReview {
+  id: string;
+  engagementId: string;
+  engagementTitle: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+  reviewer: {
+    id: string;
+    displayName: string;
+    username: string;
+    isVerified: boolean;
+    avatarUrl: string | null;
+    title: string | null;
+  };
+  /** Optional review photos (jpeg/png). */
+  media?: ApiReviewMedia[];
+}
+
+export interface ApiReviewMedia {
+  id: string;
+  mimeType: string;
+  url: string;
+}
+
+export interface ApiUserReviewsPage {
+  items: ApiUserReview[];
+  total: number;
+  take: number;
+  skip: number;
+}
+
+export interface ApiReviewStateReview {
+  id: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+}
+
+/** Server-owned review eligibility for the current user on one engagement. */
+export interface ApiReviewState {
+  canReview: boolean;
+  myReview: ApiReviewStateReview | null;
+  otherPartyReview: ApiReviewStateReview | null;
 }
 
 export interface ApiEngagementReview {
@@ -194,6 +290,32 @@ function listingStatusToUi(
   }
 }
 
+/**
+ * Compensation text for a listing. Structured amounts win over the free-text
+ * display label; the label is appended as context, never parsed for money.
+ * Amount-only (no currency prefix) — the UI renders the currency icon.
+ */
+export function listingCompensationLabel(
+  api: Pick<
+    ApiJobListing,
+    'pricingType' | 'fixedAmount' | 'minAmount' | 'maxAmount' | 'salaryLabel'
+  >,
+): string {
+  const label = api.salaryLabel?.trim() || '';
+  let amount = '';
+  if (api.pricingType === 'fixed' && api.fixedAmount != null) {
+    amount = formatMoneyAmountDigits(api.fixedAmount);
+  } else if (
+    api.pricingType === 'range' &&
+    api.minAmount != null &&
+    api.maxAmount != null
+  ) {
+    amount = `${formatMoneyAmountDigits(api.minAmount)} – ${formatMoneyAmountDigits(api.maxAmount)}`;
+  }
+  if (amount && label) return `${amount} · ${label}`;
+  return amount || label || 'Negotiable';
+}
+
 export function mapApiListingToJob(api: ApiJobListing): JobListing {
   const currency =
     api.currency === 'AED' || api.currency === 'SAR' ? api.currency : null;
@@ -203,7 +325,7 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
     company: api.companyName || api.poster.displayName,
     type: EMPLOYMENT_TO_UI[api.employmentType],
     location: api.location,
-    salary: api.salaryLabel || 'Negotiable',
+    salary: listingCompensationLabel(api),
     currency,
     description: api.description,
     skills: api.skills ?? [],
@@ -244,6 +366,16 @@ export const marketplaceApi = {
     companyName?: string;
     employmentType: JobListing['type'];
     location: string;
+    /** Structured compensation. Omitted → backend treats as negotiable. */
+    pricingType?: ApiJobPricingType;
+    fixedAmount?: number;
+    minAmount?: number;
+    maxAmount?: number;
+    /**
+     * Note: the API has no `currency` field on create — the listing snapshots
+     * the poster's default currency server-side (extra fields are rejected).
+     */
+    /** Display-only label; never used as the payable amount. */
     salaryLabel?: string;
     description?: string;
     skills?: string[];
@@ -257,6 +389,10 @@ export const marketplaceApi = {
         companyName: input.companyName,
         employmentType: EMPLOYMENT_TO_API[input.employmentType],
         location: input.location,
+        pricingType: input.pricingType,
+        fixedAmount: input.fixedAmount,
+        minAmount: input.minAmount,
+        maxAmount: input.maxAmount,
         salaryLabel: input.salaryLabel,
         description: input.description,
         skills: input.skills,
@@ -322,6 +458,22 @@ export const marketplaceApi = {
     );
   },
 
+  /** Applications the viewer submitted (status tells whether they were selected). */
+  listMyApplications(): Promise<ApiApplication[]> {
+    return apiRequest<ApiApplication[]>('/users/me/applications');
+  },
+
+  /** `accepted` selects the applicant and returns the work request to review. */
+  patchApplication(
+    applicationId: string,
+    status: Exclude<ApiApplicationStatus, 'submitted'>,
+  ): Promise<PatchApplicationResult> {
+    return apiRequest<PatchApplicationResult>(`/applications/${applicationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
   getEngagement(id: string): Promise<ApiEngagement> {
     return apiRequest<ApiEngagement>(`/engagements/${id}`);
   },
@@ -337,20 +489,9 @@ export const marketplaceApi = {
     });
   },
 
-  /**
-   * DEV-ONLY: skip pending_payment → in_progress without Phase 5 payments.
-   * Requires backend ENABLE_DEV_START_WORK=true and non-production NODE_ENV.
-   */
-  devStartWork(engagementId: string): Promise<ApiEngagement> {
-    return apiRequest<ApiEngagement>(
-      `/engagements/${engagementId}/dev-start-work`,
-      { method: 'POST' },
-    );
-  },
-
   createEngagementReview(
     engagementId: string,
-    input: { rating: number; body?: string },
+    input: { rating: number; body?: string; mediaAssetIds?: string[] },
   ): Promise<CreateEngagementReviewResult> {
     return apiRequest<CreateEngagementReviewResult>(
       `/engagements/${engagementId}/reviews`,
@@ -359,5 +500,55 @@ export const marketplaceApi = {
         body: JSON.stringify(input),
       },
     );
+  },
+
+  listWorkRequestAttachments(
+    workRequestId: string,
+  ): Promise<ApiWorkRequestAttachment[]> {
+    return apiRequest<ApiWorkRequestAttachment[]>(
+      `/work-requests/${workRequestId}/attachments`,
+    );
+  },
+
+  /** Registers an already-uploaded `work_request` media asset on the request. */
+  addWorkRequestAttachment(
+    workRequestId: string,
+    input: { mediaAssetId: string; originalFileName: string },
+  ): Promise<ApiWorkRequestAttachment> {
+    return apiRequest<ApiWorkRequestAttachment>(
+      `/work-requests/${workRequestId}/attachments`,
+      { method: 'POST', body: JSON.stringify(input) },
+    );
+  },
+
+  getWorkRequestAttachmentUrl(
+    workRequestId: string,
+    attachmentId: string,
+  ): Promise<ApiWorkRequestAttachmentUrl> {
+    return apiRequest<ApiWorkRequestAttachmentUrl>(
+      `/work-requests/${workRequestId}/attachments/${attachmentId}/url`,
+    );
+  },
+
+  /** 204. Uploader only, while the request is open or pending_payment. */
+  deleteWorkRequestAttachment(
+    workRequestId: string,
+    attachmentId: string,
+  ): Promise<void> {
+    return apiRequest<void>(
+      `/work-requests/${workRequestId}/attachments/${attachmentId}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  listReviewsForUser(
+    userId: string,
+    params?: { take?: number; skip?: number },
+  ): Promise<ApiUserReviewsPage> {
+    const qs = new URLSearchParams();
+    if (params?.take != null) qs.set('take', String(params.take));
+    if (params?.skip != null) qs.set('skip', String(params.skip));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest<ApiUserReviewsPage>(`/users/${userId}/reviews${suffix}`);
   },
 };

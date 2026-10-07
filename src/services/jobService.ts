@@ -1,6 +1,7 @@
 import { JobListing } from '../data/types';
 import { ApiError } from '../lib/apiClient';
 import {
+  type ApiJobPricingType,
   mapApiListingToJob,
   marketplaceApi,
 } from './marketplaceApi';
@@ -66,6 +67,11 @@ export const jobService = {
     company?: string;
     type: JobListing['type'];
     location: string;
+    pricingType?: ApiJobPricingType;
+    fixedAmount?: number;
+    minAmount?: number;
+    maxAmount?: number;
+    /** Display-only label. */
     salary?: string;
     description?: string;
     skills?: string[];
@@ -77,6 +83,10 @@ export const jobService = {
       companyName: input.company,
       employmentType: input.type,
       location: input.location,
+      pricingType: input.pricingType,
+      fixedAmount: input.fixedAmount,
+      minAmount: input.minAmount,
+      maxAmount: input.maxAmount,
       salaryLabel: input.salary,
       description: input.description,
       skills: input.skills,

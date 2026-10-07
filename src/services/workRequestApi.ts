@@ -1,5 +1,10 @@
 import { apiRequest } from '../lib/apiClient';
-import { ApiEngagement, ApiEngagementStatus } from './marketplaceApi';
+import type {
+  ApiEngagement,
+  ApiEngagementStatus,
+  ApiReviewState,
+  ApiWorkRequestAttachment,
+} from './marketplaceApi';
 import { formatMoneyDisplay } from '../data/location/geo';
 
 /** Entry point a work request came from. */
@@ -91,6 +96,8 @@ export interface WorkRequestTerms {
   deadline: WorkRequestDeadline;
   notes: string;
   location?: string | null;
+  /** Exact saved Google Maps URL, when the client entered one. */
+  mapsUrl?: string | null;
   employmentType?: string | null;
   packageTier?: string | null;
   packageName?: string | null;
@@ -133,6 +140,8 @@ export interface ApiWorkRequest {
   serviceTitle: string | null;
   workEngagementId: string | null;
   workEngagementStatus: ApiEngagementStatus | null;
+  workEngagementCompletedAt?: string | null;
+  reviewState?: ApiReviewState | null;
   terms: WorkRequestTerms;
   proposedTerms: WorkRequestTerms | null;
   agreedTerms: WorkRequestTerms | null;
@@ -145,6 +154,8 @@ export interface ApiWorkRequest {
   counterparty: WorkRequestParty | null;
   unread: boolean;
   events: WorkRequestEvent[];
+  /** Real uploaded files (never parsed from notes). */
+  attachments?: ApiWorkRequestAttachment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -183,9 +194,11 @@ export interface CreateServiceWorkRequestInput {
   packageTier?: PackageTier;
   addonIds?: string[];
   notes?: string;
-  /** Overrides the package price. */
-  money?: WorkRequestMoneyInput;
-  /** Overrides the package delivery time. */
+  /** Place text. A raw maps URL is not accepted as the opened link. */
+  location?: string;
+  /** Exact Google Maps HTTPS URL. */
+  mapsUrl?: string;
+  /** Delivery schedule. Package and add-on prices are taken from the catalog. */
   deadline?: WorkRequestDeadlineInput;
 }
 

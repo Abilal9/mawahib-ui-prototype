@@ -87,6 +87,12 @@ export const MARKETPLACE_SUCCESS = {
       'Your explanation was sent. The job stays In Progress until delivery is confirmed.',
     landing: { tab: 'sent', section: 'in-progress' },
   },
+  jobChangesRequested: {
+    title: 'Changes Requested',
+    message:
+      'The provider was notified. The job is back In Progress until they deliver again.',
+    landing: { tab: 'received', section: 'in-progress' },
+  },
   jobCompleted: {
     title: 'Job Completed',
     message: 'This engagement is complete and is now in History.',

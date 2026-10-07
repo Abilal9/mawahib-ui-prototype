@@ -96,9 +96,11 @@ export type RootStackParamList = {
     conversationId?: string;
     workRequestId?: string;
   };
-  ConfirmPayment: { serviceId?: string; amount?: number; requestId?: string };
-  ApplePay: { amount?: number; requestId?: string };
-  ScanCard: undefined;
+  /** Payment summary for an engagement waiting on payment (`pending_payment`). */
+  ConfirmPayment: { engagementId: string; requestId?: string };
+  ApplePay: { engagementId: string; requestId?: string };
+  /** Card entry form. Card data is validated locally and never sent to the API. */
+  CardPayment: { engagementId: string; requestId?: string };
   StoryViewer: { storyId: string };
   FullPhotoPreview: { images: string[]; initialIndex?: number };
 };

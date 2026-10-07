@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,18 +19,24 @@ import { ReviewItem } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { openUserProfile } from '../../utils/openUserProfile';
-import {
-  buildReviewsSummaryFromProfile,
-  hasRealReviews,
-} from '../../utils/profileRating';
+import { buildReviewsSummaryFromProfile } from '../../utils/profileRating';
 import { ScreenProps } from '../../navigation/types';
+import { ApiError } from '../../lib/apiClient';
+import {
+  marketplaceApi,
+  type ApiUserReview,
+} from '../../services/marketplaceApi';
+import { buildReviewsBundleFromApi } from '../../utils/reviewsMapping';
+
+const REVIEWS_PAGE_SIZE = 100;
+/** Safety cap so a pathological profile cannot loop forever. */
+const REVIEWS_MAX_PAGES = 10;
 
 type SortKey = 'newest' | 'highest' | 'lowest';
 
 /**
- * Reviews UI shell — original layout, honest data only.
- * Full Reviews product (list API + distribution aggregation) remains deferred.
- * Never loads mockReviewRepository / fake review fixtures.
+ * Reviews list backed by GET /users/:id/reviews. Never loads
+ * mockReviewRepository / fake review fixtures.
  */
 export default function ReviewsScreen({ navigation, route }: ScreenProps<'Reviews'>) {
   const { user: me } = useMyProfile();
@@ -46,8 +52,50 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
   const [filterOpen, setFilterOpen] = useState(false);
   const [minStars, setMinStars] = useState<number | null>(null);
 
-  const bundle = useMemo(() => buildReviewsSummaryFromProfile(user), [user]);
-  const rated = hasRealReviews(user);
+  const [apiReviews, setApiReviews] = useState<ApiUserReview[] | null>(null);
+  const [apiTotal, setApiTotal] = useState(0);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+
+  const loadReviews = useCallback(async () => {
+    setReviewsLoading(true);
+    setReviewsError(null);
+    try {
+      const collected: ApiUserReview[] = [];
+      let total = 0;
+      for (let page = 0; page < REVIEWS_MAX_PAGES; page += 1) {
+        const result = await marketplaceApi.listReviewsForUser(targetId, {
+          take: REVIEWS_PAGE_SIZE,
+          skip: collected.length,
+        });
+        total = result.total;
+        collected.push(...result.items);
+        if (collected.length >= total || result.items.length === 0) break;
+      }
+      setApiReviews(collected);
+      setApiTotal(total);
+    } catch (e) {
+      setApiReviews(null);
+      setReviewsError(
+        e instanceof ApiError ? e.message : 'Could not load reviews',
+      );
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, [targetId]);
+
+  useEffect(() => {
+    void loadReviews();
+  }, [loadReviews]);
+
+  const bundle = useMemo(
+    () =>
+      apiReviews
+        ? buildReviewsBundleFromApi(apiReviews, apiTotal, user)
+        : buildReviewsSummaryFromProfile(user),
+    [apiReviews, apiTotal, user],
+  );
+  const rated = bundle.total > 0;
   const filledStars = rated ? Math.round(bundle.average) : 0;
 
   const reviews = useMemo(() => {
@@ -63,12 +111,13 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
     return list;
   }, [bundle.reviews, minStars, sort]);
 
-  const emptyMessage =
-    bundle.total === 0
-      ? 'No reviews yet. Be the first to review this user after completing eligible work.'
+  const emptyMessage = reviewsError
+    ? reviewsError
+    : bundle.total === 0
+      ? 'No reviews yet. Reviews appear here after completed work.'
       : reviews.length === 0 && minStars != null
         ? 'No reviews match this filter.'
-        : 'Individual reviews aren’t available yet. Summary ratings will list here once the Reviews product ships.';
+        : 'No reviews to show.';
 
   if (!isOwn && visitorLoading && !user) {
     return (
@@ -166,7 +215,24 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
             onAuthorPress={() => openUserProfile(navigation, item.authorId, me.id)}
           />
         )}
-        ListEmptyComponent={<Text style={styles.empty}>{emptyMessage}</Text>}
+        ListEmptyComponent={
+          reviewsLoading ? (
+            <ActivityIndicator color={colors.primary} style={styles.loadingInline} />
+          ) : (
+            <View>
+              <Text style={styles.empty}>{emptyMessage}</Text>
+              {reviewsError ? (
+                <TouchableOpacity
+                  onPress={() => void loadReviews()}
+                  style={styles.retryBtn}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )
+        }
       />
 
       <ActionSheet
@@ -212,6 +278,8 @@ function ReviewRow({
   review: ReviewItem;
   onAuthorPress: () => void;
 }) {
+  const photos = (review.images ?? []).slice(0, 4);
+  const [preview, setPreview] = useState<string | null>(null);
   return (
     <View style={styles.reviewRow}>
       <TouchableOpacity onPress={onAuthorPress} activeOpacity={0.8} hitSlop={4}>
@@ -235,9 +303,39 @@ function ReviewRow({
           <Text style={styles.serviceName}>{review.serviceName}</Text>
         </Text>
         <Text style={styles.body}>{review.body}</Text>
-        {review.image ? (
-          <Image source={{ uri: review.image }} style={styles.thumb} contentFit="cover" />
+        {photos.length === 1 ? (
+          <TouchableOpacity activeOpacity={0.85} onPress={() => setPreview(photos[0])}>
+            <Image source={{ uri: photos[0] }} style={styles.thumbLarge} contentFit="cover" />
+          </TouchableOpacity>
+        ) : photos.length > 1 ? (
+          <View style={styles.photoGrid}>
+            {photos.map((uri) => (
+              <TouchableOpacity
+                key={uri}
+                activeOpacity={0.85}
+                onPress={() => setPreview(uri)}
+              >
+                <Image source={{ uri }} style={styles.thumb} contentFit="cover" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : review.image ? (
+          <TouchableOpacity activeOpacity={0.85} onPress={() => setPreview(review.image!)}>
+            <Image source={{ uri: review.image }} style={styles.thumbLarge} contentFit="cover" />
+          </TouchableOpacity>
         ) : null}
+        <Modal
+          visible={preview !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreview(null)}
+        >
+          <Pressable style={styles.previewBackdrop} onPress={() => setPreview(null)}>
+            {preview ? (
+              <Image source={{ uri: preview }} style={styles.previewImage} contentFit="contain" />
+            ) : null}
+          </Pressable>
+        </Modal>
       </View>
     </View>
   );
@@ -287,6 +385,16 @@ function ActionSheet<T>({
 }
 
 const styles = StyleSheet.create({
+  loadingInline: { paddingVertical: spacing.xl },
+  retryBtn: {
+    alignSelf: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+    marginTop: spacing.md,
+  },
+  retryText: { ...typography.button, color: colors.white },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -457,9 +565,28 @@ const styles = StyleSheet.create({
     width: 72,
     height: 56,
     borderRadius: 8,
+    backgroundColor: colors.borderLight,
+  },
+  thumbLarge: {
+    width: 160,
+    height: 120,
+    borderRadius: 8,
     marginTop: spacing.sm,
     backgroundColor: colors.borderLight,
   },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '80%' },
   empty: {
     ...typography.bodySmall,
     color: colors.textSecondary,

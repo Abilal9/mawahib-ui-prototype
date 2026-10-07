@@ -22,6 +22,7 @@ import { jobService } from '../services';
 import {
   ApiEngagementStatus,
   ApiJobListing,
+  ApiJobPricingType,
   employmentTypeToUi,
   marketplaceApi,
 } from '../services/marketplaceApi';
@@ -42,7 +43,12 @@ export interface CreatePostedJobPayload {
   title: string;
   description?: string;
   location?: string;
-  budget?: string;
+  /** Display-only label (never the payable amount). */
+  salaryLabel?: string;
+  pricingType?: ApiJobPricingType;
+  fixedAmount?: number;
+  minAmount?: number;
+  maxAmount?: number;
   jobType?: JobListing['type'];
   skills?: string[];
 }
@@ -51,13 +57,6 @@ export interface UnreadSummary {
   sent: number;
   received: number;
 }
-
-/**
- * Accepting a request parks the engagement at `pending_payment`; nothing in the
- * app may advance it until payments ship.
- */
-export const PAYMENTS_UNAVAILABLE_MESSAGE =
-  'Payments are not available yet. This request stays in Pending Payment until in-app payments ship.';
 
 interface UserJobsContextValue {
   jobs: UserJob[];
@@ -92,16 +91,15 @@ interface UserJobsContextValue {
   markDelivered: (engagementId: string) => Promise<void>;
   markCompleted: (engagementId: string) => Promise<void>;
   markDisputed: (engagementId: string, note: string) => Promise<void>;
-  /** Always rejects: money moves in a later phase. */
-  markJobPaid: (id: string) => Promise<never>;
+  /** Client asks for revisions: delivered → in_progress with a required note. */
+  requestEngagementChanges: (
+    engagementId: string,
+    note: string,
+  ) => Promise<void>;
   archiveListing: (listingId: string) => Promise<void>;
   reopenListing: (listingId: string) => Promise<void>;
   closeListing: (listingId: string) => Promise<void>;
   deleteListing: (listingId: string) => Promise<void>;
-  submitReview: (
-    id: string,
-    payload: { rating: number; text?: string; images?: string[] },
-  ) => void;
 }
 
 const UserJobsContext = createContext<UserJobsContextValue | undefined>(
@@ -276,11 +274,16 @@ export function mapWorkRequestToUserJob(
     counterpart: partyToUser(counterparty),
     date: formatCardDate(request.createdAt),
     createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
     jobType: terms.employmentType ?? undefined,
     unread: request.unread,
     activityLabel: 'Activity',
     activityValue: activityCopy(request, direction),
     details: detailsFromTerms(request, terms),
+    completedAt: request.workEngagementCompletedAt ?? undefined,
+    reviewState: request.reviewState ?? null,
+    rating: request.reviewState?.myReview?.rating,
+    reviewText: request.reviewState?.myReview?.body,
   };
 }
 
@@ -302,6 +305,7 @@ export function mapListingToPostedUserJob(
     counterpart: me,
     date: formatCardDate(listing.createdAt),
     createdAt: listing.createdAt,
+    updatedAt: listing.updatedAt,
     jobType: employmentTypeToUi(listing.employmentType),
     activityLabel: 'Posted',
     activityValue: listing.status.replace(/_/g, ' '),
@@ -427,7 +431,11 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
           company: me.name,
           type: payload.jobType ?? 'freelance',
           location: payload.location?.trim() || me.location || 'Remote',
-          salary: payload.budget?.trim() || 'Negotiable',
+          pricingType: payload.pricingType,
+          fixedAmount: payload.fixedAmount,
+          minAmount: payload.minAmount,
+          maxAmount: payload.maxAmount,
+          salary: payload.salaryLabel?.trim() || undefined,
           description: payload.description?.trim() || 'Job posted from Mawahib.',
           skills: payload.skills ?? [],
           exploreTag: 'Design',
@@ -478,7 +486,14 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         await marketplaceApi.transitionEngagement(engagementId, 'disputed', note);
         await refresh();
       },
-      markJobPaid: () => Promise.reject(new Error(PAYMENTS_UNAVAILABLE_MESSAGE)),
+      requestEngagementChanges: async (engagementId, note) => {
+        await marketplaceApi.transitionEngagement(
+          engagementId,
+          'in_progress',
+          note,
+        );
+        await refresh();
+      },
       archiveListing: async (listingId) => {
         await marketplaceApi.transitionListing(listingId, 'archived');
         await refresh();
@@ -494,12 +509,6 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       deleteListing: async (listingId) => {
         await marketplaceApi.deleteListing(listingId);
         await refresh();
-      },
-      submitReview: () => {
-        // Reviews are a later phase — callers must not treat this as success.
-        throw new Error(
-          'Reviews are not available yet. They will ship in a later phase.',
-        );
       },
     }),
     [jobs, loading, error, unread, refresh, refreshUnread, mappedUser],

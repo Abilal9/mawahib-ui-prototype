@@ -1,6 +1,6 @@
 # Frontend status
 
-**Last reviewed:** 2026-09-02
+**Last reviewed:** 2026-10-07
 
 ## Env / API target
 
@@ -45,16 +45,14 @@ Canonical behavior: [`AUTH.md`](./AUTH.md).
 - Avatar: change/remove; remove → `avatarUrl: null` → Mawahib default avatar UI.
 - Cover: `MediaPurpose.cover` → Nest upload → `coverUrl`; reposition/crop before confirm; remove → pink header fallback (no fake pink image file).
 - About (languages / education / experience / certifications) persists via `PATCH /users/me` → `Profile.aboutJson`.
-- Ratings: no fake `?? 5` / `?? 106`; zero reviews → “No reviews yet” / hide compact rating chips.
-- Seeded user/service `ratingAvg`/`ratingCount` values were reset to **0** (not backed by `EngagementReview`). Live aggregation remains deferred with Reviews.
-- Reviews screen: honest deferred/empty state (no mock review people). Full Reviews product remains deferred.
+- Ratings follow Nest `ratingAvg` / `ratingCount`. Zero reviews → “No reviews yet”.
+- Profile Reviews list engagement reviews and up to 4 images, opened in-app.
 - Connections identity: display name + optional title (no user-facing `@username`).
 - Public visitor DTO: cover/avatar/About allowed; no email/phone/verification leakage.
 - Visitor profile refreshes on focus for latest public fields.
 
 **Not shipped**
 
-- Full Reviews product / live aggregation UI beyond raw `ratingAvg`/`ratingCount` when present.
 - Aggressive old-media GC after avatar/cover replace (lifecycle deferred).
 
 ## Data paths
@@ -64,13 +62,26 @@ Canonical behavior: [`AUTH.md`](./AUTH.md).
 | Auth / session / `/users/me` | Nest + Supabase Auth |
 | Profile / portfolio / services / About / cover | Nest |
 | Explore (talents / businesses / services) | Nest |
-| Jobs inbox / work requests / listings | Nest |
+| Jobs / work requests / engagements / reviews | Nest. Selection does not create an engagement. Acceptance does. |
+| Payments / invoices | Nest mock provider. Card data never leaves the device as PAN/CVV. Amount is the engagement total. |
+| Media uploads | Nest upload-sessions + Supabase Storage. Domain rows are Nest-owned. |
 | Messaging / connections / notifications | Nest |
-| Media uploads | Nest upload-sessions + Supabase Storage (`avatars`, `covers`, …) |
 | **Home Feed / Posts / Comments / Likes / Saves** | **Nest-backed** (`PostsContext` → `postService` → `postsApi` → `/feed`, `/posts`, likes list, comments). Hybrid self/connection/discovery. **Posts max 4 images** (`MAX_POST_IMAGES`) — Post-specific only; Portfolio/Services/Messages keep their own limits. Comment Report UI is deferred (no report API). |
 | Social notifications | Nest `post_liked` / `post_commented` mapped in Notifications UI; Expo tap-nav E2E pending |
 | Stories | Deferred — Home Stories row **hidden** (style stub only; not rendered) |
-| Payments UI shells | Placeholder; no Nest payments |
+
+Local Nest expects `NODE_ENV=development`, `PAYMENT_PROVIDER=mock`, and
+`ENABLE_DEV_START_WORK=false`. `npm run start:local` talks to
+`http://localhost:3000/api/v1`. Railway is an optional hosted target, not a
+requirement for local development.
+
+Commercial behavior on the client:
+
+- Service requests send the package tier and add-on ids. They do not send a price.
+- Past calendar days are disabled. There is no time-of-day field.
+- A saved Google Maps URL opens unchanged when it is an approved HTTPS Maps host.
+- Images and iOS PDFs open in-app. Android PDFs, including invoices, open the signed URL externally.
+- A payment that is still `pending` or `processing` is polled with the same idempotency key.
 
 Money display helpers: `src/utils/money.ts`. Commercial rules live in the backend:
 
