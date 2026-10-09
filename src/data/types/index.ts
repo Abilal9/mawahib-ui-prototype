@@ -14,6 +14,8 @@ export interface User {
   defaultCurrency?: 'SAR' | 'AED' | null;
   skills?: string[];
   followers: number;
+  /** Active connections from the public profile. Not `followers`. */
+  connectionsCount?: number;
   following: number;
   posts: number;
   isVerified?: boolean;

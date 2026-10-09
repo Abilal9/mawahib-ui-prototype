@@ -26,6 +26,7 @@ import { Notification } from '../../data/types';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useNotifications } from '../../context/NotificationsContext';
+import { useConnections } from '../../context/ConnectionsContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { toImageSource } from '../../utils/image';
@@ -163,6 +164,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
     clearRatingPrompt,
     remove,
   } = useNotifications();
+  const { refresh: refreshConnections } = useConnections();
   const [activeTab, setActiveTab] = useState<NotificationTab>('All');
   const [responding, setResponding] = useState(false);
   const [confirm, setConfirm] = useState<{
@@ -215,11 +217,14 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
       const senderId =
         item.user?.id ||
         (typeof params.userId === 'string' ? params.userId : undefined);
-      if (senderId) {
-        openUserProfile(navigation, senderId, me.id);
-      } else {
-        navigation.navigate('Connections');
-      }
+      void (async () => {
+        await refreshConnections();
+        if (senderId) {
+          openUserProfile(navigation, senderId, me.id);
+        } else {
+          navigation.navigate('Connections');
+        }
+      })();
       return;
     }
 

@@ -23,6 +23,7 @@ export interface ApiUser {
   username: string;
   isVerified: boolean;
   followersCount: number;
+  connectionsCount?: number;
   followingCount: number;
   postsCount: number;
   ratingAvg: number;
@@ -115,6 +116,8 @@ export function mapApiUserToUser(api: ApiUser): User {
     defaultCurrency,
     skills: api.skills,
     followers: api.followersCount,
+    connectionsCount:
+      typeof api.connectionsCount === 'number' ? api.connectionsCount : undefined,
     following: api.followingCount,
     posts: api.postsCount,
     isVerified: api.isVerified,

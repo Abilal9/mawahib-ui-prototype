@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,17 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useConnections } from '../../context/ConnectionsContext';
+import {
+  connectionPeerToUser,
+  connectionService,
+} from '../../services/connectionService';
 import { useMyProfile } from '../../context/ProfileContext';
 import { User } from '../../data/types';
 import { openUserProfile } from '../../utils/openUserProfile';
@@ -30,7 +35,14 @@ export default function ConnectionsScreen({
   const viewedUserId = route.params?.userId;
   const { user: me } = useMyProfile();
   const isOwn = !viewedUserId || viewedUserId === me.id;
-  const { connectedUsers, incomingUsers, acceptRequest, denyRequest } = useConnections();
+  const {
+    connectedUsers,
+    incomingUsers,
+    acceptRequest,
+    denyRequest,
+    refreshIfStale,
+    mutationBusy,
+  } = useConnections();
   const [tab, setTab] = useState<ConnectionsTab>(
     isOwn && incomingUsers.length > 0 ? 'requests' : 'connections'
   );
@@ -38,23 +50,109 @@ export default function ConnectionsScreen({
   const visitorUser = useVisitorUser(
     !isOwn && isBackendUserId(viewedUserId) ? viewedUserId : undefined,
   );
-  const viewedUser = visitorUser.user ?? undefined;
-  // Public connections graph for other users is not exposed yet.
-  const visitorConnections = useMemo(() => [] as User[], []);
+  const viewedUser =
+    viewedUserId && visitorUser.user?.id === viewedUserId
+      ? visitorUser.user
+      : undefined;
+  const [mutualItems, setMutualItems] = useState<User[]>([]);
+  const [mutualCount, setMutualCount] = useState(0);
+  const [mutualTotal, setMutualTotal] = useState<number | null>(null);
+  const [mutualLoading, setMutualLoading] = useState(false);
+  const [mutualError, setMutualError] = useState<string | null>(null);
+  const [mutualAttempt, setMutualAttempt] = useState(0);
+  const canLoadMutuals =
+    !isOwn &&
+    isBackendUserId(viewedUserId) &&
+    isBackendUserId(me.id) &&
+    viewedUserId !== me.id;
+  const mutualTargetId = canLoadMutuals ? viewedUserId : undefined;
+  const [mutualForId, setMutualForId] = useState(mutualTargetId);
+  if (mutualForId !== mutualTargetId) {
+    setMutualForId(mutualTargetId);
+    setMutualItems([]);
+    setMutualCount(0);
+    setMutualTotal(null);
+    setMutualError(null);
+    setMutualLoading(Boolean(mutualTargetId));
+  }
+  const visitorCount = mutualTotal ?? viewedUser?.connectionsCount ?? 0;
+  const visitorHeaderPending =
+    !isOwn &&
+    Boolean(viewedUserId) &&
+    visitorUser.user?.id !== viewedUserId &&
+    !visitorUser.error;
 
-  const data: User[] = isOwn
-    ? tab === 'requests'
-      ? incomingUsers
-      : connectedUsers
-    : visitorConnections;
+  useFocusEffect(
+    useCallback(() => {
+      if (isOwn) {
+        void refreshIfStale(15_000);
+        return;
+      }
+      if (!canLoadMutuals || !viewedUserId) return;
+      let cancelled = false;
+      setMutualLoading(true);
+      setMutualError(null);
+      void connectionService
+        .listMutual(viewedUserId)
+        .then((result) => {
+          if (cancelled) return;
+          setMutualTotal(result.connectionsCount);
+          setMutualCount(result.mutualCount);
+          setMutualItems(result.items.map(connectionPeerToUser));
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          setMutualError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load mutual connections',
+          );
+        })
+        .finally(() => {
+          if (!cancelled) setMutualLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [isOwn, canLoadMutuals, viewedUserId, refreshIfStale, mutualAttempt]),
+  );
+
+  const data: User[] = tab === 'requests' ? incomingUsers : connectedUsers;
 
   const header = useMemo(() => {
     if (!isOwn) {
       return (
-        <Text style={styles.count}>
-          {visitorConnections.length} connection
-          {visitorConnections.length === 1 ? '' : 's'}
-        </Text>
+        <View>
+          <Text style={styles.count}>
+            {visitorUser.loading || visitorHeaderPending
+              ? 'Loading connections…'
+              : visitorUser.error
+                ? visitorUser.error
+                : `${visitorCount} connection${visitorCount === 1 ? '' : 's'}`}
+          </Text>
+          {mutualTotal !== null && !mutualLoading && !mutualError && !visitorUser.error ? (
+            <View>
+              <Text style={styles.mutualHeading}>
+                {mutualCount > 0
+                  ? `Mutual Connections (${mutualCount})`
+                  : 'No mutual connections yet.'}
+              </Text>
+              <Text style={styles.privateNote}>
+                Showing only connections you share.
+              </Text>
+            </View>
+          ) : null}
+          {mutualLoading ? (
+            <Text style={styles.privateNote}>Loading mutual connections…</Text>
+          ) : null}
+          {mutualError ? (
+            <TouchableOpacity onPress={() => setMutualAttempt((n) => n + 1)}>
+              <Text style={styles.privateNote}>
+                {mutualError}. Tap to retry.
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       );
     }
 
@@ -98,7 +196,14 @@ export default function ConnectionsScreen({
     tab,
     incomingUsers.length,
     connectedUsers.length,
-    visitorConnections.length,
+    visitorCount,
+    visitorUser.loading,
+    visitorUser.error,
+    visitorHeaderPending,
+    mutualCount,
+    mutualTotal,
+    mutualLoading,
+    mutualError,
   ]);
 
   const renderConnection = ({ item }: { item: User }) => (
@@ -145,6 +250,7 @@ export default function ConnectionsScreen({
         <TouchableOpacity
           style={styles.acceptBtn}
           onPress={() => acceptRequest(item.id)}
+          disabled={mutationBusy}
           activeOpacity={0.85}
         >
           <Text style={styles.acceptText}>Accept</Text>
@@ -152,6 +258,7 @@ export default function ConnectionsScreen({
         <TouchableOpacity
           style={styles.denyBtn}
           onPress={() => denyRequest(item.id)}
+          disabled={mutationBusy}
           activeOpacity={0.85}
         >
           <Text style={styles.denyText}>Deny</Text>
@@ -179,25 +286,32 @@ export default function ConnectionsScreen({
         <View style={styles.headerButton} />
       </View>
 
-      <FlatList
-        data={data}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={header}
-        renderItem={
-          isOwn && tab === 'requests' ? renderRequest : renderConnection
-        }
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            {isOwn
-              ? tab === 'requests'
+      {isOwn ? (
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={header}
+          renderItem={tab === 'requests' ? renderRequest : renderConnection}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {tab === 'requests'
                 ? 'When someone wants to connect, they’ll show up here.'
-                : 'People you connect with will appear here.'
-              : 'No connections to show yet.'}
-          </Text>
-        }
-      />
+                : 'People you connect with will appear here.'}
+            </Text>
+          }
+        />
+      ) : (
+        <FlatList
+          data={mutualError ? [] : mutualItems}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={header}
+          renderItem={renderConnection}
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -237,6 +351,17 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginBottom: spacing.md,
+  },
+  privateNote: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
+  },
+  mutualHeading: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
   },
   empty: {
     ...typography.body,

@@ -82,6 +82,15 @@ export const connectionsApi = {
     return apiRequest<ApiConnection[]>('/users/me/connections');
   },
 
+  /** Peers connected to both the signed-in viewer and userId. */
+  listMutual(userId: string): Promise<{
+    connectionsCount: number;
+    mutualCount: number;
+    items: ConnectionUserSummary[];
+  }> {
+    return apiRequest(`/users/${userId}/mutual-connections`);
+  },
+
   disconnect(peerUserId: string): Promise<void> {
     return apiRequest<void>(`/users/me/connections/${peerUserId}`, {
       method: 'DELETE',

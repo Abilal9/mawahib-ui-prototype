@@ -36,7 +36,7 @@ export default function ProfileCollapsingHeader({
   const showRating = hasRealReviews(user);
   const rating = user.rating ?? 0;
   const reviews = user.reviewCount ?? 0;
-  const connections = connectionsLabel ?? `${user.followers ?? 0} connections`;
+  const connections = connectionsLabel ?? 'Connections';
 
   const avatarSize = scrollY.interpolate({
     inputRange: [0, PROFILE_COLLAPSE_DISTANCE],

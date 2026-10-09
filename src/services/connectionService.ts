@@ -30,6 +30,10 @@ export const connectionService = {
     return connectionsApi.listConnections();
   },
 
+  async listMutual(userId: string) {
+    return connectionsApi.listMutual(userId);
+  },
+
   async listRequests(direction: 'incoming' | 'outgoing' | 'all' = 'all') {
     return connectionsApi.listRequests(direction);
   },

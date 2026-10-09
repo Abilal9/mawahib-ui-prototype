@@ -46,7 +46,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "selftest": "node --no-warnings scripts/card-validation-selftest.mjs && node --no-warnings scripts/payments-money-selftest.mjs && node --no-warnings scripts/jobs-reviews-gap-selftest.mjs && node --no-warnings scripts/calendar-location-selftest.mjs && node --no-warnings scripts/deadline-maps-selftest.mjs"
+    "selftest": "node --no-warnings scripts/card-validation-selftest.mjs && node --no-warnings scripts/payments-money-selftest.mjs && node --no-warnings scripts/jobs-reviews-gap-selftest.mjs && node --no-warnings scripts/calendar-location-selftest.mjs && node --no-warnings scripts/deadline-maps-selftest.mjs && node --no-warnings scripts/connections-selftest.mjs"
   },
   "private": true
 }

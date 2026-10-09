@@ -58,6 +58,8 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     denyRequest,
     disconnect,
     openOrCreateConversation,
+    mutationBusy,
+    refreshIfStale,
   } = useConnections();
   const { user: me } = useMyProfile();
   const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
@@ -68,8 +70,22 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
   useFocusEffect(
     useCallback(() => {
       visitorUser.refresh();
-    }, [visitorUser.refresh]),
+      void refreshIfStale(15_000);
+    }, [visitorUser.refresh, refreshIfStale]),
   );
+
+  const liveRelation = user?.id ? getRelation(user.id) : 'none';
+  const previousRelation = useRef(liveRelation);
+  useEffect(() => {
+    if (
+      previousRelation.current !== 'connected' &&
+      liveRelation === 'connected' &&
+      user?.id
+    ) {
+      visitorUser.refresh();
+    }
+    previousRelation.current = liveRelation;
+  }, [liveRelation, user?.id, visitorUser.refresh]);
 
   useEffect(() => {
     if (!user?.id || user.id === me.id) {
@@ -232,13 +248,20 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
           onConnectionsPress={() =>
             navigation.navigate('Connections', { userId: user.id })
           }
-          connectionsLabel="Connections"
+          connectionsLabel={
+            typeof user.connectionsCount === 'number'
+              ? `${user.connectionsCount} connection${
+                  user.connectionsCount === 1 ? '' : 's'
+                }`
+              : 'Connections'
+          }
         >
           {relation === 'incoming' ? (
             <View style={styles.ctaRow}>
               <TouchableOpacity
                 style={styles.connectBtn}
                 onPress={() => acceptRequest(user.id)}
+                disabled={mutationBusy}
                 activeOpacity={0.85}
                 hitSlop={ACTION_HIT_SLOP}
               >
@@ -248,6 +271,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
               <TouchableOpacity
                 style={styles.messageBtn}
                 onPress={() => denyRequest(user.id)}
+                disabled={mutationBusy}
                 activeOpacity={0.85}
                 hitSlop={ACTION_HIT_SLOP}
               >
@@ -264,6 +288,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                   relation === 'outgoing' && styles.connectBtnPending,
                 ]}
                 onPress={onConnectPress}
+                disabled={mutationBusy}
                 activeOpacity={0.85}
                 hitSlop={ACTION_HIT_SLOP}
               >
