@@ -193,8 +193,8 @@ export interface ApiWorkRequestAttachmentUrl {
 
 export interface ApiUserReview {
   id: string;
-  engagementId: string;
-  engagementTitle: string;
+  /** Public-safe label. Not a private engagement title. */
+  contextLabel: string;
   rating: number;
   body: string;
   createdAt: string;

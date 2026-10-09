@@ -35,7 +35,7 @@ export function mapApiReviewToItem(
     authorAvatar: review.reviewer.avatarUrl ?? '',
     timeAgo: formatReviewTimeAgo(review.createdAt, now),
     rating: review.rating,
-    serviceName: review.engagementTitle,
+    serviceName: review.contextLabel,
     body: review.body,
     images: (review.media ?? [])
       .map((item) => item.url)

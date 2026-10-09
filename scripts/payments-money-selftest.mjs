@@ -65,8 +65,7 @@ assert.equal(att.attachmentIcon('brief.pdf'), 'document-text-outline');
 const now = new Date('2026-10-06T12:00:00Z');
 const review = (id, rating, createdAt) => ({
   id,
-  engagementId: `e-${id}`,
-  engagementTitle: `Job ${id}`,
+  contextLabel: `Job ${id}`,
   rating,
   body: `body ${id}`,
   createdAt,

@@ -92,6 +92,18 @@ assert(
   jobsContext.includes('jobApplicationStatus'),
   'applicant cards read canonical application status',
 );
+const reviewsMapping = readFileSync(
+  new URL('../src/utils/reviewsMapping.ts', import.meta.url),
+  'utf8',
+);
+assert(
+  reviewsMapping.includes('contextLabel'),
+  'public review cards use the safe context label',
+);
+assert(
+  !reviewsMapping.includes('engagementTitle'),
+  'public review cards do not read the private engagement title',
+);
 assert(
   jobsContext.indexOf("case 'under_review'") <
     jobsContext.indexOf("default:\n      return { status: 'pending'"),
