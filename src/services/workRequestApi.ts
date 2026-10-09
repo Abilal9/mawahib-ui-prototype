@@ -136,6 +136,14 @@ export interface ApiWorkRequest {
   providerUserId: string;
   jobListingId: string | null;
   jobApplicationId: string | null;
+  /** Canonical application status. Null for service and direct requests. */
+  jobApplicationStatus?:
+    | 'submitted'
+    | 'under_review'
+    | 'accepted'
+    | 'rejected'
+    | 'withdrawn'
+    | null;
   serviceOfferingId: string | null;
   serviceTitle: string | null;
   workEngagementId: string | null;

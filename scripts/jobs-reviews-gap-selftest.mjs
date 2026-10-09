@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 /**
  * Gap-close rules that the app implements inline:
  * local past calendar days, same-day past slots, service quote totals,
@@ -81,6 +83,20 @@ assert(pdfUsesExternalHandler('android', 'application/pdf'), 'android pdf leaves
 assert(!pdfUsesExternalHandler('ios', 'application/pdf'), 'ios pdf stays in app');
 assert(!pdfUsesExternalHandler('android', 'image/jpeg'), 'android images stay in app');
 assert(pdfUsesExternalHandler('android', 'application/pdf'), 'invoices use the same android rule');
+
+const jobsContext = readFileSync(
+  new URL('../src/context/UserJobsContext.tsx', import.meta.url),
+  'utf8',
+);
+assert(
+  jobsContext.includes('jobApplicationStatus'),
+  'applicant cards read canonical application status',
+);
+assert(
+  jobsContext.indexOf("case 'under_review'") <
+    jobsContext.indexOf("default:\n      return { status: 'pending'"),
+  'under review is chosen before the pending fallback',
+);
 
 if (process.exitCode) {
   process.exit(process.exitCode);

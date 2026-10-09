@@ -538,30 +538,14 @@ export default function WorkRequestDetailScreen({
       setAttachments(current.attachments ?? []);
       await refreshUnread();
 
-      // Job postings: is this application the selected one?
-      if (
+      // Selected comes from the canonical application status on this payload.
+      setApplicantSelected(
         current.source === 'job_posting' &&
-        current.jobApplicationId &&
-        (current.status === 'pending' ||
-          current.status === 'changes_requested' ||
-          current.status === 'changes_declined')
-      ) {
-        const amSender = current.senderUserId === apiUser?.id;
-        const apps = amSender
-          ? await marketplaceApi.listMyApplications().catch(() => [])
-          : current.jobListingId
-            ? await marketplaceApi
-                .listApplicationsForListing(current.jobListingId)
-                .catch(() => [])
-            : [];
-        setApplicantSelected(
-          apps.some(
-            (a) => a.id === current.jobApplicationId && a.status === 'accepted',
-          ),
-        );
-      } else {
-        setApplicantSelected(false);
-      }
+          current.jobApplicationStatus === 'accepted' &&
+          (current.status === 'pending' ||
+            current.status === 'changes_requested' ||
+            current.status === 'changes_declined'),
+      );
 
       const engagementId =
         viewed?.workEngagementId ?? fetched.workEngagementId;
@@ -632,7 +616,7 @@ export default function WorkRequestDetailScreen({
       if (!silent) setLoading(false);
     }
     },
-    [requestId, refreshUnread, apiUser?.id],
+    [requestId, refreshUnread],
   );
 
   useEffect(() => {

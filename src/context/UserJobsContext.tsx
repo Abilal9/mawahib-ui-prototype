@@ -163,6 +163,29 @@ function mapStatus(request: ApiWorkRequest): {
     return { status: 'completed', statusLabel: 'Completed', section: 'completed' };
   }
 
+  // Job cards use JobApplication.status while the work request is still pending.
+  // Engagement and later request states above stay the card status after that.
+  if (request.source === 'job_posting' && request.status === 'pending') {
+    switch (request.jobApplicationStatus) {
+      case 'under_review':
+        return {
+          status: 'under-review',
+          statusLabel: 'Under Review',
+          section: 'requests',
+        };
+      case 'accepted':
+        return { status: 'selected', statusLabel: 'Selected', section: 'requests' };
+      case 'rejected':
+        return { status: 'rejected', statusLabel: 'Rejected', section: 'completed' };
+      case 'withdrawn':
+        return { status: 'withdrawn', statusLabel: 'Cancelled', section: 'completed' };
+      case 'submitted':
+        return { status: 'pending', statusLabel: 'Pending', section: 'requests' };
+      default:
+        break;
+    }
+  }
+
   switch (request.status) {
     case 'pending_payment':
       return {

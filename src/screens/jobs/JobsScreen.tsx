@@ -144,6 +144,10 @@ function getStatusTone(status: UserJob['status']) {
   switch (status) {
     case 'pending':
       return { bg: '#FCE7F3', text: '#BE185D' };
+    case 'under-review':
+      return { bg: '#FEF9C3', text: '#8A6A16' };
+    case 'selected':
+      return { bg: '#DCFCE7', text: '#15803D' };
     case 'changes-requested':
       return { bg: '#FEF9C3', text: '#8A6A16' };
     case 'changes-declined':

@@ -7,6 +7,8 @@ import { User } from './index';
  */
 export type UserJobStatus =
   | 'pending'
+  | 'under-review'
+  | 'selected'
   | 'changes-requested'
   | 'changes-declined'
   | 'pending-payment'
