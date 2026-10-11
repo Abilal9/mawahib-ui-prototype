@@ -333,6 +333,7 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
     status: listingStatusToUi(api.status),
     logo: api.poster.avatarUrl ?? undefined,
     exploreTag: api.exploreTag ?? undefined,
+    companyVerified: api.poster.isVerified,
   };
 }
 
@@ -340,6 +341,7 @@ export const marketplaceApi = {
   listOpenListings(params?: {
     q?: string;
     exploreTag?: string;
+    employmentType?: ApiEmploymentType;
     take?: number;
     skip?: number;
   }): Promise<ApiJobListingsPage> {
@@ -347,6 +349,7 @@ export const marketplaceApi = {
     qs.set('status', 'open');
     if (params?.q) qs.set('q', params.q);
     if (params?.exploreTag) qs.set('exploreTag', params.exploreTag);
+    if (params?.employmentType) qs.set('employmentType', params.employmentType);
     if (params?.take != null) qs.set('take', String(params.take));
     if (params?.skip != null) qs.set('skip', String(params.skip));
     return apiRequest<ApiJobListingsPage>(`/job-listings?${qs.toString()}`);

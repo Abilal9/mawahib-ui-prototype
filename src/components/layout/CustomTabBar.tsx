@@ -14,6 +14,25 @@ type TabIconName = keyof typeof Ionicons.glyphMap;
 const ICON_SIZE = 24;
 const CREATE_ICON_SIZE = 28;
 
+/** Floating tab-bar content height. The bar is absolutely positioned over each tab scene. */
+export const TAB_BAR_HEIGHT = 60;
+/** Matches the bar's minimum bottom padding when the device safe area is smaller. */
+export const TAB_BAR_MIN_BOTTOM_INSET = 10;
+
+/** Distance from the physical screen bottom to the top of the floating tab bar. */
+export function tabBarOverlayHeight(safeBottom: number) {
+  return TAB_BAR_HEIGHT + Math.max(safeBottom, TAB_BAR_MIN_BOTTOM_INSET);
+}
+
+/**
+ * List padding that clears the floating tab bar.
+ * Use this when the screen already applies the safe-area bottom inset,
+ * as ScreenContainer does. `gap` is the breathing room above the bar.
+ */
+export function listPaddingAboveTabBar(safeBottom: number, gap: number) {
+  return tabBarOverlayHeight(safeBottom) - safeBottom + gap;
+}
+
 const TAB_ICONS: Record<
   string,
   { active: TabIconName; inactive: TabIconName }
@@ -32,7 +51,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const { unread: jobsUnread } = useUserJobs();
   const showMessagesDot = messagesUnread > 0;
   const showJobsDot = jobsUnread.sent + jobsUnread.received > 0;
-  const bottomPad = Math.max(insets.bottom, 10);
+  const bottomPad = Math.max(insets.bottom, TAB_BAR_MIN_BOTTOM_INSET);
 
   return (
     <View
@@ -178,7 +197,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: 60,
+    height: TAB_BAR_HEIGHT,
     paddingHorizontal: spacing.sm,
     backgroundColor: 'transparent',
   },

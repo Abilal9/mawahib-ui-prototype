@@ -1,6 +1,5 @@
-import { Job, Service, Talent, User } from '../data/types';
+import { Service, Talent, User } from '../data/types';
 import { apiRequest } from '../lib/apiClient';
-import { mapApiListingToJob, marketplaceApi } from './marketplaceApi';
 
 export interface ExploreProfile {
   id: string;
@@ -47,6 +46,7 @@ function profileToUser(p: ExploreProfile): User {
     bio: p.bio,
     location: [p.locationCity, p.locationCountry].filter(Boolean).join(', ') || undefined,
     skills: p.skills,
+    accountType: p.accountType,
     followers: p.followersCount,
     following: p.followingCount,
     posts: p.postsCount,
@@ -92,21 +92,44 @@ export function mapExploreService(row: ExploreServiceRow): Service {
   };
 }
 
+export interface ExplorePage<T> {
+  items: T[];
+  total: number;
+  take: number;
+  skip: number;
+}
+
+export interface ExploreTalentPage extends ExplorePage<ExploreProfile> {
+  businesses: ExploreProfile[];
+}
+
+export interface ExploreListQuery {
+  q?: string;
+  locationCode?: string;
+  sort?: 'recommended' | 'top-rated' | 'newest';
+  skip?: number;
+  take?: number;
+}
+
+function exploreQuery(path: string, params?: ExploreListQuery): string {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set('q', params.q);
+  if (params?.locationCode) qs.set('locationCode', params.locationCode);
+  if (params?.sort) qs.set('sort', params.sort);
+  if (params?.skip != null) qs.set('skip', String(params.skip));
+  if (params?.take != null) qs.set('take', String(params.take));
+  const query = qs.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 export const exploreApi = {
-  listTalents(): Promise<ExploreProfile[]> {
-    return apiRequest<ExploreProfile[]>('/explore/talents');
+  listTalents(params?: ExploreListQuery): Promise<ExploreTalentPage> {
+    return apiRequest<ExploreTalentPage>(exploreQuery('/explore/talents', params));
   },
 
-  listBusinesses(): Promise<ExploreProfile[]> {
-    return apiRequest<ExploreProfile[]>('/explore/businesses');
-  },
-
-  listServices(): Promise<ExploreServiceRow[]> {
-    return apiRequest<ExploreServiceRow[]>('/explore/services');
-  },
-
-  async listOpenJobs(): Promise<Job[]> {
-    const page = await marketplaceApi.listOpenListings({ take: 50 });
-    return page.items.map(mapApiListingToJob);
+  listServices(params?: ExploreListQuery): Promise<ExplorePage<ExploreServiceRow>> {
+    return apiRequest<ExplorePage<ExploreServiceRow>>(
+      exploreQuery('/explore/services', params),
+    );
   },
 };

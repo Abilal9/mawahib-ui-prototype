@@ -28,6 +28,16 @@ export const catalogService = {
     return servicesCache.find((s) => s.id === id);
   },
 
+  /** Lets Service Detail open an Explore hit that is outside the Home page. */
+  rememberService(service: CatalogService) {
+    const index = servicesCache.findIndex((item) => item.id === service.id);
+    if (index >= 0) {
+      servicesCache = servicesCache.map((item, i) => (i === index ? service : item));
+      return;
+    }
+    servicesCache = [...servicesCache, service];
+  },
+
   listTalents(): Talent[] {
     return talentsCache;
   },
@@ -50,14 +60,13 @@ export const catalogService = {
     services: CatalogService[];
   }> {
     try {
-      const [talents, businesses, services] = await Promise.all([
-        exploreApi.listTalents(),
-        exploreApi.listBusinesses(),
-        exploreApi.listServices(),
+      const [talents, services] = await Promise.all([
+        exploreApi.listTalents({ take: 50 }),
+        exploreApi.listServices({ take: 50 }),
       ]);
-      talentsCache = talents.map(mapExploreTalent);
-      businessesCache = businesses.map(mapExploreTalent);
-      servicesCache = services.map(mapExploreService);
+      talentsCache = talents.items.map(mapExploreTalent);
+      businessesCache = [];
+      servicesCache = services.items.map(mapExploreService);
       catalogError = null;
       return {
         talents: talentsCache,

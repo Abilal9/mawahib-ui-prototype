@@ -139,11 +139,3 @@ export const talents: Talent[] = [
     tags: ['Saudi Made', 'Local Talent', 'Photographers', 'Visual Artists'],
   },
 ];
-
-export const recentSearches: string[] = [
-  'UI Designer Dubai',
-  'React Native Developer',
-  'Brand Photographer',
-  'Motion Graphics',
-  'Logo Design',
-];

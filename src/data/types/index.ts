@@ -22,6 +22,8 @@ export interface User {
   title?: string;
   rating?: number;
   reviewCount?: number;
+  /** talent | business. Present on Explore profiles. */
+  accountType?: string;
 }
 
 export interface Post {
@@ -94,6 +96,8 @@ export interface Job {
   logo?: string | number;
   /** Explore filter chip e.g. Tech / Design / Food */
   exploreTag?: string;
+  /** Poster verification, when the listing payload includes it. */
+  companyVerified?: boolean;
 }
 
 /** Alias for catalog Job — distinguishes from UserJob (in-app engagement) */
@@ -214,7 +218,7 @@ export type {
 
 export type { ConnectionRelation } from './connections';
 
-export type TalentConnectStatus = 'connect' | 'added' | 'request-sent';
+export type TalentConnectStatus = 'connect' | 'added' | 'request-sent' | 'incoming';
 
 export interface Talent {
   id: string;

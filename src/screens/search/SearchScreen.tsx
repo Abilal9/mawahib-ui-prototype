@@ -1,36 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
-  Platform,
+  ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
-import ExploreFilterSheet from '../../components/explore/ExploreFilterSheet';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
+import { listPaddingAboveTabBar } from '../../components/layout/CustomTabBar';
+import ExploreFilterSheet, {
+  ExploreSheetValue,
+  locationLabel,
+} from '../../components/explore/ExploreFilterSheet';
+import ServiceMediaMosaic from '../../components/explore/ServiceMediaMosaic';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import { stripCurrencyCodeTokens } from '../../utils/money';
-import { recentSearches } from '../../data/mock/talents';
-import {
-  exploreTabs,
-  chipsForTab,
-  defaultExploreFilters,
-  ExploreTab,
-} from '../../data/mock/explore';
-import {
-  filterJobs,
-  filterServices,
-  filterTalents,
-  normalizeExploreTab,
-} from '../../utils/explore';
+import { exploreTabs, ExploreTab } from '../../data/mock/explore';
+import { normalizeExploreTab } from '../../utils/explore';
 import { TabScreenProps } from '../../navigation/types';
 import { displayProfileTitle } from '../../constants/profile';
 import {
@@ -42,90 +38,294 @@ import {
 } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
 import { useConnections } from '../../context/ConnectionsContext';
-import { catalogService, jobService } from '../../services';
+import {
+  exploreApi,
+  mapExploreService,
+  mapExploreTalent,
+} from '../../services/exploreApi';
+import {
+  mapApiListingToJob,
+  marketplaceApi,
+  type ApiEmploymentType,
+} from '../../services/marketplaceApi';
 import { openUserProfile } from '../../utils/openUserProfile';
+import { catalogService } from '../../services/catalogService';
+
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
+type Row =
+  | { kind: 'talent'; talent: Talent }
+  | { kind: 'service'; service: Service }
+  | { kind: 'job'; job: Job };
+
+type Bucket<T> = {
+  items: T[];
+  businesses: Talent[];
+  total: number;
+  error: string | null;
+  initialLoading: boolean;
+  pending: boolean;
+  loadingMore: boolean;
+  loadedKey: string | null;
+};
+
+function emptyBucket<T>(): Bucket<T> {
+  return {
+    items: [],
+    businesses: [],
+    total: 0,
+    error: null,
+    initialLoading: true,
+    pending: false,
+    loadingMore: false,
+    loadedKey: null,
+  };
+}
 
 function relationToConnectStatus(relation: ConnectionRelation): TalentConnectStatus {
   if (relation === 'connected') return 'added';
-  if (relation === 'outgoing' || relation === 'incoming') return 'request-sent';
+  if (relation === 'outgoing') return 'request-sent';
+  if (relation === 'incoming') return 'incoming';
   return 'connect';
 }
 
+function postedLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function markPending<T>(
+  set: React.Dispatch<React.SetStateAction<Bucket<T>>>,
+  mode: 'reset' | 'more',
+) {
+  set((current) => ({
+    ...current,
+    error: null,
+    pending: mode === 'reset' && current.items.length > 0,
+    initialLoading: mode === 'reset' && current.items.length === 0,
+    loadingMore: mode === 'more',
+  }));
+}
+
+function markFailed<T>(
+  set: React.Dispatch<React.SetStateAction<Bucket<T>>>,
+  message: string,
+  mode: 'reset' | 'more',
+) {
+  set((current) => ({
+    ...current,
+    error: message,
+    items: mode === 'reset' ? [] : current.items,
+    businesses: mode === 'reset' ? [] : current.businesses,
+    total: mode === 'reset' ? 0 : current.total,
+    initialLoading: false,
+    pending: false,
+    loadingMore: false,
+    loadedKey: mode === 'reset' ? null : current.loadedKey,
+  }));
+}
+
+function settlePending<T>(set: React.Dispatch<React.SetStateAction<Bucket<T>>>) {
+  set((current) => ({
+    ...current,
+    pending: false,
+    loadingMore: false,
+    initialLoading: current.items.length === 0 && !current.loadedKey ? current.initialLoading : false,
+  }));
+}
+
+function appendUnique<T extends { id: string }>(current: T[], next: T[]): T[] {
+  const seen = new Set(current.map((item) => item.id));
+  return [...current, ...next.filter((item) => !seen.has(item.id))];
+}
+
 export default function SearchScreen({ navigation, route }: TabScreenProps<'SearchTab'>) {
+  const insets = useSafeAreaInsets();
+  const listBottomInset = listPaddingAboveTabBar(insets.bottom, spacing.md);
   const { user: me } = useMyProfile();
-  const { getRelation, requestConnect, cancelOutgoing, disconnect, acceptRequest } =
-    useConnections();
+  const {
+    getRelation,
+    requestConnect,
+    cancelOutgoing,
+    disconnect,
+    acceptRequest,
+    mutationBusy,
+  } = useConnections();
+  const [disconnectTarget, setDisconnectTarget] = useState<{
+    userId: string;
+    name: string;
+  } | null>(null);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searches, setSearches] = useState(recentSearches);
-  const [tab, setTab] = useState<ExploreTab>(
-    normalizeExploreTab(route.params?.contentType)
-  );
-  const [chip, setChip] = useState<string | null>(null);
-  const [filters, setFilters] = useState(defaultExploreFilters);
+  const [tab, setTab] = useState<ExploreTab>(normalizeExploreTab(route.params?.contentType));
+  const [filters, setFilters] = useState<ExploreSheetValue>({
+    locationCode: null,
+    talentSort: 'recommended',
+    employmentType: null,
+  });
   const [filterOpen, setFilterOpen] = useState(false);
-
-  const [talents, setTalents] = useState<Talent[]>(() => catalogService.listTalents());
-  const [jobs, setJobs] = useState<Job[]>(() => jobService.listSync());
-  const [jobsError, setJobsError] = useState<string | null>(null);
-  const [services, setServices] = useState(() => catalogService.listServices());
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [talents, setTalents] = useState<Bucket<Talent>>(emptyBucket);
+  const [services, setServices] = useState<Bucket<Service>>(emptyBucket);
+  const [jobs, setJobs] = useState<Bucket<Job>>(emptyBucket);
+  const requestGen = useRef({ talents: 0, services: 0, jobs: 0 });
+  const satisfiedKey = useRef({ talents: '', services: '', jobs: '' });
+  const resetHold = useRef({ talents: false, services: false, jobs: false });
 
   useEffect(() => {
     if (route.params?.contentType) {
       setTab(normalizeExploreTab(route.params.contentType));
-      setChip(null);
     }
   }, [route.params?.contentType]);
 
-  useEffect(() => {
-    void (async () => {
+  const talentKey = `${query.trim()}|${filters.locationCode ?? ''}|${filters.talentSort}`;
+  const serviceKey = `${query.trim()}|${filters.locationCode ?? ''}`;
+  const jobKey = `${query.trim()}|${filters.employmentType ?? ''}`;
+  const activeKey = tab === 'talents' ? talentKey : tab === 'services' ? serviceKey : jobKey;
+
+  const load = useCallback(
+    async (target: ExploreTab, mode: 'reset' | 'more', gen: number) => {
+      const q = query.trim();
+      if (target === 'talents') markPending(setTalents, mode);
+      else if (target === 'services') markPending(setServices, mode);
+      else markPending(setJobs, mode);
       try {
-        const [nextJobs, catalog] = await Promise.all([
-          jobService.refresh(),
-          catalogService.refresh(),
-        ]);
-        setJobs(nextJobs);
-        setTalents(catalog.talents);
-        setServices(catalog.services);
-        setJobsError(null);
-        setCatalogError(null);
-      } catch (e) {
-        setJobs([]);
-        setTalents([]);
-        setServices([]);
-        const message = e instanceof Error ? e.message : 'Failed to load explore';
-        setJobsError(message);
-        setCatalogError(message);
+        if (target === 'talents') {
+          const skip = mode === 'more' ? talents.items.length : 0;
+          const page = await exploreApi.listTalents({
+            q: q || undefined,
+            locationCode: filters.locationCode ?? undefined,
+            sort: filters.talentSort,
+            skip,
+            take: PAGE_SIZE,
+          });
+          if (requestGen.current.talents !== gen) return false;
+          const next = page.items.map(mapExploreTalent);
+          const studios = (page.businesses ?? []).map(mapExploreTalent);
+          setTalents((current) => ({
+            ...current,
+            items: mode === 'more' ? appendUnique(current.items, next) : next,
+            businesses: mode === 'more' ? current.businesses : studios,
+            total: page.total,
+            error: null,
+            initialLoading: false,
+            pending: false,
+            loadingMore: false,
+            loadedKey: talentKey,
+          }));
+          return true;
+        }
+        if (target === 'services') {
+          const skip = mode === 'more' ? services.items.length : 0;
+          const page = await exploreApi.listServices({
+            q: q || undefined,
+            locationCode: filters.locationCode ?? undefined,
+            sort: 'newest',
+            skip,
+            take: PAGE_SIZE,
+          });
+          if (requestGen.current.services !== gen) return false;
+          const next = page.items.map(mapExploreService);
+          setServices((current) => ({
+            ...current,
+            items: mode === 'more' ? appendUnique(current.items, next) : next,
+            total: page.total,
+            error: null,
+            initialLoading: false,
+            pending: false,
+            loadingMore: false,
+            loadedKey: serviceKey,
+          }));
+          return true;
+        }
+        const skip = mode === 'more' ? jobs.items.length : 0;
+        const page = await marketplaceApi.listOpenListings({
+          q: q || undefined,
+          employmentType: filters.employmentType ?? undefined,
+          skip,
+          take: PAGE_SIZE,
+        });
+        if (requestGen.current.jobs !== gen) return false;
+        const next = page.items.map(mapApiListingToJob);
+        setJobs((current) => ({
+          ...current,
+          items: mode === 'more' ? appendUnique(current.items, next) : next,
+          total: page.total,
+          error: null,
+          initialLoading: false,
+          pending: false,
+          loadingMore: false,
+            loadedKey: jobKey,
+          }));
+        return true;
+      } catch (error) {
+        if (requestGen.current[target] !== gen) return false;
+        const message = error instanceof Error ? error.message : 'Failed to load explore';
+        if (mode === 'reset') satisfiedKey.current[target] = '';
+        if (target === 'talents') markFailed(setTalents, message, mode);
+        else if (target === 'services') markFailed(setServices, message, mode);
+        else markFailed(setJobs, message, mode);
+        return false;
       }
-    })();
-  }, []);
-
-  const chipOptions = chipsForTab(tab);
-
-  const talentResults = useMemo(
-    () => filterTalents(talents, query, chip, filters),
-    [talents, query, chip, filters]
-  );
-  const jobResults = useMemo(
-    () => filterJobs(jobs, query, chip, filters),
-    [jobs, query, chip, filters]
-  );
-  const serviceResults = useMemo(
-    () => filterServices(services, query, chip, filters),
-    [services, query, chip, filters]
+    },
+    [
+      filters.employmentType,
+      filters.locationCode,
+      filters.talentSort,
+      jobKey,
+      jobs.items.length,
+      query,
+      serviceKey,
+      services.items.length,
+      talentKey,
+      talents.items.length,
+    ],
   );
 
-  const results =
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const paging = useRef(false);
+
+  useEffect(() => {
+    if (satisfiedKey.current[tab] === activeKey) {
+      requestGen.current[tab] += 1;
+      resetHold.current[tab] = false;
+      if (tab === 'talents') settlePending(setTalents);
+      else if (tab === 'services') settlePending(setServices);
+      else settlePending(setJobs);
+      return;
+    }
+    const gen = ++requestGen.current[tab];
+    resetHold.current[tab] = true;
+    if (tab === 'talents') markPending(setTalents, 'reset');
+    else if (tab === 'services') markPending(setServices, 'reset');
+    else markPending(setJobs, 'reset');
+    const delay = query.trim() ? SEARCH_DEBOUNCE_MS : 0;
+    const timer = setTimeout(() => {
+      void loadRef.current(tab, 'reset', gen).then((ok) => {
+        if (requestGen.current[tab] !== gen) return;
+        resetHold.current[tab] = false;
+        if (ok) satisfiedKey.current[tab] = activeKey;
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [activeKey, query, tab]);
+
+  const bucket = tab === 'talents' ? talents : tab === 'services' ? services : jobs;
+  const rows: Row[] =
     tab === 'talents'
-      ? talentResults
+      ? [
+          ...talents.businesses.map((talent) => ({ kind: 'talent' as const, talent })),
+          ...talents.items.map((talent) => ({ kind: 'talent' as const, talent })),
+        ]
       : tab === 'services'
-        ? serviceResults
-        : jobResults;
+        ? services.items.map((service) => ({ kind: 'service' as const, service }))
+        : jobs.items.map((job) => ({ kind: 'job' as const, job }));
 
-  const removeSearch = (term: string) => setSearches((prev) => prev.filter((s) => s !== term));
+  const hasMore = bucket.items.length < bucket.total;
 
-  const handleConnect = (userId: string) => {
+  const handleConnect = (userId: string, displayName: string) => {
     const relation = getRelation(userId);
     if (relation === 'none') {
       requestConnect(userId);
@@ -139,15 +339,26 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
       acceptRequest(userId);
       return;
     }
-    if (relation === 'connected') {
-      disconnect(userId);
-    }
+    setDisconnectTarget({ userId, name: displayName });
   };
+
+  const retry = () => {
+    satisfiedKey.current[tab] = '';
+    const gen = ++requestGen.current[tab];
+    resetHold.current[tab] = true;
+    void load(tab, 'reset', gen).then((ok) => {
+      if (requestGen.current[tab] !== gen) return;
+      resetHold.current[tab] = false;
+      if (ok) satisfiedKey.current[tab] = activeKey;
+    });
+  };
+
+  const emptyTitle =
+    tab === 'talents' ? 'No talents found' : tab === 'services' ? 'No services found' : 'No jobs found';
 
   return (
     <ScreenContainer padded={false}>
       <StatusBar style="dark" />
-
       <View style={styles.topBar}>
         {searchOpen ? (
           <View style={styles.searchBar}>
@@ -158,13 +369,14 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
               placeholderTextColor={colors.textSecondary}
               value={query}
               onChangeText={setQuery}
+              maxLength={120}
               autoFocus
             />
-            {query.length > 0 && (
+            {query.length > 0 ? (
               <TouchableOpacity onPress={() => setQuery('')}>
                 <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
-            )}
+            ) : null}
             <TouchableOpacity
               onPress={() => {
                 setSearchOpen(false);
@@ -194,16 +406,15 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
           return (
             <TouchableOpacity
               key={item.id}
-              style={[styles.mainTab, selected && styles.mainTabActive]}
-              onPress={() => {
-                setTab(item.id);
-                setChip(null);
-              }}
+              style={styles.mainTab}
+              onPress={() => setTab(item.id)}
               activeOpacity={0.85}
             >
-              <Text style={[styles.mainTabText, selected && styles.mainTabTextActive]}>
-                {item.label}
-              </Text>
+              <View style={[styles.mainTabLabel, selected && styles.mainTabLabelActive]}>
+                <Text style={[styles.mainTabText, selected && styles.mainTabTextActive]}>
+                  {item.label}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -217,140 +428,158 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
         >
           <Ionicons name="options-outline" size={18} color={colors.text} />
         </TouchableOpacity>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScroll}
-        >
-          {chipOptions.map((item) => {
-            const selected = chip === item;
-            return (
-              <TouchableOpacity
-                key={item}
-                style={[styles.chip, selected && styles.chipActive]}
-                onPress={() => setChip(selected ? null : item)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{item}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <Text style={styles.filterSummary} numberOfLines={1}>
+          {tab === 'jobs'
+            ? filters.employmentType
+              ? filters.employmentType.replace('_', ' ')
+              : 'All job types'
+            : locationLabel(filters.locationCode)}
+          {tab === 'talents'
+            ? filters.talentSort === 'top-rated'
+              ? ' · Top rated'
+              : ' · Recommended'
+            : ' · Newest'}
+        </Text>
+        {bucket.pending ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        {searchOpen && !query ? (
-          <View style={styles.recentSection}>
-            <Text style={styles.recentTitle}>Recent searches</Text>
-            {searches.map((term) => (
-              <TouchableOpacity
-                key={term}
-                style={styles.recentItem}
-                onPress={() => setQuery(term)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
-                <Text style={styles.recentText}>{term}</Text>
-                <TouchableOpacity onPress={() => removeSearch(term)}>
-                  <Ionicons name="close" size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
+      {bucket.error && bucket.items.length === 0 && !bucket.initialLoading ? (
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.emptyTitle}>Could not load {tab}</Text>
+          <Text style={styles.emptyText}>{bucket.error}</Text>
+          <TouchableOpacity onPress={retry}>
+            <Text style={styles.retry}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={bucket.initialLoading ? [] : rows}
+          keyExtractor={(row) =>
+            row.kind === 'talent'
+              ? row.talent.id
+              : row.kind === 'service'
+                ? `service-${row.service.id}`
+                : `job-${row.job.id}`
+          }
+          contentContainerStyle={[styles.content, { paddingBottom: listBottomInset }]}
+          keyboardShouldPersistTaps="handled"
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (
+              paging.current ||
+              resetHold.current[tab] ||
+              !hasMore ||
+              bucket.loadingMore ||
+              bucket.pending ||
+              bucket.initialLoading
+            ) {
+              return;
+            }
+            paging.current = true;
+            const gen = requestGen.current[tab];
+            void load(tab, 'more', gen).finally(() => {
+              paging.current = false;
+            });
+          }}
+          ListEmptyComponent={
+            bucket.initialLoading ? (
+              <View style={styles.empty}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <Ionicons name="compass-outline" size={48} color={colors.textSecondary} />
+                <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+                <Text style={styles.emptyText}>
+                  Try another search or city.
+                </Text>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            bucket.loadingMore ? (
+              <ActivityIndicator style={styles.footer} color={colors.primary} />
+            ) : bucket.error && bucket.items.length > 0 ? (
+              <TouchableOpacity onPress={retry} style={styles.footer}>
+                <Text style={styles.retry}>{bucket.error} · Retry</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
-
-        {(jobsError || catalogError) && results.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            <Text style={styles.emptyTitle}>Could not load explore</Text>
-            <Text style={styles.emptyText}>{jobsError || catalogError}</Text>
-            <TouchableOpacity
-              onPress={() => {
-                void (async () => {
-                  try {
-                    const [nextJobs, catalog] = await Promise.all([
-                      jobService.refresh(),
-                      catalogService.refresh(),
-                    ]);
-                    setJobs(nextJobs);
-                    setTalents(catalog.talents);
-                    setServices(catalog.services);
-                    setJobsError(null);
-                    setCatalogError(null);
-                  } catch (e) {
-                    const message =
-                      e instanceof Error ? e.message : 'Failed to load explore';
-                    setJobsError(message);
-                    setCatalogError(message);
-                  }
-                })();
-              }}
-            >
-              <Text style={{ ...typography.bodySmall, color: colors.primary, fontWeight: '600' }}>
-                Retry
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : results.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="compass-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No results found</Text>
-            <Text style={styles.emptyText}>
-              Try adjusting your filters or search for something else.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {tab === 'talents' &&
-              talentResults.map((talent) => (
+            ) : null
+          }
+          renderItem={({ item }) => {
+            if (item.kind === 'talent') {
+              return (
                 <TalentCard
-                  key={talent.id}
-                  talent={talent}
-                  connectStatus={relationToConnectStatus(getRelation(talent.user.id))}
-                  onPress={() => openUserProfile(navigation, talent.user.id, me.id)}
-                  onConnect={() => handleConnect(talent.user.id)}
+                  talent={item.talent}
+                  connectStatus={relationToConnectStatus(getRelation(item.talent.user.id))}
+                  onPress={() => openUserProfile(navigation, item.talent.user.id, me.id)}
+                  onConnect={() =>
+                    handleConnect(item.talent.user.id, item.talent.user.name)
+                  }
                 />
-              ))}
-
-            {tab === 'services' &&
-              serviceResults.map((service) => (
+              );
+            }
+            if (item.kind === 'service') {
+              return (
                 <ServiceCard
-                  key={service.id}
-                  service={service}
-                  onPress={() =>
-                    navigation.navigate('ServiceDetail', { serviceId: service.id })
-                  }
+                  service={item.service}
+                  onPress={() => {
+                    catalogService.rememberService(item.service);
+                    navigation.navigate('ServiceDetail', {
+                      serviceId: item.service.id,
+                      ...(item.service.provider.id !== me.id
+                        ? { userId: item.service.provider.id }
+                        : {}),
+                    });
+                  }}
                   onProviderPress={() =>
-                    openUserProfile(navigation, service.provider.id, me.id)
+                    openUserProfile(navigation, item.service.provider.id, me.id)
                   }
                 />
-              ))}
+              );
+            }
+            return (
+              <JobCard
+                job={item.job}
+                onPress={() =>
+                  navigation.navigate('JobListingDetail', { listingId: item.job.id })
+                }
+              />
+            );
+          }}
+        />
+      )}
 
-            {tab === 'jobs' &&
-              jobResults.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  onPress={() =>
-                    navigation.navigate('JobListingDetail', { listingId: job.id })
-                  }
-                />
-              ))}
-          </>
-        )}
-      </ScrollView>
+      <ConfirmActionModal
+        visible={disconnectTarget != null}
+        title="Disconnect connection?"
+        message={
+          disconnectTarget
+            ? `Are you sure you want to disconnect from ${disconnectTarget.name}?`
+            : ''
+        }
+        confirmLabel="Disconnect"
+        cancelLabel="Cancel"
+        danger
+        busy={mutationBusy}
+        onCancel={() => setDisconnectTarget(null)}
+        onConfirm={() => {
+          if (!disconnectTarget) return;
+          const userId = disconnectTarget.userId;
+          setDisconnectTarget(null);
+          disconnect(userId);
+        }}
+      />
 
       <ExploreFilterSheet
         visible={filterOpen}
-        filters={filters}
-        showJobType={tab === 'jobs'}
+        tab={tab}
+        value={filters}
         onClose={() => setFilterOpen(false)}
-        onApply={setFilters}
-        onReset={() => setFilters(defaultExploreFilters)}
+        onApply={(next) => {
+          setFilters(next);
+          setFilterOpen(false);
+        }}
       />
     </ScreenContainer>
   );
@@ -370,15 +599,20 @@ function TalentCard({
   const connectStyle =
     connectStatus === 'added'
       ? styles.connectAdded
-      : connectStatus === 'request-sent'
-        ? styles.connectPending
-        : styles.connectDefault;
+      : connectStatus === 'incoming'
+        ? styles.connectIncoming
+        : connectStatus === 'request-sent'
+          ? styles.connectPending
+          : styles.connectDefault;
   const connectIcon: keyof typeof Ionicons.glyphMap =
     connectStatus === 'added'
       ? 'checkmark'
-      : connectStatus === 'request-sent'
-        ? 'arrow-forward'
-        : 'person-add-outline';
+      : connectStatus === 'incoming'
+        ? 'arrow-down'
+        : connectStatus === 'request-sent'
+          ? 'time-outline'
+          : 'person-add-outline';
+  const studio = talent.user.accountType === 'business';
 
   return (
     <TouchableOpacity style={styles.talentCard} onPress={onPress} activeOpacity={0.9}>
@@ -390,33 +624,23 @@ function TalentCard({
             {talent.user.isVerified ? (
               <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
             ) : null}
+            {studio ? (
+              <View style={styles.studioBadge}>
+                <Text style={styles.studioText}>Studio</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.talentTitle}>{displayProfileTitle(talent.user.title)}</Text>
-          <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={14} color={colors.text} />
-            <Text style={styles.metaText}>{talent.user.location}</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <Ionicons name="cash-outline" size={14} color={colors.text} />
-            <Text style={styles.metaText}>
-              {talent.rateLabel ?? `${talent.hourlyRate} / hr`}
-            </Text>
-          </View>
-          {(talent.mutualConnections ?? 0) > 0 ? (
-            <View style={styles.mutualRow}>
-              <View style={styles.mutualAvatars}>
-                {(talent.mutualAvatars ?? []).slice(0, 3).map((avatar, index) => (
-                  <UserAvatar
-                    key={`${talent.id}-m-${index}`}
-                    uri={avatar}
-                    size={20}
-                    style={[styles.mutualAvatar, { marginLeft: index === 0 ? 0 : -6, zIndex: 3 - index }]} />
-                ))}
-              </View>
-              <Text style={styles.mutualText}>
-                {talent.mutualConnections} mutual connections
-              </Text>
+          {talent.user.location ? (
+            <View style={styles.metaRow}>
+              <Ionicons name="location-outline" size={14} color={colors.text} />
+              <Text style={styles.metaText}>{talent.user.location}</Text>
             </View>
+          ) : null}
+          {talent.skills.length > 0 ? (
+            <Text style={styles.skillLine} numberOfLines={1}>
+              {talent.skills.slice(0, 3).join(' · ')}
+            </Text>
           ) : null}
           {(talent.reviewCount ?? 0) > 0 ? (
             <View style={styles.ratingRow}>
@@ -426,18 +650,26 @@ function TalentCard({
             </View>
           ) : null}
         </View>
-        <View style={styles.talentActions}>
-          <TouchableOpacity
-            style={[styles.connectBtn, connectStyle]}
-            onPress={onConnect}
-            activeOpacity={0.85}
-          >
-            <Ionicons name={connectIcon} size={16} color={colors.white} />
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={8} onPress={() => {}} style={styles.menuBtn}>
-            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.connectBtn, connectStyle]}
+          onPress={onConnect}
+          accessibilityLabel={
+            connectStatus === 'incoming'
+              ? 'Accept connection request'
+              : connectStatus === 'request-sent'
+                ? 'Cancel connection request'
+                : connectStatus === 'added'
+                  ? 'Confirm disconnect'
+                  : 'Connect'
+          }
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name={connectIcon}
+            size={16}
+            color={connectStatus === 'request-sent' ? colors.text : colors.white}
+          />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -452,65 +684,40 @@ function ServiceCard({
   onPress: () => void;
   onProviderPress: () => void;
 }) {
+  const providerReviews = service.provider.reviewCount ?? 0;
   return (
     <TouchableOpacity style={styles.serviceCard} onPress={onPress} activeOpacity={0.9}>
-      <View style={styles.serviceImageWrap}>
-        <Image
-          source={{ uri: service.images[0] }}
-          style={styles.serviceImage}
-          contentFit="cover"
-        />
-        {service.images.length > 1 ? (
-          <View style={styles.dots}>
-            {service.images.slice(0, 3).map((_, i) => (
-              <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
-            ))}
-          </View>
-        ) : null}
-      </View>
+      <ServiceMediaMosaic images={service.images} />
       <View style={styles.serviceBody}>
-        <View style={styles.serviceTitleRow}>
-          <Text style={styles.serviceTitle} numberOfLines={1}>
-            {service.title}
-          </Text>
-          {(service.reviewCount ?? 0) > 0 ? (
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color={colors.warning} />
-              <Text style={styles.ratingValue}>{service.rating.toFixed(1)}</Text>
-              <Text style={styles.ratingCount}>({service.reviewCount})</Text>
-            </View>
-          ) : null}
-        </View>
+        <Text style={styles.serviceTitle} numberOfLines={1}>
+          {service.title}
+        </Text>
+        {service.category ? <Text style={styles.categoryText}>{service.category}</Text> : null}
         <Text style={styles.serviceDesc} numberOfLines={2}>
           {service.description}
         </Text>
-        <TouchableOpacity
-          style={styles.providerRow}
-          onPress={onProviderPress}
-          activeOpacity={0.85}
-        >
-          <UserAvatar
-            uri={service.provider.avatar}
-            size={20}
-            style={styles.providerAvatar}
-          />
+        <TouchableOpacity style={styles.providerRow} onPress={onProviderPress} activeOpacity={0.85}>
+          <UserAvatar uri={service.provider.avatar} size={20} style={styles.providerAvatar} />
           <Text style={styles.providerName}>{service.provider.name}</Text>
           {service.provider.isVerified ? (
             <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
           ) : null}
         </TouchableOpacity>
-        <View style={styles.metaRow}>
-          <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.serviceMeta}>{service.duration}</Text>
-        </View>
-        <View style={styles.metaRow}>
-          <MoneyAmount
-            amount={service.price}
-            currency={service.currency}
-            size={14}
-            color={colors.textTertiary}
-          />
-        </View>
+        {service.provider.location ? (
+          <Text style={styles.serviceMeta}>{service.provider.location}</Text>
+        ) : null}
+        {providerReviews > 0 ? (
+          <Text style={styles.providerRating}>
+            Provider · {(service.provider.rating ?? 0).toFixed(1)} ({providerReviews})
+          </Text>
+        ) : null}
+        {service.duration ? <Text style={styles.serviceMeta}>{service.duration}</Text> : null}
+        <MoneyAmount
+          amount={service.price}
+          currency={service.currency}
+          size={14}
+          color={colors.textTertiary}
+        />
       </View>
     </TouchableOpacity>
   );
@@ -518,7 +725,6 @@ function ServiceCard({
 
 function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
   const badge = jobTypeBadge(job.type);
-
   return (
     <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.jobLogoWrap}>
@@ -530,20 +736,21 @@ function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
       </View>
       <View style={styles.jobBody}>
         <Text style={styles.jobTitle}>{job.title}</Text>
-        <Text style={styles.jobCompany}>{job.company}</Text>
-        <View style={styles.metaRow}>
-          <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.jobMeta}>{job.location}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.jobCompany}>{job.company}</Text>
+          {job.companyVerified ? (
+            <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+          ) : null}
         </View>
-        <View style={styles.metaRow}>
-          <MoneyAmount
-            amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
-            currency={job.currency}
-            size={14}
-            color={colors.textTertiary}
-            rawLabel
-          />
-        </View>
+        <Text style={styles.jobMeta}>{job.location}</Text>
+        <MoneyAmount
+          amount={stripCurrencyCodeTokens(job.salary) || 'Negotiable'}
+          currency={job.currency}
+          size={14}
+          color={colors.textTertiary}
+          rawLabel
+        />
+        {job.postedAt ? <Text style={styles.jobMeta}>Posted {postedLabel(job.postedAt)}</Text> : null}
       </View>
       <View style={[styles.jobBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
         <Text style={[styles.jobBadgeText, { color: badge.text }]}>{badge.label}</Text>
@@ -575,12 +782,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     minHeight: 48,
   },
-  pageTitle: {
-    fontSize: 20,
-    lineHeight: 28,
-    fontWeight: '600',
-    color: colors.text,
-  },
+  pageTitle: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: colors.text },
   iconButton: {
     width: 36,
     height: 36,
@@ -595,310 +797,141 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     borderRadius: radius.button,
     paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-    height: 40,
+    minHeight: 40,
   },
-  searchField: {
-    flex: 1,
-    ...typography.bodySmall,
-    color: colors.text,
-    paddingVertical: 0,
-  },
-  cancelText: {
-    ...typography.caption,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  mainTabs: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+  searchField: { flex: 1, ...typography.body, color: colors.text, paddingVertical: spacing.sm },
+  cancelText: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
+  mainTabs: { flexDirection: 'row', paddingHorizontal: spacing.screen },
   mainTab: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  mainTabLabel: {
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
-  mainTabActive: {
-    borderBottomColor: colors.primary,
-  },
-  mainTabText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  mainTabTextActive: {
-    color: colors.primary,
-    fontWeight: '500',
-  },
+  mainTabLabelActive: { borderBottomColor: colors.primary },
+  mainTabText: { ...typography.body, color: colors.textSecondary },
+  mainTabTextActive: { color: colors.text, fontWeight: '600' },
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: spacing.screen,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
     gap: spacing.sm,
+    paddingHorizontal: spacing.screen,
+    paddingVertical: spacing.sm,
   },
   filterIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.button,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.white,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  chipScroll: {
-    gap: spacing.sm,
-    paddingRight: spacing.screen,
-  },
-  chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
     borderRadius: radius.button,
-    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    backgroundColor: colors.white,
   },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    ...typography.caption,
-    color: colors.text,
-  },
-  chipTextActive: {
-    color: colors.white,
-    fontWeight: '500',
-  },
-  content: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: spacing.md,
-    paddingBottom: 120,
-    gap: spacing.xl,
-  },
-  recentSection: { marginBottom: spacing.sm },
-  recentTitle: { ...typography.label, color: colors.text, marginBottom: spacing.sm },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  recentText: { ...typography.body, color: colors.text, flex: 1 },
-  empty: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
-  },
-  emptyTitle: {
-    ...typography.h3,
-    color: colors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
+  filterSummary: { flex: 1, ...typography.bodySmall, color: colors.textSecondary },
+  content: { paddingHorizontal: spacing.screen, flexGrow: 1 },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl, gap: spacing.sm },
+  emptyTitle: { ...typography.h3, color: colors.text },
+  emptyText: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center' },
+  retry: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
+  footer: { paddingVertical: spacing.md },
   talentCard: {
     backgroundColor: colors.white,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.lg,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 1,
-      },
-      android: { elevation: 1 },
-    }),
+    borderColor: colors.borderLight,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
-  talentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+  talentRow: { flexDirection: 'row', gap: spacing.sm },
+  talentAvatar: {},
+  talentBody: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
+  talentName: { ...typography.body, color: colors.text, fontWeight: '600' },
+  studioBadge: {
+    backgroundColor: '#FDF2F8',
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  talentAvatar: {
+  studioText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
+  talentTitle: { ...typography.bodySmall, color: colors.textSecondary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { ...typography.caption, color: colors.text },
+  skillLine: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  ratingValue: { ...typography.caption, color: colors.text },
+  ratingCount: { ...typography.caption, color: '#829AB1' },
+  connectBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    borderWidth: 0.9,
-    borderColor: colors.white,
-    backgroundColor: '#FDF2F8',
-  },
-  talentBody: { flex: 1, gap: spacing.sm },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  talentName: { ...typography.bodyMedium, color: colors.text, fontWeight: '500' },
-  talentTitle: { ...typography.caption, color: colors.text },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { ...typography.caption, color: colors.text },
-  mutualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  mutualAvatars: { flexDirection: 'row', alignItems: 'center' },
-  mutualAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 0.5,
-    borderColor: colors.white,
-  },
-  mutualText: { fontSize: 11, lineHeight: 14, color: colors.textSecondary },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingValue: { ...typography.caption, color: colors.text },
-  ratingCount: { ...typography.caption, color: '#829AB1' },
-  talentActions: { alignItems: 'center', gap: 2 },
-  connectBtn: {
-    width: 31,
-    height: 28,
-    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.white,
   },
-  connectDefault: {
-    backgroundColor: colors.primary,
-  },
-  connectAdded: {
-    backgroundColor: '#00A63E',
-  },
-  connectPending: {
-    backgroundColor: '#BCCCDC',
-  },
-  menuBtn: {
-    padding: spacing.sm,
-  },
+  connectDefault: { backgroundColor: colors.primary },
+  connectPending: { backgroundColor: colors.borderLight },
+  connectIncoming: { backgroundColor: colors.warning },
+  connectAdded: { backgroundColor: colors.success },
   serviceCard: {
     backgroundColor: colors.white,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.borderLight,
+    marginBottom: spacing.sm,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 1,
-      },
-      android: { elevation: 1 },
-    }),
   },
-  serviceImageWrap: {
-    height: 205,
-    backgroundColor: colors.borderLight,
-  },
-  serviceImage: { width: '100%', height: '100%' },
-  dots: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  dotActive: { backgroundColor: colors.white },
-  serviceBody: {
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  serviceTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  serviceTitle: {
-    flex: 1,
-    ...typography.bodyMedium,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  serviceDesc: {
-    ...typography.caption,
-    color: colors.textTertiary,
-  },
-  providerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  providerAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-  },
-  providerName: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: colors.text,
-  },
-  serviceMeta: {
-    ...typography.caption,
-    color: colors.textTertiary,
-  },
+  serviceBody: { padding: spacing.md, gap: 4 },
+  serviceTitle: { ...typography.body, color: colors.text, fontWeight: '600' },
+  categoryText: { ...typography.caption, color: colors.primary },
+  serviceDesc: { ...typography.bodySmall, color: colors.textSecondary },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  providerAvatar: {},
+  providerName: { ...typography.bodySmall, color: colors.text },
+  serviceMeta: { ...typography.caption, color: colors.textTertiary },
+  providerRating: { ...typography.caption, color: colors.text, fontWeight: '600' },
   jobCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 1,
-      },
-      android: { elevation: 1 },
-    }),
+    gap: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
   jobLogoWrap: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: spacing.sm,
+    width: 44,
+    height: 44,
+    borderRadius: radius.button,
+    backgroundColor: colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  jobLogo: { width: 32, height: 32, borderRadius: 8 },
-  jobLogoText: { ...typography.label, color: colors.primary },
-  jobBody: { flex: 1, gap: spacing.sm },
-  jobTitle: { ...typography.bodyMedium, fontWeight: '500', color: colors.text },
-  jobCompany: { ...typography.caption, color: colors.text },
+  jobLogo: { width: 44, height: 44 },
+  jobLogoText: { ...typography.body, fontWeight: '700', color: colors.text },
+  jobBody: { flex: 1, gap: 2 },
+  jobTitle: { ...typography.body, color: colors.text, fontWeight: '600' },
+  jobCompany: { ...typography.bodySmall, color: colors.textSecondary },
   jobMeta: { ...typography.caption, color: colors.textTertiary },
   jobBadge: {
+    alignSelf: 'flex-start',
     borderWidth: 1,
-    borderRadius: radius.button,
-    paddingHorizontal: spacing.sm,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  jobBadgeText: { fontSize: 11, lineHeight: 14 },
+  jobBadgeText: { ...typography.caption, fontWeight: '600' },
 });

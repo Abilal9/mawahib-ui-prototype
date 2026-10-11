@@ -73,6 +73,25 @@ for (const [name, needle] of Object.entries(mutationMethods)) {
   assert.ok(body.includes('epoch.current += 1'), `${name} must bump the refresh epoch`);
 }
 
+for (const name of ['requestConnect', 'acceptRequest', 'disconnect', 'cancelOutgoing']) {
+  const body = methodBody(context, mutationMethods[name]);
+  assert.ok(body.includes('if (acting.current) return'), `${name} must ignore a tap while a mutation is in flight`);
+  assert.ok(body.includes('acting.current = userId'), `${name} must claim the mutation guard`);
+  assert.ok(body.includes('acting.current = null'), `${name} must release the mutation guard`);
+}
+
+function guardedTap(guard) {
+  if (guard.acting) return false;
+  guard.acting = 'user';
+  guard.calls += 1;
+  return true;
+}
+
+const rapid = { acting: null, calls: 0 };
+assert.equal(guardedTap(rapid), true);
+assert.equal(guardedTap(rapid), false);
+assert.equal(rapid.calls, 1);
+
 for (const [name, write] of [
   ['cancelOutgoing', 'setOutgoingIds'],
   ['denyRequest', 'setIncomingUsers'],

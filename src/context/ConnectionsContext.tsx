@@ -271,6 +271,8 @@ export function ConnectionsProvider({
           });
           return;
         }
+        acting.current = userId;
+        setMutationBusy(true);
         epoch.current += 1;
         const mutationEpoch = epoch.current;
         setOutgoingIds((prev) => prev.filter((id) => id !== userId));
@@ -300,6 +302,9 @@ export function ConnectionsProvider({
               epoch.current += 1;
               await refresh();
             }
+          } finally {
+            acting.current = null;
+            setMutationBusy(false);
           }
         })();
       },
