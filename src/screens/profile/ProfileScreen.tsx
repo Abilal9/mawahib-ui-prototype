@@ -21,6 +21,7 @@ import ProfileHeaderChrome, {
 } from '../../components/profile/ProfileHeaderChrome';
 import ProfileEmptyState from '../../components/profile/ProfileEmptyState';
 import ProfileFeedPost from '../../components/profile/ProfileFeedPost';
+import ServiceMediaMosaic from '../../components/explore/ServiceMediaMosaic';
 import AboutTab from '../../components/profile/AboutTab';
 import AboutCompletionPrompt from '../../components/profile/AboutCompletionPrompt';
 import { shareProfile } from '../../utils/shareProfile';
@@ -329,23 +330,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                       })
                     }
                   >
-                    <View style={styles.serviceImageWrap}>
-                      <Image
-                        source={{ uri: service.images[0] }}
-                        style={styles.serviceImage}
-                        contentFit="cover"
-                      />
-                      {service.images.length > 1 ? (
-                        <View style={styles.dots}>
-                          {service.images.slice(0, 3).map((_, i) => (
-                            <View
-                              key={i}
-                              style={[styles.dot, i === 0 && styles.dotActive]}
-                            />
-                          ))}
-                        </View>
-                      ) : null}
-                    </View>
+                    <ServiceMediaMosaic images={service.images} height={180} />
                     <View style={styles.serviceBody}>
                       <View style={styles.serviceTitleRow}>
                         <Text style={styles.serviceTitle}>{service.title}</Text>
@@ -558,28 +543,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#F3F4F6',
-  },
-  serviceImageWrap: { height: 180, backgroundColor: colors.borderLight },
-  serviceImage: { width: '100%', height: '100%' },
-  dots: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  dotActive: {
-    width: 16,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
   },
   serviceBody: { padding: spacing.md, gap: spacing.sm },
   serviceTitleRow: {

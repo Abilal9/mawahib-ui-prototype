@@ -102,4 +102,14 @@ const confirmed = confirmDisconnect('disconnect', []);
 assert.deepEqual(confirmed.calls, ['disconnect']);
 assert.equal(confirmed.relation, 'none');
 
+const ownProfile = read('src/screens/profile/ProfileScreen.tsx');
+const visitorProfile = read('src/screens/profile/UserProfileScreen.tsx');
+for (const profile of [ownProfile, visitorProfile]) {
+  assert.equal(profile.includes('ServiceMediaMosaic'), true);
+  assert.equal(profile.includes('height={180}'), true);
+  assert.equal(profile.includes('service.images[0]'), false);
+  assert.equal(profile.includes('styles.dots'), false);
+  assert.equal(profile.includes('dotActive'), false);
+}
+
 console.log('explore-selftest ok');
