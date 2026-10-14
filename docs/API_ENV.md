@@ -20,7 +20,8 @@ localhost value in `.env.development` used to override `start:railway`.
 
 | Script | API base URL |
 |--------|----------------|
-| `npm run start:local` (or `npm start`) | `http://localhost:3000/api/v1` |
+| `npm run start:local` (or `npm start`) | `http://localhost:3000/api/v1` (simulator) |
+| `npm run start:phone` | `https://mawahib-backend-production.up.railway.app/api/v1` (Expo Go, Metro on LAN) |
 | `npm run start:railway` | `https://mawahib-backend-production.up.railway.app/api/v1` |
 
 ## Env files
@@ -41,6 +42,20 @@ just to switch backends. Use the npm scripts.
 ```bash
 # Nest on :3000
 npm run start:local
+```
+
+## A2. Physical iPhone through Expo Go
+
+The phone uses the Railway API. Metro still runs on the Mac. Same Wi-Fi lets Expo Go reach Metro over LAN. The API calls do not use the Mac.
+
+```bash
+npm run start:phone
+```
+
+If the phone cannot reach Metro on the LAN, start Metro through a tunnel instead. The API stays on Railway:
+
+```bash
+npm run start:railway -- --tunnel
 ```
 
 ## B. Run against Railway
