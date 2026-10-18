@@ -74,13 +74,23 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
       !rangeInvalidOrder);
 
   const publish = () => {
+    const trimmedTitle = title.trim();
+    const trimmedLocation = location.trim();
+    if (!trimmedTitle) {
+      Alert.alert('Add a job title', 'Enter a job title before publishing.');
+      return;
+    }
+    if (!trimmedLocation) {
+      Alert.alert('Add a location', 'Enter a job location before publishing.');
+      return;
+    }
     void (async () => {
       setSubmitting(true);
       try {
         await createPostedJob({
-          title,
+          title: trimmedTitle,
           description,
-          location,
+          location: trimmedLocation,
           pricingType,
           fixedAmount:
             pricingType === 'fixed' ? (fixedAmount ?? undefined) : undefined,
@@ -105,7 +115,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
 
   const goNext = () => {
     if (submitting) return;
-    if (step === 2 && !pricingValid) return;
+    if (step === 2 && (!location.trim() || !pricingValid)) return;
     if (step < TOTAL_STEPS) {
       navigation.navigate('PostJob', { step: step + 1 });
       return;
@@ -268,7 +278,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           disabled={
             submitting ||
             (step === 1 && !title.trim()) ||
-            (step === 2 && !pricingValid)
+            (step === 2 && (!location.trim() || !pricingValid))
           }
         />
       </View>

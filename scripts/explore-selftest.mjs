@@ -26,7 +26,7 @@ assert.equal(screen.includes('PAGE_SIZE = 20'), true);
 assert.equal(screen.includes('status=open') || jobs.includes("qs.set('status', 'open')"), true);
 assert.equal(screen.includes('listOpenListings'), true);
 assert.equal(screen.includes('rememberService'), true);
-assert.equal(screen.includes('userId: item.service.provider.id'), true);
+assert.equal(screen.includes('serviceDetailRoute'), true);
 assert.equal(screen.includes('maxLength={120}'), true);
 assert.equal(screen.includes('resetHold'), true);
 assert.equal(screen.includes('employmentType'), true);

@@ -5,24 +5,15 @@ import { colors, spacing, typography } from '../../theme';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-/** Figma sidebar: June with day 21 selected + colored event dots */
-const EVENT_DOTS: Record<number, string[]> = {
-  20: ['#F0B429'],
-  21: ['#2CB67D'],
-  22: ['#3B82F6'],
-  23: ['#F0B429', '#2CB67D'],
-  24: ['#3B82F6'],
-  25: ['#2CB67D'],
-  30: ['#F0B429', '#3B82F6'],
-};
-
 interface SidebarCalendarPreviewProps {
   onPress: () => void;
 }
 
 export default function SidebarCalendarPreview({ onPress }: SidebarCalendarPreviewProps) {
-  const [month, setMonth] = useState(() => new Date(2025, 5, 1)); // June 2025
-  const selectedDay = 21;
+  const [month, setMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
 
   const { firstDay, monthLabel, days } = useMemo(() => {
     const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -68,32 +59,14 @@ export default function SidebarCalendarPreview({ onPress }: SidebarCalendarPrevi
           {Array.from({ length: firstDay }).map((_, index) => (
             <View key={`empty-${index}`} style={styles.dayCell} />
           ))}
-          {days.map((day) => {
-            const isSelected =
-              day === selectedDay && month.getMonth() === 5 && month.getFullYear() === 2025;
-            const dots = EVENT_DOTS[day] ?? [];
-            return (
-              <View key={day} style={styles.dayCell}>
-                <View style={[styles.dayInner, isSelected && styles.daySelected]}>
-                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
-                    {day}
-                  </Text>
-                </View>
-                {dots.length > 0 ? (
-                  <View style={styles.dotsRow}>
-                    {dots.map((color, i) => (
-                      <View
-                        key={`${day}-dot-${i}`}
-                        style={[styles.dot, { backgroundColor: color }]}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.dotsSpacer} />
-                )}
+          {days.map((day) => (
+            <View key={day} style={styles.dayCell}>
+              <View style={styles.dayInner}>
+                <Text style={styles.dayText}>{day}</Text>
               </View>
-            );
-          })}
+              <View style={styles.dotsSpacer} />
+            </View>
+          ))}
         </View>
       </TouchableOpacity>
     </View>

@@ -437,8 +437,12 @@ export default function JobListingDetailScreen({
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>About this job</Text>
-        <Text style={styles.description}>{job.description}</Text>
+        {job.description?.trim() ? (
+          <>
+            <Text style={styles.sectionTitle}>About this job</Text>
+            <Text style={styles.description}>{job.description}</Text>
+          </>
+        ) : null}
 
         <Text style={styles.sectionTitle}>Required skills</Text>
         <View style={styles.skills}>

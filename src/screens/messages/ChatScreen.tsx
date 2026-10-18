@@ -801,9 +801,9 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                   const canOpenJob = declined && !!work?.workRequestId;
                   const systemBody = (
                     <>
-                      <Text style={styles.systemText}>
-                        {message.body || 'System update'}
-                      </Text>
+                      {message.body ? (
+                        <Text style={styles.systemText}>{message.body}</Text>
+                      ) : null}
                       {canOpenJob ? (
                         <Text style={styles.systemLink}>View details</Text>
                       ) : null}

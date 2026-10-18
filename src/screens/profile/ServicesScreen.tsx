@@ -57,32 +57,36 @@ export default function ServicesScreen({ route, navigation }: Props) {
           >
             <Image source={{ uri: item.images[0] }} style={styles.image} contentFit="cover" />
             <View style={styles.info}>
-              <Text style={styles.category}>{item.category}</Text>
+              {item.category ? (
+                <Text style={styles.category}>{item.category}</Text>
+              ) : null}
               <Text style={styles.title}>{item.title}</Text>
               <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
               <View style={styles.footer}>
-                <View style={styles.priceRow}>
-                  <CurrencyIcon
-                    size={14}
-                    color={colors.primary}
-                    currency={
-                      item.currency === 'AED' || item.currency === 'SAR'
-                        ? item.currency
-                        : null
-                    }
-                    location={
-                      item.currency === 'AED' || item.currency === 'SAR'
-                        ? null
-                        : item.provider.location
-                    }
-                  />
-                  <Text style={styles.price}>
-                    {item.price.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </Text>
-                </View>
+                {item.price != null ? (
+                  <View style={styles.priceRow}>
+                    <CurrencyIcon
+                      size={14}
+                      color={colors.primary}
+                      currency={
+                        item.currency === 'AED' || item.currency === 'SAR'
+                          ? item.currency
+                          : null
+                      }
+                      location={
+                        item.currency === 'AED' || item.currency === 'SAR'
+                          ? null
+                          : item.provider.location
+                      }
+                    />
+                    <Text style={styles.price}>
+                      {item.price.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
                 {(item.reviewCount ?? 0) > 0 ? (
                   <View style={styles.rating}>
                     <Ionicons name="star" size={14} color={colors.warning} />

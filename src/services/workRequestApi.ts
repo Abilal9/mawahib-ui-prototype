@@ -93,7 +93,7 @@ export interface WorkRequestTerms {
   title: string;
   scope: string;
   money: WorkRequestMoney | null;
-  deadline: WorkRequestDeadline;
+  deadline: WorkRequestDeadline | null;
   notes: string;
   location?: string | null;
   /** Exact saved Google Maps URL, when the client entered one. */
@@ -307,19 +307,21 @@ function formatIsoDateLabel(value: string, withYear: boolean): string {
   return withYear ? `${label}, ${year}` : label;
 }
 
-/** `May 9, 2027` | `May 6 – May 9` | `3 days` | `Flexible` */
+/** `May 9, 2027` | `May 6 – May 9` | `3 days` | `Flexible` when that mode was chosen. */
 export function formatDeadline(
   deadline: WorkRequestDeadline | null | undefined,
 ): string {
-  if (!deadline) return 'Flexible';
+  if (!deadline) return '';
   switch (deadline.type) {
+    case 'flexible':
+      return 'Flexible';
     case 'exact_date':
       return isIsoDate(deadline.startDate)
         ? formatIsoDateLabel(deadline.startDate, true)
-        : 'Flexible';
+        : '';
     case 'date_range': {
       const { startDate: start, endDate: end } = deadline;
-      if (!isIsoDate(start) || !isIsoDate(end)) return 'Flexible';
+      if (!isIsoDate(start) || !isIsoDate(end)) return '';
       const sameYear = start.slice(0, 4) === end.slice(0, 4);
       return `${formatIsoDateLabel(start, !sameYear)} – ${formatIsoDateLabel(
         end,
@@ -329,11 +331,11 @@ export function formatDeadline(
     case 'duration': {
       const value = Number(deadline.durationValue);
       const unit = deadline.durationUnit;
-      if (!Number.isFinite(value) || value < 1 || !unit) return 'Flexible';
+      if (!Number.isFinite(value) || value < 1 || !unit) return '';
       return `${value} ${value === 1 ? unit.replace(/s$/, '') : unit}`;
     }
     default:
-      return 'Flexible';
+      return '';
   }
 }
 

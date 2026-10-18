@@ -336,7 +336,9 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
         <ServiceHero images={service.images} onBack={() => navigation.goBack()} />
 
         <View style={styles.content}>
-          <Text style={styles.category}>{service.category}</Text>
+          {service.category ? (
+            <Text style={styles.category}>{service.category}</Text>
+          ) : null}
           <Text style={styles.title}>{service.title}</Text>
 
           <TouchableOpacity
@@ -369,20 +371,26 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
 
-          <View style={styles.metaCards}>
-            <View style={styles.metaCard}>
-              <View style={styles.metaPriceRow}>
-                <CurrencyIcon size={18} color={colors.primary} currency={objectCurrency} location={objectCurrency ? null : providerLocation} />
-                <Text style={styles.metaValueInline}>{service.price.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metaLabel}>Price</Text>
+          {service.price != null || service.duration.trim() ? (
+            <View style={styles.metaCards}>
+              {service.price != null ? (
+                <View style={styles.metaCard}>
+                  <View style={styles.metaPriceRow}>
+                    <CurrencyIcon size={18} color={colors.primary} currency={objectCurrency} location={objectCurrency ? null : providerLocation} />
+                    <Text style={styles.metaValueInline}>{service.price.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metaLabel}>Price</Text>
+                </View>
+              ) : null}
+              {service.duration.trim() ? (
+                <View style={styles.metaCard}>
+                  <Ionicons name="time-outline" size={20} color={colors.primary} />
+                  <Text style={styles.metaValue}>{service.duration}</Text>
+                  <Text style={styles.metaLabel}>Duration</Text>
+                </View>
+              ) : null}
             </View>
-            <View style={styles.metaCard}>
-              <Ionicons name="time-outline" size={20} color={colors.primary} />
-              <Text style={styles.metaValue}>{service.duration}</Text>
-              <Text style={styles.metaLabel}>Duration</Text>
-            </View>
-          </View>
+          ) : null}
 
           <Text style={styles.sectionTitle}>About this service</Text>
           <Text style={styles.description}>{service.description}</Text>

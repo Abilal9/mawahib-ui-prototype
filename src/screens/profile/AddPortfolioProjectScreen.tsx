@@ -20,6 +20,7 @@ import ReorderableMediaGrid from '../../components/ui/ReorderableMediaGrid';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
 import { ScreenProps } from '../../navigation/types';
+import { requiredTitle } from '../../domain/truthfulFacts';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
 
 const MAX_MEDIA = 10;
@@ -81,7 +82,16 @@ export default function AddPortfolioProjectScreen({
       Alert.alert('Add media', 'Upload at least one image for this project.');
       return;
     }
-    const trimmedTitle = title.trim() || 'Untitled project';
+    let trimmedTitle: string;
+    try {
+      trimmedTitle = requiredTitle(title, 'project title');
+    } catch (err) {
+      Alert.alert(
+        'Add a title',
+        err instanceof Error ? err.message : 'Enter a project title.',
+      );
+      return;
+    }
     const trimmedDesc = description.trim();
     const mediaAssetIds = media.map((m) => m.mediaAssetId);
 
@@ -184,7 +194,7 @@ export default function AddPortfolioProjectScreen({
             onPress={() => {
               void save();
             }}
-            disabled={saving || uploading}
+            disabled={saving || uploading || title.trim().length === 0}
           />
         </View>
       </KeyboardAvoidingView>

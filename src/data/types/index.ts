@@ -170,10 +170,10 @@ export interface Service {
   id: string;
   title: string;
   description: string;
-  price: number;
+  price: number | null;
   currency: string;
   duration: string;
-  category: string;
+  category: string | null;
   provider: User;
   rating: number;
   reviewCount: number;

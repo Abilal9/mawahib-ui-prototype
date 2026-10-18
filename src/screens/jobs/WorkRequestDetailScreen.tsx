@@ -286,6 +286,7 @@ function TermsBlock({
     : false;
   const priceLabel =
     terms.packageName || terms.packageTier ? 'Package Price' : 'Base Price';
+  const deadlineLabel = formatDeadline(terms.deadline);
 
   return (
     <View
@@ -302,12 +303,14 @@ function TermsBlock({
         struck={variant === 'original' && priceDiff}
         emphasized={variant === 'proposed' && priceDiff}
       />
-      <Row
-        label="Deadline"
-        value={formatDeadline(terms.deadline)}
-        struck={variant === 'original' && deadlineDiff}
-        emphasized={variant === 'proposed' && deadlineDiff}
-      />
+      {deadlineLabel ? (
+        <Row
+          label="Deadline"
+          value={deadlineLabel}
+          struck={variant === 'original' && deadlineDiff}
+          emphasized={variant === 'proposed' && deadlineDiff}
+        />
+      ) : null}
       {terms.packageName || terms.packageTier ? (
         <Row
           label="Package"
@@ -497,6 +500,8 @@ export default function WorkRequestDetailScreen({
 
   const [changesOpen, setChangesOpen] = useState(false);
   const [deadlineMode, setDeadlineMode] = useState<DeadlineType>('exact_date');
+  /** A request with no deadline stays that way until the editor chooses one. */
+  const [deadlineTouched, setDeadlineTouched] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() =>
     startOfLocalMonth(new Date()),
   );
@@ -939,6 +944,7 @@ export default function WorkRequestDetailScreen({
     setAmountText(money ? normalizeMoneyInputEditing(String(money.amount)) : '');
     setCurrency(money?.currency || DEFAULT_CURRENCY);
 
+    setDeadlineTouched(false);
     const deadline = terms.deadline;
     const start =
       deadline?.type === 'exact_date' || deadline?.type === 'date_range'
@@ -1184,6 +1190,7 @@ export default function WorkRequestDetailScreen({
   /** Switching mode drops the previous mode. Coming back starts clean. */
   const chooseDeadlineMode = (mode: DeadlineType) => {
     if (mode === deadlineMode) return;
+    setDeadlineTouched(true);
     setDeadlineMode(mode);
     setExactDate(null);
     setRangeFrom(null);
@@ -1199,6 +1206,7 @@ export default function WorkRequestDetailScreen({
    * A day before the start is not selectable.
    */
   const onPickDay = (picked: Date) => {
+    setDeadlineTouched(true);
     if (deadlineMode === 'exact_date') {
       setExactDate(picked);
       return;
@@ -1237,12 +1245,16 @@ export default function WorkRequestDetailScreen({
 
   const proposedAmount = parseMoneyInput(amountText);
   const amountReady = amountText.trim().length === 0 || proposedAmount !== null;
-  const deadlineReady = proposedDeadline() !== null;
+  const proposingDeadline = terms.deadline != null || deadlineTouched;
+  const proposedSchedule = proposedDeadline();
+  const deadlineReady = !proposingDeadline || proposedSchedule !== null;
 
   const queueSubmitChanges = () => {
-    const deadline = proposedDeadline();
-    if (!deadline || !amountReady) return;
-    const proposedTerms: ProposedTermsInput = { deadline };
+    if (!deadlineReady || !amountReady) return;
+    const proposedTerms: ProposedTermsInput = {};
+    if (proposingDeadline && proposedSchedule) {
+      proposedTerms.deadline = proposedSchedule;
+    }
     if (proposedAmount !== null) {
       proposedTerms.money = { amount: proposedAmount, currency };
     }

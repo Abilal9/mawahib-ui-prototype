@@ -1,4 +1,5 @@
 import { Service, Talent, User } from '../data/types';
+import { displayCategory, displayPrice } from '../domain/truthfulFacts';
 import { apiRequest } from '../lib/apiClient';
 
 export interface ExploreProfile {
@@ -26,7 +27,7 @@ export interface ExploreServiceRow {
   title: string;
   description: string;
   category: string | null;
-  price: number;
+  price: number | null;
   currency: string;
   duration: string;
   rating: number;
@@ -65,8 +66,8 @@ export function mapExploreTalent(p: ExploreProfile): Talent {
     category: p.title || p.skills[0] || 'Talent',
     rating: p.ratingAvg,
     reviewCount: p.ratingCount,
+    // Not shown. Mawahib has no hourly rate or mutual-connection data yet.
     hourlyRate: 0,
-    rateLabel: p.accountType === 'business' ? 'Studio' : 'Available',
     skills: p.skills,
     mutualConnections: 0,
     mutualAvatars: [],
@@ -80,10 +81,10 @@ export function mapExploreService(row: ExploreServiceRow): Service {
     id: row.id,
     title: row.title,
     description: row.description,
-    price: row.price,
+    price: displayPrice(row.price),
     currency: row.currency,
     duration: row.duration,
-    category: row.category || 'General',
+    category: displayCategory(row.category),
     provider: profileToUser(row.provider),
     rating: row.rating,
     reviewCount: row.reviewCount,

@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { JobListing, User } from '../data/types';
+import { postedJobCreate } from '../domain/truthfulFacts';
 import {
   UserJob,
   UserJobDetails,
@@ -449,19 +450,23 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
       createPostedJob: async (payload) => {
         const me = mappedUser;
         if (!me) throw new Error('Not authenticated');
+        const listingFields = postedJobCreate({
+          title: payload.title,
+          location: payload.location,
+          description: payload.description,
+        });
         const listing = await jobService.createListing({
-          title: payload.title.trim() || 'Untitled job',
+          title: listingFields.title,
           company: me.name,
           type: payload.jobType ?? 'freelance',
-          location: payload.location?.trim() || me.location || 'Remote',
+          location: listingFields.location,
           pricingType: payload.pricingType,
           fixedAmount: payload.fixedAmount,
           minAmount: payload.minAmount,
           maxAmount: payload.maxAmount,
           salary: payload.salaryLabel?.trim() || undefined,
-          description: payload.description?.trim() || 'Job posted from Mawahib.',
+          description: listingFields.description,
           skills: payload.skills ?? [],
-          exploreTag: 'Design',
           publish: true,
         });
         await refresh();

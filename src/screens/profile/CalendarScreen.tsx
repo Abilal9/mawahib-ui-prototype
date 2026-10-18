@@ -4,10 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { colors, spacing, radius, typography } from '../../theme';
-import {
-  CALENDAR_MONTH,
-  getEventsForDay,
-} from '../../data/mock/calendar';
 import { ScreenProps } from '../../navigation/types';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -21,12 +17,15 @@ function clampDay(year: number, month: number, day: number) {
 }
 
 export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) {
-  const [currentMonth, setCurrentMonth] = useState(CALENDAR_MONTH);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const totalDays = daysInMonth(year, month);
   const firstDay = new Date(year, month, 1).getDay();
-  const [selectedDay, setSelectedDay] = useState(14);
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
 
   const monthLabel = currentMonth.toLocaleString('default', {
     month: 'long',
@@ -34,7 +33,6 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
   });
   const monthName = currentMonth.toLocaleString('default', { month: 'long' });
   const days = Array.from({ length: totalDays }, (_, i) => i + 1);
-  const dayEvents = getEventsForDay(year, month, selectedDay);
 
   const shiftMonth = (delta: number) => {
     const next = new Date(year, month + delta, 1);
@@ -85,7 +83,6 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
             <View key={`empty-${index}`} style={styles.dayCell} />
           ))}
           {days.map((day) => {
-            const dayDots = getEventsForDay(year, month, day);
             const isSelected = day === selectedDay;
             return (
               <TouchableOpacity
@@ -99,21 +96,7 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
                     {day}
                   </Text>
                 </View>
-                {dayDots.length > 0 ? (
-                  <View style={styles.eventDotsRow}>
-                    {dayDots.slice(0, 3).map((event) => (
-                      <View
-                        key={event.id}
-                        style={[
-                          styles.eventDot,
-                          { backgroundColor: isSelected ? colors.white : event.color },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.eventDotSpacer} />
-                )}
+                <View style={styles.eventDotSpacer} />
               </TouchableOpacity>
             );
           })}
@@ -123,19 +106,7 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
           <Text style={styles.eventsTitle}>
             Events on {monthName} {selectedDay}
           </Text>
-          {dayEvents.length === 0 ? (
-            <Text style={styles.noEvents}>No events scheduled</Text>
-          ) : (
-            dayEvents.map((event) => (
-              <View key={event.id} style={styles.eventCard}>
-                <View style={[styles.eventIndicator, { backgroundColor: event.color }]} />
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.eventTime}>{event.time}</Text>
-                </View>
-              </View>
-            ))
-          )}
+          <Text style={styles.noEvents}>No events scheduled</Text>
         </View>
       </ScrollView>
     </ScreenContainer>

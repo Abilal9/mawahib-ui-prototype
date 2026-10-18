@@ -25,6 +25,10 @@ import { ServicePackage } from '../../data/types';
 import { ScreenProps } from '../../navigation/types';
 import { pickAndUploadImage } from '../../lib/uploadMedia';
 import {
+  buildServicePackages,
+  requiredTitle,
+} from '../../domain/truthfulFacts';
+import {
   moneyAmountDraftFromLabel,
   normalizeMoneyInputEditing,
   parseMoneyInput,
@@ -45,13 +49,18 @@ type MediaItem = { uri: string; mediaAssetId: string };
 type PackageName = ServicePackage['name'];
 type PackageDraft = { price: string; delivery: string; features: string[] };
 
-const EMPTY_PACKAGE: PackageDraft = { price: '0', delivery: '', features: [] };
+const EMPTY_PACKAGE: PackageDraft = { price: '', delivery: '', features: [] };
 
 const PACKAGE_TABS: PackageName[] = ['Basic', 'Standard', 'Premium'];
 
 function hasPositivePrice(value: string): boolean {
   const amount = parseMoneyInput(value);
   return amount !== null && amount > 0;
+}
+
+/** Empty input is missing. A typed 0 is a real free price, not a missing one. */
+function hasEnteredPrice(value: string): boolean {
+  return parseMoneyInput(value, { requirePositive: false }) !== null;
 }
 
 /** Digits-only price → locale-formatted display string (currency icon is rendered separately). */
@@ -150,7 +159,7 @@ export default function AddProfileServiceScreen({
 
   // Step 3
   const [addonTitle, setAddonTitle] = useState('');
-  const [addonPrice, setAddonPrice] = useState('0');
+  const [addonPrice, setAddonPrice] = useState('');
   const [addons, setAddons] = useState<
     { id: string; title: string; price: string }[]
   >(() =>
@@ -168,8 +177,9 @@ export default function AddProfileServiceScreen({
 
   const currentPkg = packages[activePackage];
   const basicReady =
-    hasPositivePrice(packages.Basic.price) &&
-    packages.Basic.delivery.trim().length > 0;
+    hasEnteredPrice(packages.Basic.price) &&
+    packages.Basic.delivery.trim().length > 0 &&
+    packages.Basic.features.some((feature) => feature.trim().length > 0);
 
   const canNextStep1 = name.trim().length > 0;
   const canNextStep2 = basicReady;
@@ -258,33 +268,29 @@ export default function AddProfileServiceScreen({
       throw new Error('Upload at least one image for this service');
     }
 
-    const builtPackages = PACKAGE_TABS.filter((key) => {
-      if (key === 'Basic') return true;
-      const p = packages[key];
-      return (
-        hasPositivePrice(p.price) ||
-        p.delivery.trim() ||
-        p.features.length > 0
-      );
-    }).map((key) => {
-      const p = packages[key];
-      return {
+    const builtPackages = buildServicePackages(
+      PACKAGE_TABS.map((key) => ({
         name: key,
-        price: parseMoneyInput(p.price) ?? 0,
-        deliveryLabel: p.delivery.trim() || 'Flexible',
-        includes: p.features.length ? p.features : ['Details TBD'],
-      };
-    });
+        price: packages[key].price,
+        delivery: packages[key].delivery,
+        features: packages[key].features,
+        required: key === 'Basic',
+      })),
+      (value) => parseMoneyInput(value, { requirePositive: false }),
+    );
 
     const payload = {
-      title: name.trim() || 'Untitled service',
+      title: requiredTitle(name, 'service name'),
       description: description.trim(),
       mediaAssetIds: media.map((m) => m.mediaAssetId),
       packages: builtPackages,
-      addons: addons.map((a) => ({
-        title: a.title,
-        price: parseMoneyInput(a.price) ?? 0,
-      })),
+      addons: addons.map((a) => {
+        const price = parseMoneyInput(a.price, { requirePositive: false });
+        if (price === null || !a.title.trim()) {
+          throw new Error('Enter a name and price for each add-on.');
+        }
+        return { title: a.title.trim(), price };
+      }),
     };
 
     if (isEditing && existing) {
@@ -311,13 +317,13 @@ export default function AddProfileServiceScreen({
     })();
   };
 
-  /** Save progress from any step without finishing the wizard (name required). */
+  /** Save only when the offering has a real title and a complete Basic package. */
   const saveProgress = () => {
-    if (!name.trim()) return;
+    if (!canSave) return;
     publish();
   };
 
-  const canSave = name.trim().length > 0;
+  const canSave = name.trim().length > 0 && basicReady;
 
   const footerPrimaryDisabled =
     (step === 1 && !canNextStep1) || (step === 2 && !canNextStep2);
@@ -326,14 +332,14 @@ export default function AddProfileServiceScreen({
     return PACKAGE_TABS.map((key) => {
       const p = packages[key];
       const hasContent =
-        hasPositivePrice(p.price) ||
+        hasEnteredPrice(p.price) ||
         !!p.delivery.trim() ||
         p.features.length > 0;
       if (key !== 'Basic' && !hasContent) return null;
       return {
         key,
-        price: formatMoneyDigits(p.price),
-        delivery: p.delivery.trim() || '—',
+        price: hasEnteredPrice(p.price) ? formatMoneyDigits(p.price) : '',
+        delivery: p.delivery.trim(),
         featureCount: p.features.length,
       };
     }).filter(Boolean) as {
@@ -610,7 +616,7 @@ export default function AddProfileServiceScreen({
                     <Ionicons name="create-outline" size={18} color={colors.text} />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.reviewName}>{name.trim() || 'Untitled service'}</Text>
+                <Text style={styles.reviewName}>{name.trim()}</Text>
                 {description.trim() ? (
                   <Text style={styles.reviewDesc} numberOfLines={3}>
                     {description.trim()}
@@ -701,6 +707,7 @@ export default function AddProfileServiceScreen({
             <Button
               title={isEditing ? 'Update Service' : 'Publish Service'}
               fullWidth
+              disabled={!canSave || saving}
               onPress={publish}
             />
           ) : (

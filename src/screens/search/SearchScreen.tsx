@@ -24,6 +24,7 @@ import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import MoneyAmount from '../../components/ui/MoneyAmount';
+import { serviceDetailRoute } from '../../domain/truthfulFacts';
 import { stripCurrencyCodeTokens } from '../../utils/money';
 import { exploreTabs, ExploreTab } from '../../data/mock/explore';
 import { normalizeExploreTab } from '../../utils/explore';
@@ -525,12 +526,14 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                   service={item.service}
                   onPress={() => {
                     catalogService.rememberService(item.service);
-                    navigation.navigate('ServiceDetail', {
-                      serviceId: item.service.id,
-                      ...(item.service.provider.id !== me.id
-                        ? { userId: item.service.provider.id }
-                        : {}),
-                    });
+                    navigation.navigate(
+                      'ServiceDetail',
+                      serviceDetailRoute(
+                        item.service.id,
+                        item.service.provider.id,
+                        me.id,
+                      ),
+                    );
                   }}
                   onProviderPress={() =>
                     openUserProfile(navigation, item.service.provider.id, me.id)
@@ -712,12 +715,14 @@ function ServiceCard({
           </Text>
         ) : null}
         {service.duration ? <Text style={styles.serviceMeta}>{service.duration}</Text> : null}
-        <MoneyAmount
-          amount={service.price}
-          currency={service.currency}
-          size={14}
-          color={colors.textTertiary}
-        />
+        {service.price != null ? (
+          <MoneyAmount
+            amount={service.price}
+            currency={service.currency}
+            size={14}
+            color={colors.textTertiary}
+          />
+        ) : null}
       </View>
     </TouchableOpacity>
   );

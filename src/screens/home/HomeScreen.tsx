@@ -25,6 +25,7 @@ import { useConnections } from '../../context/ConnectionsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
 import MoneyAmount from '../../components/ui/MoneyAmount';
+import { serviceDetailRoute } from '../../domain/truthfulFacts';
 import PostLikesModal from '../../components/ui/PostLikesModal';
 import PostMediaPreview from '../../components/ui/PostMediaPreview';
 import { stripCurrencyCodeTokens } from '../../utils/money';
@@ -291,20 +292,24 @@ function ServiceMatchCard({
         </View>
       </View>
 
-      <View style={styles.jobMetaRow}>
-        <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText} numberOfLines={1}>
-          {service.duration}
-        </Text>
-      </View>
-      <View style={styles.jobMetaRow}>
-        <MoneyAmount
-          amount={service.price}
-          currency={service.currency}
-          size={14}
-          color={colors.textSecondary}
-        />
-      </View>
+      {service.duration.trim() ? (
+        <View style={styles.jobMetaRow}>
+          <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.jobMetaText} numberOfLines={1}>
+            {service.duration}
+          </Text>
+        </View>
+      ) : null}
+      {service.price != null ? (
+        <View style={styles.jobMetaRow}>
+          <MoneyAmount
+            amount={service.price}
+            currency={service.currency}
+            size={14}
+            color={colors.textSecondary}
+          />
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -348,18 +353,14 @@ function TalentMatchCard({
         </View>
       </View>
 
-      <View style={styles.jobMetaRow}>
-        <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText} numberOfLines={1}>
-          {talent.user.location ?? 'Riyadh'}
-        </Text>
-      </View>
-      <View style={styles.jobMetaRow}>
-        <Ionicons name="cash-outline" size={14} color={colors.textSecondary} />
-        <Text style={styles.jobMetaText} numberOfLines={1}>
-          {talent.rateLabel ?? `${talent.hourlyRate} / hr`}
-        </Text>
-      </View>
+      {talent.user.location ? (
+        <View style={styles.jobMetaRow}>
+          <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.jobMetaText} numberOfLines={1}>
+            {talent.user.location}
+          </Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -679,7 +680,10 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
                 <ServiceMatchCard
                   service={item}
                   onPress={() =>
-                    navigation.navigate('ServiceDetail', { serviceId: item.id })
+                    navigation.navigate(
+                      'ServiceDetail',
+                      serviceDetailRoute(item.id, item.provider.id, me.id),
+                    )
                   }
                   onDismiss={() =>
                     setServiceList((prev) => prev.filter((s) => s.id !== item.id))
