@@ -38,6 +38,11 @@ import {
   type CountryCode,
 } from '../data/location/geo';
 import { DEFAULT_PROFILE_TITLE } from '../constants/profile';
+import {
+  selectionsFromProfile,
+  skillSelectionPayload,
+  type ProfileSkillSelection,
+} from '../domain/profileSkills';
 
 /**
  * Signed-in user's editable profile.
@@ -50,6 +55,7 @@ export const emptyProfileContent = (): ProfileContent => ({
   bio: '',
   languages: [],
   talents: [],
+  talentSelections: [],
   education: [],
   experience: [],
   certifications: [],
@@ -103,6 +109,7 @@ interface ProfileContextValue {
   setBio: (bio: string) => Promise<void>;
   setLanguages: (languages: ProfileLanguage[]) => Promise<void>;
   setTalents: (talents: string[]) => Promise<void>;
+  setTalentSelections: (skills: ProfileSkillSelection[]) => Promise<void>;
   setEducation: (education: ProfileEducation[]) => Promise<void>;
   setExperience: (experience: ProfileExperience[]) => Promise<void>;
   setCertifications: (certifications: ProfileCertification[]) => Promise<void>;
@@ -280,7 +287,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setContent((prev) => ({
       ...prev,
       bio: next.bio ?? '',
-      talents: next.skills ?? prev.talents,
+      talents: (next.skills ?? prev.talents).slice(),
+      talentSelections: selectionsFromProfile({
+        skills: next.skills ?? prev.talents,
+        skillSelections: next.skillSelections,
+      }),
       languages:
         next.about?.languages?.map((l) => ({
           ...l,
@@ -402,8 +413,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         await persistAboutLists(next);
       },
       setTalents: async (talents) => {
-        setContent((prev) => ({ ...prev, talents }));
         await persistMe({ skills: talents });
+      },
+      setTalentSelections: async (skills) => {
+        await persistMe(skillSelectionPayload(skills));
       },
       setEducation: async (education) => {
         const next = { ...content, education };

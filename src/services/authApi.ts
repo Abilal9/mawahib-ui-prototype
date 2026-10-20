@@ -41,6 +41,7 @@ export interface ApiUser {
   phoneVerified?: boolean;
   emailVerified?: boolean;
   skills: string[];
+  skillSelections?: { skillId: string | null; name: string }[];
   about?: {
     languages: ProfileLanguage[];
     education: ProfileEducation[];
@@ -76,6 +77,7 @@ export interface UpdateMePayload {
   avatarUrl?: string | null;
   coverUrl?: string | null;
   skills?: string[];
+  skillSelections?: ({ skillId: string } | { text: string })[];
   about?: {
     languages?: ProfileLanguage[];
     education?: Array<Partial<ProfileEducation> & { id: string; school: string }>;

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,25 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 import { TALENT_CHIP_STYLES } from '../../data/types';
-import { normalizeTalentList } from '../../utils/aboutFormat';
+import {
+  acceptSuggestionResponse,
+  addCanonicalSkill,
+  addCustomSkill,
+  exactSuggestion,
+  suggestionsForDraft,
+  MAX_PROFILE_SKILL_LENGTH,
+  MAX_PROFILE_SKILLS,
+  type CanonicalSkillSuggestion,
+  type ProfileSkillSelection,
+} from '../../domain/profileSkills';
+import { suggestSkills } from '../../services/taxonomyApi';
 
-const MAX_TALENTS = 40;
-const MAX_LEN = 60;
+const MAX_TALENTS = MAX_PROFILE_SKILLS;
+const MAX_LEN = MAX_PROFILE_SKILL_LENGTH;
 
 type Props = {
-  value: string[];
-  onChange: (next: string[]) => void;
+  value: ProfileSkillSelection[];
+  onChange: (next: ProfileSkillSelection[]) => void;
   disabled?: boolean;
 };
 
@@ -29,19 +40,83 @@ type Props = {
 export default function TalentChipsEditor({ value, onChange, disabled }: Props) {
   const [draft, setDraft] = useState('');
   const [dragging, setDragging] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<CanonicalSkillSuggestion[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState(false);
+  const [suggestAttempt, setSuggestAttempt] = useState(0);
+  const [readyQuery, setReadyQuery] = useState('');
   const layoutYs = useRef<number[]>([]);
   const itemsRef = useRef(value);
+  const requestGen = useRef(0);
   itemsRef.current = value;
 
+  useEffect(() => {
+    const query = draft.trim();
+    const requestId = requestGen.current + 1;
+    requestGen.current = requestId;
+    if (!query) {
+      setSuggestions([]);
+      setReadyQuery('');
+      setSuggestError(false);
+      setSuggesting(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSuggesting(true);
+      suggestSkills(query)
+        .then((rows) => {
+          const accepted = acceptSuggestionResponse(
+            requestId,
+            requestGen.current,
+            rows,
+          );
+          if (!accepted) return;
+          setSuggestions(accepted);
+          setReadyQuery(query);
+          setSuggestError(false);
+        })
+        .catch(() => {
+          if (requestId !== requestGen.current) return;
+          setSuggestions([]);
+          setReadyQuery(query);
+          setSuggestError(true);
+        })
+        .finally(() => {
+          if (requestId === requestGen.current) setSuggesting(false);
+        });
+    }, 180);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [draft, suggestAttempt]);
+
+  const visibleSuggestions = suggestionsForDraft(readyQuery, draft, suggestions);
+  const lookupPending = draft.trim().length > 0 && readyQuery !== draft.trim();
+
+  const selectCanonical = (suggestion: CanonicalSkillSuggestion) => {
+    onChange(addCanonicalSkill(value, suggestion));
+    setDraft('');
+    setSuggestions([]);
+    setReadyQuery('');
+  };
+
   const addTalent = () => {
-    const next = normalizeTalentList([...value, draft]);
+    if (lookupPending) return;
+    const matched = exactSuggestion(visibleSuggestions, draft);
+    if (matched) {
+      selectCanonical(matched);
+      return;
+    }
+    const next = addCustomSkill(value, draft);
     if (next.length === value.length && !draft.trim()) {
       setDraft('');
       return;
     }
-    if (next.length > MAX_TALENTS) return;
-    onChange(next.slice(0, MAX_TALENTS));
+    if (next.length === value.length) return;
+    onChange(next);
     setDraft('');
+    setSuggestions([]);
+    setReadyQuery('');
   };
 
   const removeAt = (index: number) => {
@@ -91,7 +166,7 @@ export default function TalentChipsEditor({ value, onChange, disabled }: Props) 
           const pan = createPan(index);
           return (
             <View
-              key={`${talent}-${index}`}
+              key={talent.skillId ?? `custom:${talent.name}`}
               style={[
                 styles.chip,
                 { backgroundColor: tone.bg },
@@ -106,12 +181,12 @@ export default function TalentChipsEditor({ value, onChange, disabled }: Props) 
                 color={tone.text}
                 style={{ marginRight: 4 }}
               />
-              <Text style={[styles.chipText, { color: tone.text }]}>{talent}</Text>
+              <Text style={[styles.chipText, { color: tone.text }]}>{talent.name}</Text>
               <TouchableOpacity
                 onPress={() => removeAt(index)}
                 hitSlop={8}
                 disabled={disabled}
-                accessibilityLabel={`Remove ${talent}`}
+                accessibilityLabel={`Remove ${talent.name}`}
               >
                 <Ionicons name="close" size={14} color={tone.text} />
               </TouchableOpacity>
@@ -133,13 +208,48 @@ export default function TalentChipsEditor({ value, onChange, disabled }: Props) 
           blurOnSubmit={false}
         />
         <TouchableOpacity
-          style={[styles.addBtn, (!draft.trim() || disabled) && styles.addBtnDisabled]}
+          style={[
+            styles.addBtn,
+            (!draft.trim() || disabled || lookupPending) && styles.addBtnDisabled,
+          ]}
           onPress={addTalent}
-          disabled={!draft.trim() || disabled || value.length >= MAX_TALENTS}
+          disabled={!draft.trim() || disabled || lookupPending || value.length >= MAX_TALENTS}
         >
           <Ionicons name="add" size={20} color={colors.white} />
         </TouchableOpacity>
       </View>
+      {draft.trim() ? (
+        <View style={styles.suggestBox}>
+          {lookupPending || suggesting ? (
+            <Text style={styles.hint}>Looking up skills…</Text>
+          ) : null}
+          {visibleSuggestions.map((suggestion) => (
+            <TouchableOpacity
+              key={suggestion.id}
+              style={styles.suggestRow}
+              onPress={() => selectCanonical(suggestion)}
+              disabled={disabled}
+            >
+              <Text style={styles.suggestName}>{suggestion.nameEn}</Text>
+            </TouchableOpacity>
+          ))}
+          {!lookupPending && !exactSuggestion(visibleSuggestions, draft) ? (
+            <TouchableOpacity
+              key="add-custom-skill"
+              style={styles.suggestRow}
+              onPress={addTalent}
+              disabled={disabled}
+            >
+              <Text style={styles.suggestName}>{`Add "${draft.trim()}"`}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {suggestError ? (
+            <TouchableOpacity onPress={() => setSuggestAttempt((n) => n + 1)}>
+              <Text style={styles.hint}>Couldn’t load suggestions. Tap to retry. You can still add your own.</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
       <Text style={styles.hint}>
         {value.length}/{MAX_TALENTS} · drag chips to reorder · Save to persist
       </Text>
@@ -201,5 +311,22 @@ const styles = StyleSheet.create({
   hint: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  suggestBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+  },
+  suggestRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  suggestName: {
+    ...typography.body,
+    color: colors.text,
   },
 });

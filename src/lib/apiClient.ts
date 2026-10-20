@@ -3,10 +3,20 @@ import { supabase } from './supabase';
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
+  skillId?: string;
+  nameEn?: string;
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    message: string,
+    details?: { code?: string; skillId?: string; nameEn?: string },
+  ) {
     super(message);
     this.status = status;
+    this.code = details?.code;
+    this.skillId = details?.skillId;
+    this.nameEn = details?.nameEn;
   }
 }
 
@@ -52,11 +62,21 @@ export async function apiRequest<T>(
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
-      const body = (await res.json()) as { message?: string | string[] };
+      const body = (await res.json()) as {
+        message?: string | string[];
+        code?: string;
+        skillId?: string;
+        nameEn?: string;
+      };
       if (Array.isArray(body.message)) message = body.message.join(', ');
       else if (body.message) message = body.message;
-    } catch {
-      // ignore
+      throw new ApiError(res.status, message, {
+        code: body.code,
+        skillId: body.skillId,
+        nameEn: body.nameEn,
+      });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
     }
     throw new ApiError(res.status, message);
   }

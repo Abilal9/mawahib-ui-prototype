@@ -133,6 +133,8 @@ export interface ProfileContent {
   bio: string;
   languages: ProfileLanguage[];
   talents: string[];
+  /** Canonical links for the signed-in editor. Display still uses `talents`. */
+  talentSelections?: { name: string; skillId: string | null }[];
   education: ProfileEducation[];
   experience: ProfileExperience[];
   certifications: ProfileCertification[];

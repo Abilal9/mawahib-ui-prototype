@@ -46,11 +46,9 @@ import {
   MONTH_OPTIONS,
   yearOptions,
 } from '../../constants/aboutOptions';
-import {
-  normalizeTalentList,
-  removeById,
-  replaceById,
-} from '../../utils/aboutFormat';
+import { removeById, replaceById } from '../../utils/aboutFormat';
+import { selectionsFromProfile, type ProfileSkillSelection } from '../../domain/profileSkills';
+import { ApiError } from '../../lib/apiClient';
 
 const BIO_MAX_LENGTH = 500;
 
@@ -85,7 +83,12 @@ export default function EditAboutSectionScreen({
   const existingCert = profile.content.certifications.find((c) => c.id === itemId);
 
   const [bio, setBio] = useState(profile.content.bio);
-  const [talents, setTalents] = useState(() => [...profile.content.talents]);
+  const [talents, setTalents] = useState<ProfileSkillSelection[]>(() =>
+    selectionsFromProfile({
+      skills: profile.content.talents,
+      skillSelections: profile.content.talentSelections,
+    }),
+  );
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selectKind, setSelectKind] = useState<SelectKind>(null);
@@ -308,7 +311,7 @@ export default function EditAboutSectionScreen({
           await profile.setBio(bio.trim());
           break;
         case 'talents':
-          await profile.setTalents(normalizeTalentList(talents));
+          await profile.setTalentSelections(talents);
           break;
         case 'languages': {
           if (!langName.trim() || !langLevel) {
@@ -431,9 +434,17 @@ export default function EditAboutSectionScreen({
       }
       navigation.goBack();
     } catch (err) {
+      const canonical =
+        err instanceof ApiError && err.code === 'SKILL_MATCHES_CANONICAL'
+          ? err.nameEn
+          : null;
       Alert.alert(
         'Could not save',
-        err instanceof Error ? err.message : 'Please try again',
+        canonical
+          ? `Choose ${canonical} from the suggestions.`
+          : err instanceof Error
+            ? err.message
+            : 'Please try again',
       );
     } finally {
       setSaving(false);
