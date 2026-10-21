@@ -350,6 +350,7 @@ export const marketplaceApi = {
     q?: string;
     exploreTag?: string;
     employmentType?: ApiEmploymentType;
+    categoryIds?: string;
     take?: number;
     skip?: number;
   }): Promise<ApiJobListingsPage> {
@@ -358,6 +359,7 @@ export const marketplaceApi = {
     if (params?.q) qs.set('q', params.q);
     if (params?.exploreTag) qs.set('exploreTag', params.exploreTag);
     if (params?.employmentType) qs.set('employmentType', params.employmentType);
+    if (params?.categoryIds) qs.set('categoryIds', params.categoryIds);
     if (params?.take != null) qs.set('take', String(params.take));
     if (params?.skip != null) qs.set('skip', String(params.skip));
     return apiRequest<ApiJobListingsPage>(`/job-listings?${qs.toString()}`);

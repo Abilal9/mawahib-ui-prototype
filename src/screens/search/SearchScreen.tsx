@@ -19,6 +19,7 @@ import ExploreFilterSheet, {
   ExploreSheetValue,
   locationLabel,
 } from '../../components/explore/ExploreFilterSheet';
+import ExploreTaxonomyFilters from '../../components/explore/ExploreTaxonomyFilters';
 import ServiceMediaMosaic from '../../components/explore/ServiceMediaMosaic';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
@@ -51,6 +52,15 @@ import {
 } from '../../services/marketplaceApi';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { catalogService } from '../../services/catalogService';
+import {
+  emptyExploreTaxonomy,
+  exploreFilterParams,
+  exploreTaxonomyKey,
+  isInactiveTaxonomyFilterError,
+  pruneExploreSelection,
+  type ExploreTaxonomySelection,
+} from '../../domain/exploreTaxonomy';
+import { loadTaxonomy, resetTaxonomyCache } from '../../services/taxonomyApi';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -167,6 +177,14 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
     employmentType: null,
   });
   const [filterOpen, setFilterOpen] = useState(false);
+  const [taxonomyByTab, setTaxonomyByTab] = useState<
+    Record<ExploreTab, ExploreTaxonomySelection>
+  >({
+    talents: emptyExploreTaxonomy(),
+    services: emptyExploreTaxonomy(),
+    jobs: emptyExploreTaxonomy(),
+  });
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [talents, setTalents] = useState<Bucket<Talent>>(emptyBucket);
   const [services, setServices] = useState<Bucket<Service>>(emptyBucket);
   const [jobs, setJobs] = useState<Bucket<Job>>(emptyBucket);
@@ -180,10 +198,25 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
     }
   }, [route.params?.contentType]);
 
-  const talentKey = `${query.trim()}|${filters.locationCode ?? ''}|${filters.talentSort}`;
-  const serviceKey = `${query.trim()}|${filters.locationCode ?? ''}`;
-  const jobKey = `${query.trim()}|${filters.employmentType ?? ''}`;
+  const talentKey = `${query.trim()}|${filters.locationCode ?? ''}|${filters.talentSort}|${exploreTaxonomyKey(taxonomyByTab.talents)}`;
+  const serviceKey = `${query.trim()}|${filters.locationCode ?? ''}|${exploreTaxonomyKey(taxonomyByTab.services)}`;
+  const jobKey = `${query.trim()}|${filters.employmentType ?? ''}|${exploreTaxonomyKey(taxonomyByTab.jobs)}`;
   const activeKey = tab === 'talents' ? talentKey : tab === 'services' ? serviceKey : jobKey;
+
+  const recoverInactiveFilters = useCallback(async (target: ExploreTab) => {
+    resetTaxonomyCache();
+    setCatalogAttempt((current) => current + 1);
+    try {
+      const catalog = await loadTaxonomy();
+      setTaxonomyByTab((current) => {
+        const next = pruneExploreSelection(current[target], catalog.categories);
+        if (exploreTaxonomyKey(next) === exploreTaxonomyKey(current[target])) return current;
+        return { ...current, [target]: next };
+      });
+    } catch {
+      // The chip row keeps Clear available when the catalog cannot refresh.
+    }
+  }, []);
 
   const load = useCallback(
     async (target: ExploreTab, mode: 'reset' | 'more', gen: number) => {
@@ -194,10 +227,12 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
       try {
         if (target === 'talents') {
           const skip = mode === 'more' ? talents.items.length : 0;
+          const facets = exploreFilterParams(taxonomyByTab.talents);
           const page = await exploreApi.listTalents({
             q: q || undefined,
             locationCode: filters.locationCode ?? undefined,
             sort: filters.talentSort,
+            categoryIds: facets.categoryIds,
             skip,
             take: PAGE_SIZE,
           });
@@ -219,10 +254,12 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
         }
         if (target === 'services') {
           const skip = mode === 'more' ? services.items.length : 0;
+          const facets = exploreFilterParams(taxonomyByTab.services);
           const page = await exploreApi.listServices({
             q: q || undefined,
             locationCode: filters.locationCode ?? undefined,
             sort: 'newest',
+            categoryIds: facets.categoryIds,
             skip,
             take: PAGE_SIZE,
           });
@@ -241,9 +278,11 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
           return true;
         }
         const skip = mode === 'more' ? jobs.items.length : 0;
+        const facets = exploreFilterParams(taxonomyByTab.jobs);
         const page = await marketplaceApi.listOpenListings({
           q: q || undefined,
           employmentType: filters.employmentType ?? undefined,
+          categoryIds: facets.categoryIds,
           skip,
           take: PAGE_SIZE,
         });
@@ -267,6 +306,9 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
         if (target === 'talents') markFailed(setTalents, message, mode);
         else if (target === 'services') markFailed(setServices, message, mode);
         else markFailed(setJobs, message, mode);
+        if (isInactiveTaxonomyFilterError(message)) {
+          void recoverInactiveFilters(target);
+        }
         return false;
       }
     },
@@ -281,6 +323,8 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
       services.items.length,
       talentKey,
       talents.items.length,
+      recoverInactiveFilters,
+      taxonomyByTab,
     ],
   );
 
@@ -344,6 +388,10 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
   };
 
   const retry = () => {
+    if (isInactiveTaxonomyFilterError(bucket.error || '')) {
+      void recoverInactiveFilters(tab);
+      return;
+    }
     satisfiedKey.current[tab] = '';
     const gen = ++requestGen.current[tab];
     resetHold.current[tab] = true;
@@ -356,6 +404,7 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
 
   const emptyTitle =
     tab === 'talents' ? 'No talents found' : tab === 'services' ? 'No services found' : 'No jobs found';
+  const taxonomyActive = taxonomyByTab[tab].categoryIds.length > 0;
 
   return (
     <ScreenContainer padded={false}>
@@ -444,6 +493,18 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
         {bucket.pending ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       </View>
 
+      <ExploreTaxonomyFilters
+        tab={tab}
+        value={taxonomyByTab[tab]}
+        catalogAttempt={catalogAttempt}
+        onChange={(update) =>
+          setTaxonomyByTab((current) => ({
+            ...current,
+            [tab]: typeof update === 'function' ? update(current[tab]) : update,
+          }))
+        }
+      />
+
       {bucket.error && bucket.items.length === 0 && !bucket.initialLoading ? (
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
@@ -493,7 +554,9 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
                 <Ionicons name="compass-outline" size={48} color={colors.textSecondary} />
                 <Text style={styles.emptyTitle}>{emptyTitle}</Text>
                 <Text style={styles.emptyText}>
-                  Try another search or city.
+                  {taxonomyActive
+                    ? 'No matches for these filters.'
+                    : 'Try another search or city.'}
                 </Text>
               </View>
             )

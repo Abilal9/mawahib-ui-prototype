@@ -108,6 +108,7 @@ export interface ExploreListQuery {
   q?: string;
   locationCode?: string;
   sort?: 'recommended' | 'top-rated' | 'newest';
+  categoryIds?: string;
   skip?: number;
   take?: number;
 }
@@ -117,6 +118,7 @@ function exploreQuery(path: string, params?: ExploreListQuery): string {
   if (params?.q) qs.set('q', params.q);
   if (params?.locationCode) qs.set('locationCode', params.locationCode);
   if (params?.sort) qs.set('sort', params.sort);
+  if (params?.categoryIds) qs.set('categoryIds', params.categoryIds);
   if (params?.skip != null) qs.set('skip', String(params.skip));
   if (params?.take != null) qs.set('take', String(params.take));
   const query = qs.toString();
