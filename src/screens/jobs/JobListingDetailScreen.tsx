@@ -35,6 +35,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ScreenProps } from '../../navigation/types';
 import { JobListing } from '../../data/types';
+import { visibleJobSkillLabels } from '../../domain/offeringTaxonomy';
 import { ApiError } from '../../lib/apiClient';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import { stripCurrencyCodeTokens } from '../../utils/money';
@@ -175,6 +176,7 @@ export default function JobListingDetailScreen({
   const isOwner = Boolean(apiUser && apiListing && apiUser.id === apiListing.posterId);
   /** Any signed-in user may apply; the API rejects applying to your own listing. */
   const canApply = Boolean(apiUser) && !isOwner;
+  const skillLabels = visibleJobSkillLabels(job.skills);
 
   const runOwnerAction = (
     action: () => Promise<void>,
@@ -444,14 +446,18 @@ export default function JobListingDetailScreen({
           </>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Required skills</Text>
-        <View style={styles.skills}>
-          {job.skills.map((skill) => (
-            <View key={skill} style={styles.skillTag}>
-              <Text style={styles.skillText}>{skill}</Text>
+        {skillLabels.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Skills</Text>
+            <View style={styles.skills}>
+              {skillLabels.map((skill) => (
+                <View key={skill} style={styles.skillTag}>
+                  <Text style={styles.skillText}>{skill}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        ) : null}
 
         {isOwner ? (
           <View style={styles.applicantsSection}>

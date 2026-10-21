@@ -10,6 +10,7 @@ export interface CanonicalSkillSuggestion {
   id: string;
   nameEn: string;
   matchedTerm: string;
+  categoryId?: string;
 }
 
 export function selectionsFromProfile(input: {

@@ -67,6 +67,10 @@ export interface ApiJobListing {
   description: string;
   skills: string[];
   exploreTag: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  customCategory?: string | null;
+  taxonomySkills?: { id: string; name: string }[];
   status: ApiJobListingStatus;
   postedAt: string | null;
   createdAt: string;
@@ -329,6 +333,10 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
     currency,
     description: api.description,
     skills: api.skills ?? [],
+    categoryId: api.categoryId ?? null,
+    categoryName: api.categoryName ?? null,
+    customCategory: api.customCategory ?? null,
+    taxonomySkills: api.taxonomySkills ?? [],
     postedAt: api.postedAt || api.createdAt,
     status: listingStatusToUi(api.status),
     logo: api.poster.avatarUrl ?? undefined,
@@ -381,8 +389,9 @@ export const marketplaceApi = {
     /** Display-only label; never used as the payable amount. */
     salaryLabel?: string;
     description?: string;
-    skills?: string[];
-    exploreTag?: string;
+    categoryId: string;
+    customCategory?: string | null;
+    skillIds?: string[];
     publish?: boolean;
   }): Promise<ApiJobListing> {
     return apiRequest<ApiJobListing>('/job-listings', {
@@ -398,8 +407,11 @@ export const marketplaceApi = {
         maxAmount: input.maxAmount,
         salaryLabel: input.salaryLabel,
         description: input.description,
-        skills: input.skills,
-        exploreTag: input.exploreTag,
+        categoryId: input.categoryId,
+        ...(input.customCategory !== undefined
+          ? { customCategory: input.customCategory }
+          : {}),
+        skillIds: input.skillIds ?? [],
         publish: input.publish ?? true,
       }),
     });
@@ -414,8 +426,9 @@ export const marketplaceApi = {
       location: string;
       salaryLabel: string | null;
       description: string;
-      skills: string[];
-      exploreTag: string | null;
+      categoryId?: string;
+      customCategory?: string | null;
+      skillIds?: string[];
     }>,
   ): Promise<ApiJobListing> {
     return apiRequest<ApiJobListing>(`/job-listings/${id}`, {

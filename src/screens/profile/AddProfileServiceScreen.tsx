@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,12 @@ import {
   normalizeMoneyInputEditing,
   parseMoneyInput,
 } from '../../utils/money';
+import { TaxonomyFields } from '../../components/taxonomy/TaxonomyFields';
+import {
+  customCategoryError,
+  offeringTaxonomyPayload,
+} from '../../domain/offeringTaxonomy';
+import { ApiError } from '../../lib/apiClient';
 
 /**
  * Multi-step wizard to create or edit a profile service.
@@ -131,11 +137,40 @@ export default function AddProfileServiceScreen({
   const [mediaDragging, setMediaDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Step 1
   const [name, setName] = useState(existing?.title ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(existing?.categoryId ?? null);
+  const [categoryName, setCategoryName] = useState<string | null>(
+    existing?.categoryName ?? null,
+  );
+  const [selectedSkills, setSelectedSkills] = useState(
+    existing?.taxonomySkills ?? [],
+  );
+  const [customCategory, setCustomCategory] = useState(
+    existing?.customCategory ?? '',
+  );
+  const [allowsCustom, setAllowsCustom] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [hydratedServiceId, setHydratedServiceId] = useState<string | null>(
+    existing?.id ?? null,
+  );
+  if (existing && hydratedServiceId !== existing.id) {
+    setHydratedServiceId(existing.id);
+    setName(existing.title ?? '');
+    setDescription(existing.description ?? '');
+    setCategoryId(existing.categoryId ?? null);
+    setCategoryName(existing.categoryName ?? null);
+    setSelectedSkills(existing.taxonomySkills ?? []);
+    setCustomCategory(existing.customCategory ?? '');
+    setAllowsCustom(false);
+  }
+  const initialCategoryId = existing?.categoryId ?? null;
+  const initialSkillIds = (existing?.taxonomySkills ?? []).map((skill) => skill.id);
+  const initialCustomCategory = existing?.customCategory ?? null;
   const [media, setMedia] = useState<MediaItem[]>(() => {
     if (!existing) return [];
     const ids = existing.mediaAssetIds ?? [];
@@ -252,6 +287,21 @@ export default function AddProfileServiceScreen({
   };
 
   const goNext = () => {
+    if (savingRef.current) return;
+    if (step === 1 && !isEditing && !categoryId) {
+      Alert.alert('Choose a category', 'Select a category before continuing.');
+      return;
+    }
+    if (step === 1) {
+      const problem = customCategoryError({
+        allowsCustomCategory: allowsCustom,
+        customCategory,
+      });
+      if (problem) {
+        setCustomError(problem);
+        return;
+      }
+    }
     if (step < TOTAL_STEPS) {
       setStep((s) => s + 1);
       return;
@@ -279,11 +329,33 @@ export default function AddProfileServiceScreen({
       (value) => parseMoneyInput(value, { requirePositive: false }),
     );
 
+    const problem = customCategoryError({
+      allowsCustomCategory: allowsCustom,
+      customCategory,
+    });
+    if (problem) {
+      setCustomError(problem);
+      throw new Error(problem);
+    }
+    const taxonomy = offeringTaxonomyPayload({
+      creating: !isEditing,
+      categoryId,
+      initialCategoryId,
+      skillIds: selectedSkills.map((skill) => skill.id),
+      initialSkillIds,
+      allowsCustomCategory: allowsCustom,
+      customCategory,
+      initialCustomCategory,
+    });
+    if (!isEditing && !taxonomy.categoryId) {
+      throw new Error('Choose a category');
+    }
     const payload = {
       title: requiredTitle(name, 'service name'),
       description: description.trim(),
       mediaAssetIds: media.map((m) => m.mediaAssetId),
       packages: builtPackages,
+      ...taxonomy,
       addons: addons.map((a) => {
         const price = parseMoneyInput(a.price, { requirePositive: false });
         if (price === null || !a.title.trim()) {
@@ -295,23 +367,47 @@ export default function AddProfileServiceScreen({
 
     if (isEditing && existing) {
       await updateService(existing.id, payload);
-    } else {
-      await addService(payload);
+      return;
     }
+    if (!taxonomy.categoryId) throw new Error('Choose a category');
+    await addService({ ...payload, categoryId: taxonomy.categoryId });
   };
 
   const publish = () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     void (async () => {
       try {
-        setSaving(true);
         await persistService();
         navigation.goBack();
       } catch (err) {
+        if (
+          err instanceof ApiError &&
+          err.code === 'CUSTOM_CATEGORY_MATCHES_CATEGORY' &&
+          err.categoryId
+        ) {
+          Alert.alert('Choose a category', err.message, [
+            { text: 'Keep editing', style: 'cancel' },
+            {
+              text: err.nameEn ? `Use ${err.nameEn}` : 'Use that category',
+              onPress: () => {
+                setCategoryId(err.categoryId ?? null);
+                setCategoryName(err.nameEn ?? null);
+                setAllowsCustom(false);
+                setCustomCategory('');
+                setCustomError(null);
+              },
+            },
+          ]);
+          return;
+        }
         Alert.alert(
           'Save failed',
           err instanceof Error ? err.message : 'Could not save service',
         );
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
     })();
@@ -395,6 +491,31 @@ export default function AddProfileServiceScreen({
                 onChangeText={setName}
                 placeholder="e.g. Professional Logo Design"
                 placeholderTextColor={colors.textSecondary}
+              />
+
+              <TaxonomyFields
+                categoryId={categoryId}
+                categoryName={categoryName}
+                onCategoryChange={(category) => {
+                  setCategoryId(category.id);
+                  setCategoryName(category.name);
+                  setAllowsCustom(category.allowsCustomCategory);
+                  if (!category.allowsCustomCategory) {
+                    setCustomCategory('');
+                    setCustomError(null);
+                  }
+                }}
+                skills={selectedSkills}
+                onSkillsChange={setSelectedSkills}
+                categoryRequired={!isEditing}
+                customCategory={customCategory}
+                onCustomCategoryChange={(value) => {
+                  setCustomCategory(value);
+                  setCustomError(null);
+                }}
+                customLabel="What type of service is this?"
+                customError={customError}
+                onAllowsCustomCategoryChange={setAllowsCustom}
               />
 
               <Text style={styles.label}>Description</Text>
@@ -699,7 +820,7 @@ export default function AddProfileServiceScreen({
                 title="Save"
                 variant="outline"
                 fullWidth
-                disabled={!canSave}
+                disabled={!canSave || saving}
                 onPress={saveProgress}
               />
             </View>
@@ -732,7 +853,7 @@ export default function AddProfileServiceScreen({
                 title="Save"
                 variant="ghost"
                 fullWidth
-                disabled={!canSave}
+                disabled={!canSave || saving}
                 onPress={saveProgress}
               />
             </View>

@@ -18,6 +18,7 @@ export interface TaxonomyCategory {
   nameEn: string;
   nameAr: string | null;
   sortOrder: number;
+  allowsCustomCategory?: boolean;
   skills: TaxonomySkill[];
 }
 
@@ -63,6 +64,7 @@ export function suggestSkills(query: string): Promise<CanonicalSkillSuggestion[]
           id: row.id,
           nameEn: row.nameEn,
           matchedTerm: row.matchedTerm,
+          categoryId: row.categoryId,
         })),
       ),
     )

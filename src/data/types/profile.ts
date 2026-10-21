@@ -124,6 +124,12 @@ export interface ServiceOffering {
   currency?: 'SAR' | 'AED' | string | null;
   packages: ServicePackage[];
   addons?: ServiceAddon[];
+  /** Legacy display string. Canonical edits use categoryId. */
+  category?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  customCategory?: string | null;
+  taxonomySkills?: Array<{ id: string; name: string }>;
 }
 
 /** @deprecated Prefer ServiceOffering — kept for existing imports */

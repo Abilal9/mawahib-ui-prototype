@@ -51,7 +51,9 @@ export interface CreatePostedJobPayload {
   minAmount?: number;
   maxAmount?: number;
   jobType?: JobListing['type'];
-  skills?: string[];
+  categoryId: string;
+  customCategory?: string;
+  skillIds?: string[];
 }
 
 export interface UnreadSummary {
@@ -466,7 +468,9 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
           maxAmount: payload.maxAmount,
           salary: payload.salaryLabel?.trim() || undefined,
           description: listingFields.description,
-          skills: payload.skills ?? [],
+          categoryId: payload.categoryId,
+          customCategory: payload.customCategory,
+          skillIds: payload.skillIds ?? [],
           publish: true,
         });
         await refresh();

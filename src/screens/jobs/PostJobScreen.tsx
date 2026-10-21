@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +21,12 @@ import {
   parseMoneyInput,
   toCurrencyCode,
 } from '../../utils/money';
+import { TaxonomyFields } from '../../components/taxonomy/TaxonomyFields';
+import {
+  customCategoryError,
+  displayCustomCategory,
+} from '../../domain/offeringTaxonomy';
+import type { OfferingSkillChip } from '../../domain/offeringTaxonomy';
 
 const JOB_TYPES = ['full-time', 'part-time', 'contract', 'freelance'] as const;
 const TOTAL_STEPS = 3;
@@ -49,6 +55,12 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   } = useMarketplaceSuccess(navigation, refresh);
   const step = route.params?.step ?? 1;
   const [title, setTitle] = useState('');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
+  const [customCategory, setCustomCategory] = useState('');
+  const [allowsCustom, setAllowsCustom] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [selectedSkills, setSelectedSkills] = useState<OfferingSkillChip[]>([]);
   const [type, setType] = useState<typeof JOB_TYPES[number]>('full-time');
   const [location, setLocation] = useState('');
   const [pricingType, setPricingType] = useState<ApiJobPricingType>('negotiable');
@@ -58,6 +70,7 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
   const [salaryLabel, setSalaryLabel] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
 
   const fixedAmount = parseMoneyInput(fixedText);
@@ -80,12 +93,27 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
       Alert.alert('Add a job title', 'Enter a job title before publishing.');
       return;
     }
+    if (!categoryId) {
+      Alert.alert('Choose a category', 'Select a category before publishing.');
+      return;
+    }
+    const problem = customCategoryError({
+      allowsCustomCategory: allowsCustom,
+      customCategory,
+    });
+    if (problem) {
+      setCustomError(problem);
+      Alert.alert('Describe this category', problem);
+      return;
+    }
     if (!trimmedLocation) {
       Alert.alert('Add a location', 'Enter a job location before publishing.');
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     void (async () => {
-      setSubmitting(true);
       try {
         await createPostedJob({
           title: trimmedTitle,
@@ -100,14 +128,40 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
             pricingType === 'range' ? (maxAmount ?? undefined) : undefined,
           salaryLabel,
           jobType: type,
+          categoryId,
+          customCategory: allowsCustom
+            ? displayCustomCategory(customCategory)
+            : undefined,
+          skillIds: selectedSkills.map((skill) => skill.id),
         });
         showSuccess('jobPosted');
       } catch (e) {
+        if (
+          e instanceof ApiError &&
+          e.code === 'CUSTOM_CATEGORY_MATCHES_CATEGORY' &&
+          e.categoryId
+        ) {
+          Alert.alert('Choose a category', e.message, [
+            { text: 'Keep editing', style: 'cancel' },
+            {
+              text: e.nameEn ? `Use ${e.nameEn}` : 'Use that category',
+              onPress: () => {
+                setCategoryId(e.categoryId ?? null);
+                setCategoryName(e.nameEn ?? null);
+                setAllowsCustom(false);
+                setCustomCategory('');
+                setCustomError(null);
+              },
+            },
+          ]);
+          return;
+        }
         Alert.alert(
           'Could not publish job',
           e instanceof ApiError ? e.message : 'Please try again.',
         );
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     })();
@@ -115,6 +169,20 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
 
   const goNext = () => {
     if (submitting) return;
+    if (step === 1 && !categoryId) {
+      Alert.alert('Choose a category', 'Select a category before continuing.');
+      return;
+    }
+    if (step === 1) {
+      const problem = customCategoryError({
+        allowsCustomCategory: allowsCustom,
+        customCategory,
+      });
+      if (problem) {
+        setCustomError(problem);
+        return;
+      }
+    }
     if (step === 2 && (!location.trim() || !pricingValid)) return;
     if (step < TOTAL_STEPS) {
       navigation.navigate('PostJob', { step: step + 1 });
@@ -143,6 +211,30 @@ export default function PostJobScreen({ route, navigation }: ScreenProps<'PostJo
           <>
             <Text style={styles.title}>Job Details</Text>
             <TextInput label="Job Title" placeholder="e.g. Senior UI Designer" value={title} onChangeText={setTitle} />
+            <TaxonomyFields
+              categoryId={categoryId}
+              categoryName={categoryName}
+              onCategoryChange={(category) => {
+                setCategoryId(category.id);
+                setCategoryName(category.name);
+                setAllowsCustom(category.allowsCustomCategory);
+                if (!category.allowsCustomCategory) {
+                  setCustomCategory('');
+                  setCustomError(null);
+                }
+              }}
+              skills={selectedSkills}
+              onSkillsChange={setSelectedSkills}
+              categoryRequired
+              customCategory={customCategory}
+              onCustomCategoryChange={(value) => {
+                setCustomCategory(value);
+                setCustomError(null);
+              }}
+              customLabel="What type of job is this?"
+              customError={customError}
+              onAllowsCustomCategoryChange={setAllowsCustom}
+            />
             <Text style={styles.label}>Job Type</Text>
             <View style={styles.typeRow}>
               {JOB_TYPES.map((t) => (

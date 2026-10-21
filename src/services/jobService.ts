@@ -74,8 +74,9 @@ export const jobService = {
     /** Display-only label. */
     salary?: string;
     description?: string;
-    skills?: string[];
-    exploreTag?: string;
+    categoryId: string;
+    customCategory?: string | null;
+    skillIds?: string[];
     publish?: boolean;
   }): Promise<JobListing> {
     const created = await marketplaceApi.createListing({
@@ -89,8 +90,9 @@ export const jobService = {
       maxAmount: input.maxAmount,
       salaryLabel: input.salary,
       description: input.description,
-      skills: input.skills,
-      exploreTag: input.exploreTag,
+      categoryId: input.categoryId,
+      customCategory: input.customCategory,
+      skillIds: input.skillIds,
       publish: input.publish ?? true,
     });
     const mapped = mapApiListingToJob(created);

@@ -29,6 +29,10 @@ export interface ApiServiceOffering {
   position: number;
   createdAt: string;
   updatedAt: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  customCategory?: string | null;
+  taxonomySkills?: Array<{ id: string; name: string }>;
 }
 
 export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
@@ -58,6 +62,11 @@ export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
       currency: a.currency,
       priceLabel: a.priceLabel,
     })),
+    category: api.category,
+    categoryId: api.categoryId ?? null,
+    categoryName: api.categoryName ?? null,
+    customCategory: api.customCategory ?? null,
+    taxonomySkills: api.taxonomySkills ?? [],
   };
 }
 
@@ -88,12 +97,20 @@ export const servicesApi = {
       includes: string[];
     }>;
     addons?: Array<{ title: string; price: number }>;
+    categoryId: string;
+    customCategory?: string | null;
+    skillIds?: string[];
   }): Promise<ApiServiceOffering> {
     return apiRequest<ApiServiceOffering>('/users/me/services', {
       method: 'POST',
       body: JSON.stringify({
         title: input.title,
         description: input.description,
+        categoryId: input.categoryId,
+        ...(input.customCategory !== undefined
+          ? { customCategory: input.customCategory }
+          : {}),
+        skillIds: input.skillIds ?? [],
         media: input.mediaAssetIds.map((mediaAssetId) => ({ mediaAssetId })),
         packages: input.packages.map((p) => ({
           tier: TIER_API[p.name],
@@ -119,6 +136,9 @@ export const servicesApi = {
         includes: string[];
       }>;
       addons?: Array<{ title: string; price: number }>;
+      categoryId?: string;
+      customCategory?: string | null;
+      skillIds?: string[];
     },
   ): Promise<ApiServiceOffering> {
     return apiRequest<ApiServiceOffering>(`/users/me/services/${id}`, {
@@ -126,6 +146,11 @@ export const servicesApi = {
       body: JSON.stringify({
         title: input.title,
         description: input.description,
+        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        ...(input.customCategory !== undefined
+          ? { customCategory: input.customCategory }
+          : {}),
+        ...(input.skillIds !== undefined ? { skillIds: input.skillIds } : {}),
         media: input.mediaAssetIds?.map((mediaAssetId) => ({ mediaAssetId })),
         packages: input.packages?.map((p) => ({
           tier: TIER_API[p.name],

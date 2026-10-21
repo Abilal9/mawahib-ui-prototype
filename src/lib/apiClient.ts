@@ -6,17 +6,24 @@ export class ApiError extends Error {
   code?: string;
   skillId?: string;
   nameEn?: string;
+  categoryId?: string;
 
   constructor(
     status: number,
     message: string,
-    details?: { code?: string; skillId?: string; nameEn?: string },
+    details?: {
+      code?: string;
+      skillId?: string;
+      nameEn?: string;
+      categoryId?: string;
+    },
   ) {
     super(message);
     this.status = status;
     this.code = details?.code;
     this.skillId = details?.skillId;
     this.nameEn = details?.nameEn;
+    this.categoryId = details?.categoryId;
   }
 }
 
@@ -67,6 +74,7 @@ export async function apiRequest<T>(
         code?: string;
         skillId?: string;
         nameEn?: string;
+        categoryId?: string;
       };
       if (Array.isArray(body.message)) message = body.message.join(', ');
       else if (body.message) message = body.message;
@@ -74,6 +82,7 @@ export async function apiRequest<T>(
         code: body.code,
         skillId: body.skillId,
         nameEn: body.nameEn,
+        categoryId: body.categoryId,
       });
     } catch (error) {
       if (error instanceof ApiError) throw error;

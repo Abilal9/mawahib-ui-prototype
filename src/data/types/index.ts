@@ -90,6 +90,11 @@ export interface Job {
   currency?: 'SAR' | 'AED' | null;
   description: string;
   skills: string[];
+  /** Canonical category when the listing was linked. Absent on older payloads. */
+  categoryId?: string | null;
+  categoryName?: string | null;
+  customCategory?: string | null;
+  taxonomySkills?: { id: string; name: string }[];
   postedAt: string;
   status?: 'open' | 'in-progress' | 'completed' | 'cancelled';
   matchScore?: number;

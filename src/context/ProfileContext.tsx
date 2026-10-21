@@ -139,6 +139,9 @@ interface ProfileContextValue {
       includes: string[];
     }>;
     addons?: Array<{ title: string; price: number }>;
+    categoryId: string;
+    customCategory?: string | null;
+    skillIds?: string[];
   }) => Promise<ProfileService>;
   setServices: (services: ProfileService[]) => Promise<void>;
   updateService: (
@@ -154,6 +157,9 @@ interface ProfileContextValue {
         includes: string[];
       }>;
       addons?: Array<{ title: string; price: number }>;
+      categoryId?: string;
+      customCategory?: string | null;
+      skillIds?: string[];
     },
   ) => Promise<ProfileService>;
   removeService: (serviceId: string) => Promise<void>;
