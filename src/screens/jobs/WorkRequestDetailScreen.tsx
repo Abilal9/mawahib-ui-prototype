@@ -22,6 +22,7 @@ import {
   startOfLocalDay,
   startOfLocalMonth,
 } from '../../utils/calendarDay';
+import { formatGregorianLocalDay } from '../../utils/gregorianCivilDate';
 import { placeFromLocationNote } from '../../utils/googleMapsLink';
 import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import ConfirmActionModal from '../../components/ui/ConfirmActionModal';
@@ -149,11 +150,7 @@ function formatDateTime(iso: string) {
 }
 
 function formatPickedDate(date: Date) {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return formatGregorianLocalDay(date);
 }
 
 type EngagementEvent = ApiEngagement['events'][number];

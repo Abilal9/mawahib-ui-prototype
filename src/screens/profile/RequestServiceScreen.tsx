@@ -30,6 +30,10 @@ import {
   startOfLocalDay,
   startOfLocalMonth,
 } from '../../utils/calendarDay';
+import {
+  formatGregorianMonthTitle,
+  GREGORIAN_WEEKDAYS,
+} from '../../utils/gregorianCivilDate';
 import { acceptedGoogleMapsUrl } from '../../utils/googleMapsLink';
 import { ProfileService, ServicePackage } from '../../data/types';
 import {
@@ -66,7 +70,6 @@ import { formatBytes } from '../../utils/formatBytes';
  */
 const TOTAL_STEPS = 7;
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type PackageName = ServicePackage['name'];
 type ScheduleMode = 'deadline' | 'duration';
@@ -439,10 +442,7 @@ export default function RequestServiceScreen({
   const month = calendarMonth.getMonth();
   const totalDays = daysInMonth(year, month);
   const firstDay = new Date(year, month, 1).getDay();
-  const monthLabel = calendarMonth.toLocaleString('default', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const monthLabel = formatGregorianMonthTitle(year, month + 1);
 
   return (
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.white}>
@@ -721,7 +721,7 @@ export default function RequestServiceScreen({
               </View>
 
               <View style={styles.weekRow}>
-                {WEEKDAYS.map((d) => (
+                {GREGORIAN_WEEKDAYS.map((d) => (
                   <Text key={d} style={styles.weekDay}>
                     {d}
                   </Text>

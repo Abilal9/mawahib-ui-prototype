@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { formatGregorianMonthTitle } from '../../utils/gregorianCivilDate';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -18,10 +19,7 @@ export default function SidebarCalendarPreview({ onPress }: SidebarCalendarPrevi
   const { firstDay, monthLabel, days } = useMemo(() => {
     const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
     const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
-    const monthLabel = month.toLocaleString('default', {
-      month: 'long',
-      year: 'numeric',
-    });
+    const monthLabel = formatGregorianMonthTitle(month.getFullYear(), month.getMonth() + 1);
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     return { firstDay, monthLabel, days };
   }, [month]);

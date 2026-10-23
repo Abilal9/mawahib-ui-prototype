@@ -1,52 +1,66 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Pressable,
+  ScrollView,
+  RefreshControl,
+  StyleSheet,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
+import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
-
-const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function clampDay(year: number, month: number, day: number) {
-  return Math.min(day, daysInMonth(year, month));
-}
+import { useMyCalendar } from '../../hooks/useMyCalendar';
+import {
+  formatGregorianLongDate,
+  formatGregorianMonthTitle,
+  formatGregorianSpan,
+  GREGORIAN_WEEKDAYS,
+  gregorianMonthGrid,
+  indicatorDays,
+  monthBounds,
+  scheduledOnDay,
+  workRequestRoute,
+  type CalendarItem,
+  type ScheduledCalendarItem,
+} from '../../utils/gregorianCivilDate';
 
 export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1);
-  });
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-  const totalDays = daysInMonth(year, month);
-  const firstDay = new Date(year, month, 1).getDay();
-  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
+  const calendar = useMyCalendar();
+  const grid = useMemo(
+    () => gregorianMonthGrid(calendar.year, calendar.month),
+    [calendar.year, calendar.month],
+  );
+  const bounds = monthBounds(calendar.year, calendar.month);
+  const monthTitle = formatGregorianMonthTitle(calendar.year, calendar.month);
+  const heading = formatGregorianLongDate(calendar.selected) ?? monthTitle;
+  const page =
+    calendar.page &&
+    calendar.page.from === bounds.from &&
+    calendar.page.to === bounds.to
+      ? calendar.page
+      : null;
+  const marks = useMemo(() => {
+    if (!page || calendar.phase !== 'ready') return new Set<string>();
+    return new Set(indicatorDays(page.scheduled, page.from, page.to));
+  }, [page, calendar.phase]);
+  const dayItems = useMemo(
+    () => (page ? scheduledOnDay(page.scheduled, calendar.selected) : []),
+    [page, calendar.selected],
+  );
 
-  const monthLabel = currentMonth.toLocaleString('default', {
-    month: 'long',
-    year: 'numeric',
-  });
-  const monthName = currentMonth.toLocaleString('default', { month: 'long' });
-  const days = Array.from({ length: totalDays }, (_, i) => i + 1);
-
-  const shiftMonth = (delta: number) => {
-    const next = new Date(year, month + delta, 1);
-    const nextYear = next.getFullYear();
-    const nextMonth = next.getMonth();
-    const today = new Date();
-    const isCurrentMonth =
-      nextYear === today.getFullYear() && nextMonth === today.getMonth();
-
-    setCurrentMonth(next);
-    setSelectedDay(
-      isCurrentMonth ? today.getDate() : clampDay(nextYear, nextMonth, selectedDay)
-    );
+  const openItem = (item: CalendarItem) => {
+    const params = workRequestRoute(item.workRequestId);
+    if (!params) return;
+    navigation.navigate('WorkRequestDetail', params);
   };
+
+  const monthHasScheduled = (page?.scheduled.length ?? 0) > 0;
+  const hasUnscheduled = (page?.unscheduled.length ?? 0) > 0 || page?.unscheduledHasMore === true;
 
   return (
     <ScreenContainer padded={false}>
@@ -59,19 +73,28 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={calendar.refreshing}
+            onRefresh={calendar.refresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={styles.monthHeader}>
-          <TouchableOpacity onPress={() => shiftMonth(-1)} hitSlop={8}>
+          <TouchableOpacity onPress={() => calendar.shiftMonth(-1)} hitSlop={8}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.monthName}>{monthLabel}</Text>
-          <TouchableOpacity onPress={() => shiftMonth(1)} hitSlop={8}>
+          <Text style={styles.monthName}>{monthTitle}</Text>
+          <TouchableOpacity onPress={() => calendar.shiftMonth(1)} hitSlop={8}>
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.weekDays}>
-          {DAYS_OF_WEEK.map((day) => (
+          {GREGORIAN_WEEKDAYS.map((day) => (
             <Text key={day} style={styles.weekDay}>
               {day}
             </Text>
@@ -79,37 +102,115 @@ export default function CalendarScreen({ navigation }: ScreenProps<'Calendar'>) 
         </View>
 
         <View style={styles.daysGrid}>
-          {Array.from({ length: firstDay }).map((_, index) => (
-            <View key={`empty-${index}`} style={styles.dayCell} />
-          ))}
-          {days.map((day) => {
-            const isSelected = day === selectedDay;
+          {grid.map((cell, index) => {
+            if (!cell) {
+              return <View key={`blank-${index}`} style={styles.dayCell} />;
+            }
+            const isSelected = cell.iso === calendar.selected;
+            const isToday = cell.iso === calendar.today;
+            const marked = marks.has(cell.iso);
+            const label = formatGregorianLongDate(cell.iso) ?? cell.iso;
             return (
-              <TouchableOpacity
-                key={day}
+              <Pressable
+                key={cell.iso}
                 style={styles.dayCell}
-                onPress={() => setSelectedDay(day)}
-                activeOpacity={0.8}
+                onPress={() => calendar.selectDay(cell.iso)}
+                accessibilityRole="button"
+                accessibilityLabel={marked ? `${label}, scheduled work` : label}
+                accessibilityState={{ selected: isSelected }}
               >
-                <View style={[styles.dayInner, isSelected && styles.daySelected]}>
-                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
-                    {day}
-                  </Text>
+                <View style={[styles.dayInner, isToday && !isSelected && styles.dayToday, isSelected && styles.daySelected]}>
+                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>{cell.day}</Text>
                 </View>
-                <View style={styles.eventDotSpacer} />
-              </TouchableOpacity>
+                <View style={[styles.eventDotSpacer, marked && styles.eventDot]} />
+              </Pressable>
             );
           })}
         </View>
 
         <View style={styles.eventsSection}>
-          <Text style={styles.eventsTitle}>
-            Events on {monthName} {selectedDay}
-          </Text>
-          <Text style={styles.noEvents}>No events scheduled</Text>
+          {calendar.phase !== 'error' && !page ? (
+            <Text style={styles.noEvents}>Loading calendar…</Text>
+          ) : null}
+          {calendar.phase === 'error' ? (
+            <View>
+              <Text style={styles.noEvents}>Couldn{"'"}t load calendar</Text>
+              <TouchableOpacity onPress={calendar.retry} style={styles.retry} accessibilityRole="button">
+                <Text style={styles.retryText}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {calendar.phase === 'ready' && page ? (
+            <View>
+              <Text style={styles.eventsTitle}>{heading}</Text>
+              {page.scheduledHasMore ? (
+                <Text style={styles.notice}>Some scheduled work in this period is not shown.</Text>
+              ) : null}
+              {dayItems.length === 0 ? (
+                <Text style={styles.noEvents}>
+                  {monthHasScheduled || hasUnscheduled
+                    ? 'Nothing scheduled this day'
+                    : 'No scheduled work yet'}
+                </Text>
+              ) : (
+                dayItems.map((item) => (
+                  <AgendaCard key={item.engagementId} item={item} onPress={() => openItem(item)} />
+                ))
+              )}
+
+              {hasUnscheduled ? (
+                <View style={styles.unscheduled}>
+                  <Text style={styles.eventsTitle}>Unscheduled</Text>
+                  {page.unscheduled.map((item) => (
+                    <AgendaCard
+                      key={item.engagementId}
+                      item={item}
+                      detail="Date not set"
+                      onPress={() => openItem(item)}
+                    />
+                  ))}
+                  {page.unscheduledHasMore ? (
+                    <Text style={styles.notice}>More unscheduled work exists.</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+function AgendaCard({
+  item,
+  detail,
+  onPress,
+}: {
+  item: CalendarItem | ScheduledCalendarItem;
+  detail?: string;
+  onPress: () => void;
+}) {
+  const range =
+    'startDate' in item ? formatGregorianSpan(item.startDate, item.endDate) : null;
+  const subtitle = detail ?? range;
+  const tappable = workRequestRoute(item.workRequestId) !== null;
+  return (
+    <Pressable
+      style={styles.eventCard}
+      disabled={!tappable}
+      accessibilityRole={tappable ? 'button' : 'text'}
+      accessibilityState={{ disabled: !tappable }}
+      onPress={tappable ? onPress : undefined}
+    >
+      <UserAvatar uri={item.counterpart.avatarUrl} size={40} />
+      <View style={styles.eventInfo}>
+        <Text style={styles.eventTitle}>{item.title}</Text>
+        <Text style={styles.eventMeta}>{item.counterpart.displayName}</Text>
+        {subtitle ? <Text style={styles.eventMeta}>{subtitle}</Text> : null}
+        <Text style={styles.eventStatus}>{item.statusLabel}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -166,6 +267,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 18,
   },
+  dayToday: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
   daySelected: {
     backgroundColor: colors.primary,
   },
@@ -174,17 +279,8 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: typography.label.fontFamily,
   },
-  eventDotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    marginTop: 4,
-    minHeight: 5,
-  },
   eventDot: {
-    width: 5,
-    height: 5,
+    backgroundColor: colors.primary,
     borderRadius: 2.5,
   },
   eventDotSpacer: {
@@ -193,8 +289,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   eventsSection: { padding: spacing.screen, paddingTop: spacing.xl },
-  eventsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.lg },
+  eventsTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.md },
   noEvents: { ...typography.body, color: colors.textSecondary },
+  notice: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  retry: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.button,
+    backgroundColor: colors.primary,
+  },
+  retryText: { ...typography.label, color: colors.white },
+  unscheduled: { marginTop: spacing.xl },
   eventCard: {
     flexDirection: 'row',
     backgroundColor: colors.white,
@@ -204,13 +315,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
     gap: spacing.md,
+    alignItems: 'center',
   },
-  eventIndicator: { width: 4, borderRadius: 2 },
   eventInfo: { flex: 1 },
   eventTitle: { ...typography.label, color: colors.text },
-  eventTime: {
+  eventMeta: {
     ...typography.caption,
     color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  eventStatus: {
+    ...typography.caption,
+    color: colors.text,
     marginTop: spacing.xs,
   },
 });

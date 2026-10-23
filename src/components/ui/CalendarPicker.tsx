@@ -9,8 +9,10 @@ import {
   startOfLocalDay,
   startOfLocalMonth,
 } from '../../utils/calendarDay';
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+import {
+  formatGregorianMonthTitle,
+  GREGORIAN_WEEKDAYS,
+} from '../../utils/gregorianCivilDate';
 
 interface Props {
   /** Any day inside the month to render. */
@@ -54,10 +56,7 @@ export default function CalendarPicker({
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
     return {
-      label: month.toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      }),
+      label: formatGregorianMonthTitle(year, monthIndex + 1),
       leadingBlanks: new Date(year, monthIndex, 1).getDay(),
       days: Array.from(
         { length: new Date(year, monthIndex + 1, 0).getDate() },
@@ -108,7 +107,7 @@ export default function CalendarPicker({
       </View>
 
       <View style={styles.weekRow}>
-        {WEEKDAYS.map((day) => (
+        {GREGORIAN_WEEKDAYS.map((day) => (
           <Text key={day} style={styles.weekDay}>
             {day}
           </Text>
