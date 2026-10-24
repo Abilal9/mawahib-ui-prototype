@@ -18,6 +18,7 @@ import {
   savePendingSignup,
 } from '../lib/pendingSignup';
 import { isPasswordValid } from '../lib/passwordRules';
+import { shouldIgnoreStaleAuthResult } from './authSessionGuard';
 import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
 import { authApi, mapApiUserToUser, type ApiUser } from '../services/authApi';
@@ -196,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const hydrateInFlight = useRef<Promise<ApiUser | null> | null>(null);
+  const authEpoch = useRef(0);
   const hydrateSessionRef = useRef<Session | null>(null);
   const hydrateOverridesRef = useRef<HydrateOverrides | undefined>(undefined);
   const lastHydrateErrorRef = useRef<string | null>(null);
@@ -207,6 +209,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
   const clearAuthenticatedState = useCallback(() => {
+    authEpoch.current += 1;
+    hydrateSessionRef.current = null;
+    hydrateOverridesRef.current = undefined;
     setSession(null);
     setApiUser(null);
     setIsSignedIn(false);
@@ -271,6 +276,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         overridesSnap: HydrateOverrides | undefined,
       ): Promise<ApiUser | null> => {
         const accessToken = sessionSnap.access_token;
+        const epochAtStart = authEpoch.current;
+        const isStale = (liveToken: string | null) =>
+          shouldIgnoreStaleAuthResult({
+            epochAtStart,
+            epochNow: authEpoch.current,
+            requestToken: accessToken,
+            trackedToken: hydrateSessionRef.current?.access_token ?? null,
+            liveToken,
+          });
         try {
           let user: ApiUser;
           try {
@@ -292,14 +306,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
           }
           lastHydrateErrorRef.current = null;
+          if (isStale(hydrateSessionRef.current?.access_token ?? null)) return null;
           applyApiUser(user);
           if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
             clearPendingSignup();
           }
           return user;
         } catch (err) {
+          const { data: live } = await supabase.auth.getSession();
+          const liveToken = live.session?.access_token ?? null;
+          if (isStale(liveToken)) {
+            if (live.session && liveToken && liveToken !== accessToken) {
+              hydrateSessionRef.current = live.session;
+            }
+            return null;
+          }
           if (err instanceof ApiError && err.status === 401) {
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
             clearAuthenticatedState();
             lastHydrateErrorRef.current = err.message;
             return null;
@@ -391,6 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === 'TOKEN_REFRESHED') {
         setSession(next);
+        if (next) hydrateSessionRef.current = next;
         return;
       }
 
@@ -705,7 +729,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshMe = useCallback(async () => {
+    const epoch = authEpoch.current;
     const user = await authApi.getMe();
+    if (epoch !== authEpoch.current) return user;
     applyApiUser(user);
     return user;
   }, [applyApiUser]);
@@ -770,8 +796,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setAuthError(null);
+    // Local scope signs this device out only. The client default is global.
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      throw new Error('Could not log out. You are still signed in on this device.');
+    }
     // Keep pendingSignup so abandoned verification can resume after logout.
-    await supabase.auth.signOut();
     clearAuthenticatedState();
   }, [clearAuthenticatedState]);
 

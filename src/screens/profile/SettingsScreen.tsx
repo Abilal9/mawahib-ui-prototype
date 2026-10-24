@@ -1,50 +1,139 @@
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  TouchableOpacity,
   StyleSheet,
-  Switch,
-  Alert,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import ScreenContainer from '../../components/ui/ScreenContainer';
-import { colors, spacing, radius, typography } from '../../theme';
-import { useAuth } from '../../context/AuthContext';
+import Constants from 'expo-constants';
 import { ScreenProps } from '../../navigation/types';
+import { colors, spacing, radius, typography } from '../../theme';
+import ScreenContainer from '../../components/ui/ScreenContainer';
+import { useAuth } from '../../context/AuthContext';
+import type { AccountType } from '../../context/AuthContext';
+import { useLocalSignOutPrompt } from '../../components/auth/LocalSignOutConfirm';
+import type { ApiUser } from '../../services/authApi';
+import {
+  COUNTRY_CATALOG,
+  currencyForCountry,
+  isSupportedCurrency,
+  normalizeCountryCode,
+} from '../../data/location/geo';
 
-const SETTINGS_SECTIONS = [
-  {
-    title: 'Account',
-    items: [
-      { id: 'profile', icon: 'person-outline' as const, label: 'Edit Profile' },
-      { id: 'premium', icon: 'diamond-outline' as const, label: 'Mawahib Premium', highlight: true },
-      { id: 'privacy', icon: 'lock-closed-outline' as const, label: 'Privacy & Security' },
-    ],
-  },
-  {
-    title: 'Preferences',
-    items: [
-      { id: 'notifications', icon: 'notifications-outline' as const, label: 'Notifications', toggle: true },
-      { id: 'language', icon: 'language-outline' as const, label: 'Language', value: 'English' },
-      { id: 'calendar', icon: 'calendar-outline' as const, label: 'Calendar' },
-    ],
-  },
-  {
-    title: 'Support',
-    items: [
-      { id: 'help', icon: 'help-circle-outline' as const, label: 'Help Center' },
-      { id: 'feedback', icon: 'chatbox-outline' as const, label: 'Send Feedback' },
-      { id: 'about', icon: 'information-circle-outline' as const, label: 'About Mawahib' },
-    ],
-  },
-];
+type VerificationState = 'verified' | 'unverified' | 'unknown';
+
+type SettingsRow = {
+  label: string;
+  value?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  onPress?: () => void;
+  status?: VerificationState;
+};
+
+function verificationState(value: boolean | undefined): VerificationState {
+  if (value === true) return 'verified';
+  if (value === false) return 'unverified';
+  return 'unknown';
+}
+
+const CURRENCY_NOTE =
+  'Used for new jobs and services based on your profile country. Existing work keeps its original currency.';
+
+function accountTypeLabel(accountType: AccountType | undefined): string {
+  if (accountType === 'talent') return 'Talent';
+  if (accountType === 'business') return 'Business';
+  return 'Not available';
+}
+
+function countryLabel(user: ApiUser): string {
+  const code = normalizeCountryCode(user.countryCode ?? null);
+  if (code) return COUNTRY_CATALOG[code].label;
+  const saved = user.locationCountry?.trim();
+  return saved || 'Not added';
+}
+
+function currencyContext(user: ApiUser): { value: string; note: string } {
+  const country = normalizeCountryCode(user.countryCode ?? null);
+  const stored = isSupportedCurrency(user.defaultCurrency)
+    ? user.defaultCurrency.trim().toUpperCase()
+    : null;
+  const derived = country ? currencyForCountry(country) : null;
+  const currency = stored ?? derived;
+  if (!currency) {
+    return {
+      value: 'Not available',
+      note: 'Add a country in Edit Profile. Until then, new jobs and services use SAR. Existing work keeps its original currency.',
+    };
+  }
+  return { value: currency, note: CURRENCY_NOTE };
+}
+
+function usernameLabel(username: string | undefined): string {
+  const trimmed = username?.trim();
+  if (!trimmed) return 'Not available';
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
+}
+
+function appVersionLabel(): string {
+  const version = Constants.expoConfig?.version?.trim();
+  return version ? `Mawahib v${version}` : 'Mawahib';
+}
 
 export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
-  const { signOut } = useAuth();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const { apiUser, refreshMe } = useAuth();
+  const signOutPrompt = useLocalSignOutPrompt(() => {
+    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMe().catch(() => undefined);
+    }, [refreshMe]),
+  );
+
+  const email = apiUser?.email?.trim() || '';
+  const phone = apiUser?.phoneE164?.trim() || '';
+  const currency = apiUser ? currencyContext(apiUser) : null;
+
+  const shortcutRows: SettingsRow[] = [
+    {
+      label: 'Edit Profile',
+      icon: 'person-outline',
+      onPress: () => navigation.navigate('EditProfile'),
+    },
+    {
+      label: 'Calendar',
+      icon: 'calendar-outline',
+      onPress: () => navigation.navigate('Calendar'),
+    },
+  ];
+
+  const accountRows: SettingsRow[] = [
+    {
+      label: 'Email',
+      value: email || 'Not available',
+      status: email ? verificationState(apiUser?.emailVerified) : undefined,
+    },
+    {
+      label: 'Phone',
+      value: phone || 'Not added',
+      status: phone ? verificationState(apiUser?.phoneVerified) : undefined,
+    },
+    { label: 'Username', value: usernameLabel(apiUser?.username) },
+    { label: 'Account type', value: accountTypeLabel(apiUser?.accountType) },
+    {
+      label: 'Country',
+      value: apiUser ? countryLabel(apiUser) : 'Not added',
+    },
+    {
+      label: 'Currency',
+      value: currency?.value ?? 'Not available',
+    },
+  ];
 
   return (
     <ScreenContainer padded={false}>
@@ -58,105 +147,176 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {SETTINGS_SECTIONS.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.sectionCard}>
-              {section.items.map((item, index) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.row, index < section.items.length - 1 && styles.rowBorder]}
-                  onPress={() => {
-                    if ('toggle' in item && item.toggle) return;
-                    if (item.id === 'premium') {
-                      navigation.navigate('Premium');
-                      return;
-                    }
-                    if (item.id === 'calendar') {
-                      navigation.navigate('Calendar');
-                      return;
-                    }
-                    if (item.id === 'language') {
-                      navigation.navigate('ChangeLanguage');
-                      return;
-                    }
-                    if (item.id === 'profile') {
-                      navigation.navigate('EditProfile');
-                      return;
-                    }
-                    Alert.alert('Coming soon', `${item.label} will be available in a future update.`);
-                  }}
-                  activeOpacity={'toggle' in item && item.toggle ? 1 : 0.7}
-                >
-                  <Ionicons
-                    name={item.icon}
-                    size={22}
-                    color={'highlight' in item && item.highlight ? colors.primary : colors.textSecondary}
-                  />
-                  <Text style={[styles.rowLabel, 'highlight' in item && item.highlight && styles.rowHighlight]}>
-                    {item.label}
-                  </Text>
-                  {'value' in item && item.value && (
-                    <Text style={styles.rowValue}>{item.value}</Text>
-                  )}
-                  {'toggle' in item && item.toggle ? (
-                    <Switch
-                      value={notificationsEnabled}
-                      onValueChange={setNotificationsEnabled}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  ) : (
-                    <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ))}
+        <Section title="Shortcuts" rows={shortcutRows} />
+        <Section title="Account" rows={accountRows} note={currency?.note} />
+        <Section title="About" rows={[{ label: 'Version', value: appVersionLabel() }]} />
 
-        <TouchableOpacity
-          style={styles.logoutButton}
-          activeOpacity={0.8}
-          onPress={() => {
-            void (async () => {
-              await signOut();
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'SignIn' }],
-              });
-            })();
-          }}
-        >
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.version}>Mawahib v1.0.0</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Session</Text>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            activeOpacity={0.8}
+            disabled={signOutPrompt.busy}
+            onPress={signOutPrompt.request}
+          >
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+      {signOutPrompt.dialog}
     </ScreenContainer>
+  );
+}
+
+function VerificationMark({ state }: { state: VerificationState }) {
+  if (state === 'unknown') {
+    return <Text style={styles.statusUnknown}>Not available</Text>;
+  }
+  const verified = state === 'verified';
+  return (
+    <View style={styles.statusRow}>
+      <Ionicons
+        name={verified ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+        size={14}
+        color={verified ? colors.success : colors.warning}
+      />
+      <Text style={verified ? styles.statusVerified : styles.statusUnverified}>
+        {verified ? 'Verified' : 'Not verified'}
+      </Text>
+    </View>
+  );
+}
+
+function Section({
+  title,
+  rows,
+  note,
+}: {
+  title: string;
+  rows: SettingsRow[];
+  note?: string;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionCard}>
+        {rows.map((row, index) => {
+          const content = (
+            <>
+              {row.icon ? (
+                <Ionicons name={row.icon} size={22} color={colors.textSecondary} />
+              ) : null}
+              <Text style={[styles.rowLabel, row.value ? styles.rowLabelFixed : styles.rowLabelFill]}>
+                {row.label}
+              </Text>
+              {row.value ? (
+                <View style={styles.valueBlock}>
+                  <Text style={styles.rowValue} numberOfLines={2}>
+                    {row.value}
+                  </Text>
+                  {row.status ? <VerificationMark state={row.status} /> : null}
+                </View>
+              ) : null}
+              {row.onPress ? (
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              ) : null}
+            </>
+          );
+          if (row.onPress) {
+            return (
+              <TouchableOpacity
+                key={row.label}
+                style={[styles.row, index < rows.length - 1 && styles.rowBorder]}
+                activeOpacity={0.7}
+                onPress={row.onPress}
+              >
+                {content}
+              </TouchableOpacity>
+            );
+          }
+          return (
+            <View
+              key={row.label}
+              style={[styles.row, index < rows.length - 1 && styles.rowBorder]}
+            >
+              {content}
+            </View>
+          );
+        })}
+        {note ? <Text style={styles.note}>{note}</Text> : null}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.screen, paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screen,
+    paddingVertical: spacing.md,
   },
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h3, color: colors.text },
   content: { paddingHorizontal: spacing.screen, paddingBottom: spacing.xxxl },
   section: { marginBottom: spacing.xl },
-  sectionTitle: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  sectionCard: { backgroundColor: colors.white, borderRadius: radius.card, borderWidth: 1, borderColor: colors.borderLight },
-  row: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md },
+  sectionTitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-  rowLabel: { ...typography.body, color: colors.text, flex: 1 },
-  rowHighlight: { color: colors.primary, fontFamily: typography.label.fontFamily },
-  rowValue: { ...typography.bodySmall, color: colors.textSecondary, marginRight: spacing.xs },
+  rowLabel: { ...typography.body, color: colors.text },
+  rowLabelFill: { flex: 1 },
+  rowLabelFixed: { flexShrink: 0 },
+  valueBlock: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  rowValue: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'right',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusVerified: { ...typography.caption, color: colors.success },
+  statusUnverified: { ...typography.caption, color: colors.warning },
+  statusUnknown: { ...typography.caption, color: colors.textSecondary },
+  note: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    lineHeight: 18,
+  },
   logoutButton: {
-    alignItems: 'center', paddingVertical: spacing.lg,
-    backgroundColor: colors.white, borderRadius: radius.card,
-    borderWidth: 1, borderColor: colors.error + '30', marginTop: spacing.lg,
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.error + '30',
   },
   logoutText: { ...typography.label, color: colors.error },
-  version: { ...typography.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xl },
 });

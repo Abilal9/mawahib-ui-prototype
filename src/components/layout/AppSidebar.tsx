@@ -18,7 +18,7 @@ import { colors, spacing, radius, typography } from '../../theme';
 import UserAvatar from '../ui/UserAvatar';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
-import { useAuth } from '../../context/AuthContext';
+import { useLocalSignOutPrompt } from '../auth/LocalSignOutConfirm';
 import { RootStackParamList } from '../../navigation/types';
 import { displayProfileTitle } from '../../constants/profile';
 import { formatRatingValue, hasRealReviews } from '../../utils/profileRating';
@@ -55,11 +55,14 @@ const FOOTER_LINKS: {
 export default function AppSidebar() {
   const { isOpen, close } = useSidebar();
   const { user } = useMyProfile();
-  const { signOut } = useAuth();
+  const signOutPrompt = useLocalSignOutPrompt(() => {
+    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+  });
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const logoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -78,6 +81,12 @@ export default function AppSidebar() {
       ]).start();
     }
   }, [isOpen, slideAnim, fadeAnim]);
+
+  useEffect(() => {
+    return () => {
+      if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    };
+  }, []);
 
   const handleNavigate = (
     route:
@@ -101,14 +110,12 @@ export default function AppSidebar() {
   };
 
   const handleLogout = () => {
+    if (signOutPrompt.busy) return;
     close();
-    void (async () => {
-      await signOut();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
-    })();
+    if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    logoutTimer.current = setTimeout(() => {
+      signOutPrompt.request();
+    }, 280);
   };
 
   const showRating = hasRealReviews(user);
@@ -116,6 +123,7 @@ export default function AppSidebar() {
   const reviews = user.reviewCount ?? 0;
 
   return (
+    <>
     <Modal visible={isOpen} transparent animationType="none" onRequestClose={close}>
       <View style={styles.overlay}>
         <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
@@ -188,7 +196,6 @@ export default function AppSidebar() {
 
             <View style={styles.footerSpacer} />
 
-            {/* Calendar + Premium sit above Documentation */}
             <View style={styles.bottomBlock}>
               <SidebarCalendarPreview onPress={() => handleNavigate('Calendar')} />
 
@@ -243,6 +250,8 @@ export default function AppSidebar() {
         </Animated.View>
       </View>
     </Modal>
+    {signOutPrompt.dialog}
+    </>
   );
 }
 

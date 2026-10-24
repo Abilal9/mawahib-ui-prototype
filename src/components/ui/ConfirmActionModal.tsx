@@ -44,14 +44,19 @@ export default function ConfirmActionModal({
     if (!visible) setComment('');
   }, [visible]);
 
+  const dismiss = () => {
+    if (busy) return;
+    onCancel();
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onCancel}
+      onRequestClose={dismiss}
     >
-      <Pressable style={styles.backdrop} onPress={onCancel}>
+      <Pressable style={styles.backdrop} onPress={dismiss}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
@@ -78,6 +83,7 @@ export default function ConfirmActionModal({
               title={confirmLabel}
               style={danger ? { ...styles.half, ...styles.danger } : styles.half}
               disabled={busy}
+              loading={busy}
               onPress={() =>
                 onConfirm(commentPlaceholder ? comment.trim() || undefined : undefined)
               }

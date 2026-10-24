@@ -22,7 +22,7 @@ const PLANS = [
     name: 'Pro',
     price: '49',
     period: '/month',
-    features: ['Unlimited applications', 'Priority in search', 'Analytics dashboard', 'Verified badge'],
+    features: ['Unlimited applications', 'Priority in search', 'Analytics dashboard'],
     popular: true,
   },
   {
