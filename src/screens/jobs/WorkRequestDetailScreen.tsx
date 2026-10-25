@@ -33,7 +33,7 @@ import DocumentViewerModal, {
   type DocumentViewerSource,
 } from '../../components/media/DocumentViewerModal';
 import EngagementReviewPrompt from '../../components/job/EngagementReviewPrompt';
-import { colors, spacing, radius, typography } from '../../theme';
+import { colors, spacing, radius, typography, fontFamily } from '../../theme';
 import {
   normalizeMoneyInputEditing,
   parseMoneyInput,
@@ -485,6 +485,8 @@ export default function WorkRequestDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportText, setReportText] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const reportSubmittingRef = useRef(false);
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
   /** Client delivery note sheet: dispute (→ disputed) or request changes (→ in_progress). */
   const [deliveryNoteMode, setDeliveryNoteMode] = useState<
@@ -1074,10 +1076,16 @@ export default function WorkRequestDetailScreen({
     }
   };
 
+  const closeReportSheet = () => {
+    if (reportSubmittingRef.current) return;
+    setReportOpen(false);
+  };
+
   const submitReport = async () => {
     const description = reportText.trim();
-    if (description.length < 10) return;
-    setBusy(true);
+    if (description.length < 10 || reportSubmittingRef.current) return;
+    reportSubmittingRef.current = true;
+    setReportSubmitting(true);
     try {
       // Moderation phase will replace this stub with a real report API.
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -1085,7 +1093,8 @@ export default function WorkRequestDetailScreen({
       setReportText('');
       setReportSuccessOpen(true);
     } finally {
-      setBusy(false);
+      reportSubmittingRef.current = false;
+      setReportSubmitting(false);
     }
   };
 
@@ -2055,11 +2064,11 @@ export default function WorkRequestDetailScreen({
         visible={reportOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setReportOpen(false)}
+        onRequestClose={closeReportSheet}
       >
         <Pressable
           style={styles.modalBackdrop}
-          onPress={() => setReportOpen(false)}
+          onPress={closeReportSheet}
         >
           <Pressable
             style={styles.reportSheet}
@@ -2070,6 +2079,10 @@ export default function WorkRequestDetailScreen({
             <Text style={styles.reportDescription}>
               Please describe the issue you experienced.
             </Text>
+            <Text style={styles.reportBeta}>
+              <Text style={styles.reportBetaMark}>BETA</Text>
+              {' — sending this does not file a report yet.'}
+            </Text>
             <TextInput
               placeholder="Describe what happened..."
               placeholderTextColor={colors.textSecondary}
@@ -2077,7 +2090,7 @@ export default function WorkRequestDetailScreen({
               multiline
               value={reportText}
               onChangeText={setReportText}
-              editable={!busy}
+              editable={!reportSubmitting}
             />
             {reportText.trim().length > 0 && reportText.trim().length < 10 ? (
               <Text style={styles.reportHint}>
@@ -2089,13 +2102,13 @@ export default function WorkRequestDetailScreen({
                 title="Cancel"
                 variant="secondary"
                 style={styles.halfBtn}
-                disabled={busy}
-                onPress={() => setReportOpen(false)}
+                disabled={reportSubmitting}
+                onPress={closeReportSheet}
               />
               <Button
                 title="Send Report"
                 style={styles.halfBtn}
-                disabled={busy || reportText.trim().length < 10}
+                disabled={reportSubmitting || reportText.trim().length < 10}
                 onPress={() => void submitReport()}
               />
             </View>
@@ -2203,10 +2216,8 @@ export default function WorkRequestDetailScreen({
 
       <SuccessConfirmationModal
         visible={reportSuccessOpen}
-        title="Report Submitted"
-        message={
-          'Thank you for your report.\n\nOur team has received it and will review it as soon as possible. If additional information is needed, someone from our team will contact you.'
-        }
+        title="Report not sent"
+        message="BETA — nothing was sent for review, and no one from Mawahib will contact you about it."
         onDone={() => setReportSuccessOpen(false)}
       />
     </ScreenContainer>
@@ -2303,6 +2314,16 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  reportBeta: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  reportBetaMark: {
+    ...typography.bodySmall,
+    fontFamily: fontFamily.semiBold,
+    color: colors.text,
   },
   reportInput: {
     minHeight: 120,

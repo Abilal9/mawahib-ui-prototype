@@ -23,7 +23,7 @@ import UserAvatar from '../../components/ui/UserAvatar';
 import Button from '../../components/ui/Button';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import PostLikesModal from '../../components/ui/PostLikesModal';
-import { colors, spacing, radius, typography } from '../../theme';
+import { colors, spacing, radius, typography, fontFamily } from '../../theme';
 import { Comment, Post } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
@@ -71,6 +71,7 @@ export default function PostDetailScreen({
   const [reportTarget, setReportTarget] = useState<Comment | null>(null);
   const [reportText, setReportText] = useState('');
   const [reportBusy, setReportBusy] = useState(false);
+  const reportBusyRef = useRef(false);
   const [reportSuccessOpen, setReportSuccessOpen] = useState(false);
   const [likesOpen, setLikesOpen] = useState(false);
 
@@ -186,15 +187,16 @@ export default function PostDetailScreen({
   }, []);
 
   const closeCommentReport = useCallback(() => {
-    if (reportBusy) return;
+    if (reportBusyRef.current) return;
     setReportTarget(null);
     setReportText('');
-  }, [reportBusy]);
+  }, []);
 
   const submitCommentReport = useCallback(async () => {
-    if (!reportTarget || !post) return;
+    if (reportBusyRef.current || !reportTarget || !post) return;
     const description = reportText.trim();
     if (description.length < REPORT_MIN_CHARS) return;
+    reportBusyRef.current = true;
     setReportBusy(true);
     try {
       // Deferred: moderation phase will replace this stub with
@@ -211,6 +213,7 @@ export default function PostDetailScreen({
       setReportText('');
       setReportSuccessOpen(true);
     } finally {
+      reportBusyRef.current = false;
       setReportBusy(false);
     }
   }, [post, reportTarget, reportText]);
@@ -674,6 +677,10 @@ export default function PostDetailScreen({
             <Text style={styles.reportDescription}>
               What’s wrong with this comment?
             </Text>
+            <Text style={styles.reportBeta}>
+              <Text style={styles.reportBetaMark}>BETA</Text>
+              {' — sending this does not file a report yet.'}
+            </Text>
             <TextInput
               placeholder="Describe the issue..."
               placeholderTextColor={colors.textSecondary}
@@ -718,10 +725,8 @@ export default function PostDetailScreen({
 
       <SuccessConfirmationModal
         visible={reportSuccessOpen}
-        title="Report Submitted"
-        message={
-          'Thank you for your report.\n\nOur team has received it and will review it as soon as possible. If additional information is needed, someone from our team will contact you.'
-        }
+        title="Report not sent"
+        message="BETA — nothing was sent for review, and no one from Mawahib will contact you about it."
         onDone={() => setReportSuccessOpen(false)}
       />
     </ScreenContainer>
@@ -902,6 +907,16 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  reportBeta: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  reportBetaMark: {
+    ...typography.bodySmall,
+    fontFamily: fontFamily.semiBold,
+    color: colors.text,
   },
   reportInput: {
     minHeight: 120,

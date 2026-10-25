@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
-import { colors, spacing, radius, typography } from '../../theme';
+import { colors, spacing, typography, fontFamily } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 
 export default function TurnOnNotificationsScreen({
@@ -30,6 +30,12 @@ export default function TurnOnNotificationsScreen({
       </View>
 
       <View style={styles.footer}>
+        <Text style={styles.betaCaption}>
+          <Text style={styles.betaMark}>BETA</Text>
+          {
+            ' — notifications are not turned on from this screen yet. Updates still appear in the app’s Notifications inbox.'
+          }
+        </Text>
         <Button
           title="Enable Notifications"
           onPress={() => navigation.navigate('SignupSuccess')}
@@ -97,6 +103,17 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingBottom: spacing.xl,
+  },
+  betaCaption: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  betaMark: {
+    fontFamily: fontFamily.semiBold,
+    color: colors.text,
   },
   laterButton: {
     marginTop: spacing.sm,
