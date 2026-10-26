@@ -100,6 +100,7 @@ interface ProfileContextValue {
   saveProfileBasics: (patch: {
     name?: string;
     title?: string | null;
+    bio?: string;
     location?: string;
     countryCode?: CountryCode | null;
     locationCode?: string | null;
@@ -357,7 +358,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const persistMe = useCallback(
     async (payload: UpdateMePayload) => {
-      if (!accessToken || !isSignedIn) return;
+      if (!accessToken || !isSignedIn) {
+        throw new Error('You are not signed in.');
+      }
       await authApi.updateMe(payload);
       // Canonical hydrate from Nest so Auth + Profile stay aligned.
       const refreshed = await refreshMe();
@@ -397,6 +400,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         const locationPayload = locationPartsFromPatch(patch);
         await persistMe({
           ...(patch.name !== undefined ? { displayName: patch.name } : {}),
+          ...(patch.bio !== undefined ? { bio: patch.bio } : {}),
           ...(patch.title !== undefined
             ? {
                 title: patch.title?.trim()

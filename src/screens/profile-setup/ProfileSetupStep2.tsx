@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, View, Text, ScrollView, StyleSheet } from 'react-native';
 import Button from '../../components/ui/Button';
 import TalentChipsEditor from '../../components/profile/TalentChipsEditor';
@@ -23,27 +23,41 @@ export default function ProfileSetupStep2({
     }),
   );
   const [saving, setSaving] = useState(false);
+  const saveInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const persistAnd = async (next: () => void) => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     try {
       setSaving(true);
       await setTalentSelections(selected);
-      next();
+      if (mountedRef.current) next();
     } catch (err) {
       const canonical =
         err instanceof ApiError && err.code === 'SKILL_MATCHES_CANONICAL'
           ? err.nameEn
           : null;
-      Alert.alert(
-        'Could not save skills',
-        canonical
-          ? `Choose ${canonical} from the suggestions.`
-          : err instanceof Error
-            ? err.message
-            : 'Please try again',
-      );
+      if (mountedRef.current) {
+        Alert.alert(
+          'Could not save skills',
+          canonical
+            ? `Choose ${canonical} from the suggestions.`
+            : err instanceof Error
+              ? err.message
+              : 'Please try again',
+        );
+      }
     } finally {
-      setSaving(false);
+      saveInFlightRef.current = false;
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -61,7 +75,18 @@ export default function ProfileSetupStep2({
       </ScrollView>
 
       <View style={styles.footer}>
-        {onBack ? <Button title="Back" variant="outline" onPress={onBack} fullWidth /> : null}
+        {onBack ? (
+          <Button
+            title="Back"
+            variant="outline"
+            onPress={() => {
+              if (saveInFlightRef.current || !onBack) return;
+              onBack();
+            }}
+            disabled={saving}
+            fullWidth
+          />
+        ) : null}
         <Button
           title="Continue"
           onPress={() => {
@@ -71,7 +96,16 @@ export default function ProfileSetupStep2({
           disabled={saving || selected.length === 0}
         />
         <View style={styles.secondaryRow}>
-          <Button title="Skip" variant="outline" onPress={onNext} disabled={saving} style={styles.halfBtn} />
+          <Button
+            title="Skip"
+            variant="outline"
+            onPress={() => {
+              if (saveInFlightRef.current) return;
+              onNext();
+            }}
+            disabled={saving}
+            style={styles.halfBtn}
+          />
           <Button
             title="Save & exit"
             variant="outline"
