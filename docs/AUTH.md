@@ -40,7 +40,9 @@ Create Account (email + password + phone E.164 + location)
 
 ConfirmCode is opened only when an OTP was actually requested (`otp_sent`), or when a later **successful** resend stamps pending verification.
 
-Browser confirmation links are **not** the primary signup path. `AuthDeepLinkListener` still handles inbound `mawahib://` / Expo auth URLs if they arrive (legacy templates, future recovery). Those paths must still hydrate Nest and pass `resolvePostAuthDestination` — never bypass into MainTabs.
+Browser confirmation links are **not** the primary signup path. `AuthDeepLinkListener` still handles inbound signup and confirmation URLs. Those paths hydrate Nest and pass `resolvePostAuthDestination`.
+
+A password-recovery URL (`type=recovery`, or an access token whose `amr` method is `recovery`) is rejected **before** `setSession` or `exchangeCodeForSession`. Relabeling that link as `type=signup` does not create a session. Other token links are accepted only when the token email matches the pending signup already stored on this device.
 
 ---
 
@@ -183,11 +185,54 @@ Authenticated + email-verified user
 
 ---
 
+## Forgot password and change password
+
+Password recovery is an email OTP. It is not a normal application session.
+
+```text
+Sign In → Forgot password?
+  → local sign-out if a session already exists
+  → resetPasswordForEmail(email) with no redirectTo
+  → neutral result (does not reveal whether the account exists)
+  → 6-digit code
+  → persist recovery phase "verifying" BEFORE verifyOtp
+  → verifyOtp({ type: 'recovery' })
+  → PASSWORD_RECOVERY does not hydrate Nest
+  → phase "recovery-session" only if the session email matches
+  → Reset Password
+  → updateUser({ password }) after rechecking user id and email
+  → signOut({ scope: 'global' })
+  → clear the recovery lock only after sign-out succeeds
+  → Sign In
+```
+
+While `verifying` or `recovery-session` is stored:
+
+- do not call `/users/me` or `/auth/bootstrap`
+- do not treat `SIGNED_IN` or `TOKEN_REFRESHED` as app entry
+- do not open MainTabs, VerifyAccount, or TurnOnNotifications
+
+An interrupted recovery is discarded on the next launch: local sign-out, then clear the lock only if that sign-out succeeds. The stored recovery session is not resumed into the app.
+
+Change Password is a real Settings row:
+
+- current password is checked with `signInWithPassword` for the signed-in account's own email
+- the returned user id must match
+- `updateUser({ password })`
+- `signOut({ scope: 'others' })` revokes other refresh sessions
+- this device stays signed in
+- if the other-session call fails, say the password changed and do not ask for another change
+
+Nest does not store or change passwords. Existing access tokens can keep working until they expire.
+
+Supabase Dashboard prerequisite: Authentication → Email Templates → Reset Password must include `{{ .Token }}` and must not rely only on `{{ .ConfirmationURL }}`.
+
+---
+
 ## What is NOT available in the app UI
 
 | Control / flow | Status |
 |----------------|--------|
-| Forgot password / password reset | **Not implemented.** Control is **hidden**. Supabase can support recovery emails later; there is no in-app reset screen or Forgot Password CTA today. |
 | Social / OAuth (Google, Apple, Facebook) | **Not implemented.** Buttons are **hidden**. Do not document as available. |
 | Phone SMS OTP in production | **Disabled** until provider + flag (see above). |
 
@@ -323,7 +368,7 @@ Recommended MVP: **Twilio**
 
 Default Supabase email is fine for local Auth work. Before Beta/Production, configure Custom SMTP with a branded sender such as `Mawahib <no-reply@…>`.
 
-Password-recovery and OAuth provider dashboard setup are **out of scope** until those product flows are implemented.
+Password-recovery email delivery uses the Reset Password template (`{{ .Token }}`). OAuth provider dashboard setup remains **out of scope**.
 
 ---
 
@@ -333,6 +378,8 @@ Installed `@supabase/supabase-js` (auth-js ~2.112):
 
 - **Verify signup email OTP:** `type: 'email'`
 - **Resend signup email:** `resend({ type: 'signup' })`
+- **Verify password-recovery OTP:** `type: 'recovery'`
+- **Request a recovery code:** `resetPasswordForEmail(email)` with no `redirectTo` (`resend()` has no recovery type)
 
 ---
 

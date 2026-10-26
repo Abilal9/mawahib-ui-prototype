@@ -149,6 +149,55 @@ export function mapAuthError(error: unknown, fallback = 'Something went wrong. P
   return fallback;
 }
 
+export function isAuthNetworkError(error: unknown): boolean {
+  const message = authErrorText(error).toLowerCase();
+  return (
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('network request failed') ||
+    message.includes('timeout')
+  );
+}
+
+export function isAuthRateLimitError(error: unknown): boolean {
+  const message = authErrorText(error).toLowerCase();
+  const code = authErrorCode(error);
+  return (
+    code === 'over_email_send_rate_limit' ||
+    code === 'over_sms_send_rate_limit' ||
+    message.includes('over_email_send_rate_limit') ||
+    message.includes('over_sms_send_rate_limit') ||
+    message.includes('rate limit') ||
+    message.includes('too many requests')
+  );
+}
+
+function authErrorText(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return '';
+}
+
+function authErrorCode(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code.toLowerCase();
+  }
+  return '';
+}
+
 export function mapDeepLinkAuthError(params: Record<string, string | undefined>): string | null {
   const error = params.error || params.error_code || params.error_description;
   if (!error) return null;

@@ -10,6 +10,9 @@ export { default as SignInScreen } from './auth/SignInScreen';
 export { default as SignUpScreen } from './auth/SignUpScreen';
 export { default as VerifyAccountScreen } from './auth/VerifyAccountScreen';
 export { default as ConfirmCodeScreen } from './auth/ConfirmCodeScreen';
+export { default as ForgotPasswordScreen } from './auth/ForgotPasswordScreen';
+export { default as ResetPasswordScreen } from './auth/ResetPasswordScreen';
+export { default as ChangePasswordScreen } from './auth/ChangePasswordScreen';
 export { default as SignupSuccessScreen } from './auth/SignupSuccessScreen';
 
 // Profile Setup

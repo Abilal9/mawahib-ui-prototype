@@ -13,6 +13,9 @@ import {
   SignUpScreen,
   VerifyAccountScreen,
   ConfirmCodeScreen,
+  ForgotPasswordScreen,
+  ResetPasswordScreen,
+  ChangePasswordScreen,
   SignupSuccessScreen,
   ProfileSetupScreen,
   NotificationsScreen,
@@ -58,6 +61,7 @@ import {
 import { RootStackParamList } from './types';
 import { useAuth } from '../context/AuthContext';
 import { resolvePostAuthDestination } from '../lib/postAuthGate';
+import { loadRecoveryState } from '../lib/recoveryState';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -71,7 +75,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  * ProfileSetupStep1–5 as routes, MessagesEmpty.
  */
 function MainTabsGate() {
-  const { isSignedIn, authLoading, apiUser, session, signUpBasics } = useAuth();
+  const { isSignedIn, authLoading, apiUser, session, signUpBasics, recovery } = useAuth();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -80,6 +84,17 @@ function MainTabsGate() {
 
   useEffect(() => {
     if (authLoading) return;
+    if (recovery || loadRecoveryState()) {
+      const focused =
+        navigation.getState().routes[navigation.getState().index]?.name;
+      if (focused === 'MainTabs') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        });
+      }
+      return;
+    }
     if (!isSignedIn || !apiUser) {
       navigation.reset({
         index: 0,
@@ -107,9 +122,10 @@ function MainTabsGate() {
     navigation,
     session,
     signUpBasics,
+    recovery,
   ]);
 
-  if (authLoading || !isSignedIn || !apiUser || needsVerify) return null;
+  if (authLoading || recovery || loadRecoveryState() || !isSignedIn || !apiUser || needsVerify) return null;
   return <MainTabs />;
 }
 
@@ -129,6 +145,9 @@ export default function RootNavigator() {
       <Stack.Screen name="TurnOnNotifications" component={TurnOnNotificationsScreen} />
       <Stack.Screen name="AccountType" component={AccountTypeScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="VerifyAccount" component={VerifyAccountScreen} />
       <Stack.Screen name="ConfirmCode" component={ConfirmCodeScreen} />

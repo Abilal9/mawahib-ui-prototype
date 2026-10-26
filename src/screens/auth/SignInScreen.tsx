@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -48,7 +48,7 @@ function isRateLimitError(error: unknown): boolean {
   );
 }
 
-export default function SignInScreen({ navigation }: RootStackScreenProps<'SignIn'>) {
+export default function SignInScreen({ navigation, route }: RootStackScreenProps<'SignIn'>) {
   const {
     signInWithEmail,
     resumeEmailVerification,
@@ -57,14 +57,38 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
     clearAuthError,
     session,
     apiUser,
+    recovery,
+    discardInterruptedRecovery,
   } = useAuth();
   const { hydrateFromApiUser } = useMyProfile();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(route.params?.email ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !loading;
-  const backendUnavailable = Boolean(session && !apiUser && authError);
+  const [discarding, setDiscarding] = useState(false);
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !loading && !recovery;
+  const backendUnavailable = Boolean(session && !apiUser && authError && !recovery);
+
+  useEffect(() => {
+    if (route.params?.notice !== 'password-updated') return;
+    Alert.alert('Password updated', 'Sign in with your new password.');
+    navigation.setParams({ notice: undefined });
+  }, [navigation, route.params?.notice]);
+
+  const handleDiscardRecovery = async () => {
+    setDiscarding(true);
+    try {
+      const ok = await discardInterruptedRecovery();
+      if (!ok) {
+        Alert.alert(
+          'Still signed in',
+          'Could not sign this device out. Try again.',
+        );
+      }
+    } finally {
+      setDiscarding(false);
+    }
+  };
 
   const handleRetryBackend = async () => {
     clearAuthError();
@@ -94,7 +118,7 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
   };
 
   const handleLogIn = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || recovery) return;
     clearAuthError();
     setLoading(true);
     try {
@@ -190,6 +214,24 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
           <Text style={styles.title}>Log In</Text>
           <Text style={styles.subtitle}>Welcome back! Please enter your details.</Text>
 
+          {recovery ? (
+            <View style={styles.backendBanner}>
+              <Text style={styles.backendBannerTitle}>Password reset interrupted</Text>
+              <Text style={styles.backendBannerBody}>
+                This device still needs to sign out before you can continue. You
+                are not signed in to Mawahib.
+              </Text>
+              <Button
+                title={discarding ? 'Signing out…' : 'Sign out and continue'}
+                onPress={() => {
+                  void handleDiscardRecovery();
+                }}
+                loading={discarding}
+                disabled={discarding}
+              />
+            </View>
+          ) : null}
+
           {backendUnavailable ? (
             <View style={styles.backendBanner}>
               <Text style={styles.backendBannerTitle}>Signed in, profile unavailable</Text>
@@ -224,7 +266,15 @@ export default function SignInScreen({ navigation }: RootStackScreenProps<'SignI
             secureTextEntry
           />
 
-          <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ForgotPassword')}
+            style={styles.forgotWrap}
+            accessibilityRole="button"
+          >
+            <Text style={styles.footerLink}>Forgot password?</Text>
+          </TouchableOpacity>
+
+          <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit || Boolean(recovery)} />
           {loading ? (
             <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.primary} />
           ) : null}
@@ -287,4 +337,9 @@ const styles = StyleSheet.create({
   },
   footerText: { ...typography.body, color: colors.textSecondary },
   footerLink: { ...typography.bodyMedium, color: colors.primary },
+  forgotWrap: {
+    alignSelf: 'flex-end',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
 });

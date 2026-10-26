@@ -8,6 +8,7 @@ import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { loadRecoveryState } from '../../lib/recoveryState';
 import {
   hasResumablePendingVerification,
   loadPendingSignup,
@@ -20,7 +21,7 @@ import {
  */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { authLoading, isSignedIn, apiUser, session, signUpBasics } = useAuth();
+  const { authLoading, isSignedIn, apiUser, session, signUpBasics, recoveryRestart } = useAuth();
   const [minSplashDone, setMinSplashDone] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,14 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
 
   useEffect(() => {
     if (authLoading || !minSplashDone) return;
+
+    if (loadRecoveryState() || recoveryRestart) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' }],
+      });
+      return;
+    }
 
     if (isSignedIn && apiUser) {
       const dest = resolvePostAuthDestination({
@@ -80,6 +89,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     session,
     signUpBasics,
     navigation,
+    recoveryRestart,
   ]);
 
   return (

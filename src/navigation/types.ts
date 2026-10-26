@@ -40,7 +40,10 @@ export type RootStackParamList = {
   Welcome: { step?: 1 | 2 | 3 };
   TurnOnNotifications: undefined;
   AccountType: undefined;
-  SignIn: undefined;
+  SignIn: { email?: string; notice?: 'password-updated' } | undefined;
+  ForgotPassword: { email?: string; autoSend?: boolean } | undefined;
+  ResetPassword: undefined;
+  ChangePassword: undefined;
   SignUp: { preserveDraft?: boolean } | undefined;
   VerifyAccount: { email: string; phoneE164: string };
   SignupSuccess: undefined;

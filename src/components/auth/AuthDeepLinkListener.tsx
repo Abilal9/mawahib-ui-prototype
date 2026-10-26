@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { handleAuthDeepLink } from '../../lib/authDeepLink';
+import { loadRecoveryState } from '../../lib/recoveryState';
 import { useAuth } from '../../context/AuthContext';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import type { RootStackParamList } from '../../navigation/types';
@@ -40,9 +41,33 @@ export default function AuthDeepLinkListener() {
   useEffect(() => {
     const run = async (url: string | null) => {
       if (!url || handling.current) return;
+      if (loadRecoveryState()) return;
       handling.current = true;
       try {
         const result = await handleAuthDeepLink(url);
+        if (result.type === 'recovery-rejected') {
+          Alert.alert(
+            'Use the reset code',
+            'This password reset link cannot sign you in. Enter the code from the email on the Forgot Password screen.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  if (apiUserRef.current) return;
+                  navigationRef.current.navigate('ForgotPassword');
+                },
+              },
+            ],
+          );
+          return;
+        }
+        if (result.type === 'link-rejected') {
+          Alert.alert(
+            'Link not used',
+            'This link cannot sign you in. Continue in the app, or enter the code from your email.',
+          );
+          return;
+        }
         if (result.type === 'error') {
           Alert.alert('Verification failed', result.message, [
             {
@@ -53,6 +78,7 @@ export default function AuthDeepLinkListener() {
           return;
         }
         if (result.type === 'session') {
+          if (loadRecoveryState()) return;
           try {
             const user = apiUserRef.current
               ? await refreshMeRef.current()

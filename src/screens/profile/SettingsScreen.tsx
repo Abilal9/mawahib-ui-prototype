@@ -114,6 +114,11 @@ export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) 
 
   const accountRows: SettingsRow[] = [
     {
+      label: 'Change Password',
+      icon: 'lock-closed-outline',
+      onPress: () => navigation.navigate('ChangePassword'),
+    },
+    {
       label: 'Email',
       value: email || 'Not available',
       status: email ? verificationState(apiUser?.emailVerified) : undefined,

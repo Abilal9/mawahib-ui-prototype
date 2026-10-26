@@ -11,13 +11,21 @@ import React, {
 import type { Session } from '@supabase/supabase-js';
 import { ApiError } from '../lib/apiClient';
 import { AuthFailure } from '../lib/authFailure';
-import { mapAuthError } from '../lib/authErrors';
+import { isAuthNetworkError, mapAuthError } from '../lib/authErrors';
 import {
   clearPendingSignup,
   loadPendingSignup,
   savePendingSignup,
 } from '../lib/pendingSignup';
 import { isPasswordValid } from '../lib/passwordRules';
+import {
+  clearRecoveryState,
+  loadRecoveryState,
+  normalizeRecoveryEmail,
+  PasswordFlowError,
+  saveRecoveryState,
+  type RecoveryState,
+} from '../lib/recoveryState';
 import { shouldIgnoreStaleAuthResult } from './authSessionGuard';
 import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
@@ -102,9 +110,46 @@ interface AuthContextValue {
   completeSignUp: () => void;
   signIn: () => void;
   signOut: () => Promise<void>;
+  /** Set while a password-recovery lock is persisted. Not ordinary app auth. */
+  recovery: RecoveryState | null;
+  armRecoveryVerification: (email: string) => boolean;
+  /** True after this launch discarded an interrupted recovery. */
+  recoveryRestart: boolean;
+  commitRecoverySession: (email: string, userId: string) => boolean;
+  clearRecoveryLock: () => void;
+  /** Local sign-out, then clear the lock only after that sign-out succeeds. */
+  discardInterruptedRecovery: () => Promise<boolean>;
+  completePasswordReset: (password: string) => Promise<
+    | { status: 'signed-out' }
+    | { status: 'sign-out-failed' }
+    | { status: 'rejected' }
+  >;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<{ otherSessionsRevoked: boolean }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function uncertainPasswordChange(): PasswordFlowError {
+  return new PasswordFlowError(
+    'We could not confirm whether the password changed. Try the new password before trying again.',
+    'network',
+  );
+}
+
+async function updatePassword(password: string): Promise<void> {
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) return;
+    if (isAuthNetworkError(error)) throw uncertainPasswordChange();
+    throw new PasswordFlowError(mapAuthError(error), 'update');
+  } catch (err) {
+    if (err instanceof PasswordFlowError) throw err;
+    throw uncertainPasswordChange();
+  }
+}
 
 function isEmailConfirmed(session: Session): boolean {
   const user = session.user;
@@ -186,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState | null>(null);
+  const [recoveryRestart, setRecoveryRestart] = useState(false);
   type HydrateOverrides = {
     accountType?: AccountType;
     displayName?: string;
@@ -203,10 +250,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastHydrateErrorRef = useRef<string | null>(null);
   const accountTypeRef = useRef(accountType);
   const signUpBasicsRef = useRef(signUpBasics);
+  const apiUserRef = useRef(apiUser);
+  const suppressSameUserHydrateRef = useRef(false);
   accountTypeRef.current = accountType;
   signUpBasicsRef.current = signUpBasics;
+  apiUserRef.current = apiUser;
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
+
+  const clearRecoveryLock = useCallback(() => {
+    clearRecoveryState();
+    setRecovery(null);
+  }, []);
+
+  const armRecoveryVerification = useCallback((email: string) => {
+    const next: RecoveryState = {
+      email: normalizeRecoveryEmail(email),
+      phase: 'verifying',
+    };
+    if (!saveRecoveryState(next)) return false;
+    setRecovery(next);
+    return true;
+  }, []);
+
+  const commitRecoverySession = useCallback((email: string, userId: string) => {
+    const normalized = normalizeRecoveryEmail(email);
+    const current = loadRecoveryState();
+    if (
+      !current ||
+      current.phase !== 'verifying' ||
+      current.email !== normalized ||
+      !userId.trim()
+    ) {
+      return false;
+    }
+    const next: RecoveryState = {
+      email: normalized,
+      phase: 'recovery-session',
+      userId: userId.trim(),
+    };
+    if (!saveRecoveryState(next)) return false;
+    setRecovery(next);
+    return true;
+  }, []);
 
   const clearAuthenticatedState = useCallback(() => {
     authEpoch.current += 1;
@@ -218,6 +304,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountType(null);
     setSignUpBasics(null);
   }, []);
+
+  const discardInterruptedRecovery = useCallback(async () => {
+    const existing = loadRecoveryState();
+    if (!existing) {
+      setRecovery(null);
+      return true;
+    }
+    setRecovery(existing);
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) return false;
+    clearRecoveryState();
+    setRecovery(null);
+    clearAuthenticatedState();
+    return true;
+  }, [clearAuthenticatedState]);
 
   const applyApiUser = useCallback((user: ApiUser) => {
     setApiUser(user);
@@ -257,6 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active: Session | null,
       overrides?: HydrateOverrides,
     ): Promise<ApiUser | null> => {
+      if (loadRecoveryState()) return null;
       if (!active) {
         hydrateSessionRef.current = null;
         hydrateOverridesRef.current = undefined;
@@ -275,6 +377,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionSnap: Session,
         overridesSnap: HydrateOverrides | undefined,
       ): Promise<ApiUser | null> => {
+        if (loadRecoveryState()) return null;
         const accessToken = sessionSnap.access_token;
         const epochAtStart = authEpoch.current;
         const isStale = (liveToken: string | null) =>
@@ -306,6 +409,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
           }
           lastHydrateErrorRef.current = null;
+          if (loadRecoveryState()) return null;
           if (isStale(hydrateSessionRef.current?.access_token ?? null)) return null;
           applyApiUser(user);
           if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
@@ -396,9 +500,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAccountType(pending.accountType);
           }
         }
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-        await hydrateBackendUser(data.session);
+        if (loadRecoveryState()) {
+          const discarded = await discardInterruptedRecovery();
+          if (discarded && mounted) setRecoveryRestart(true);
+        } else {
+          const { data } = await supabase.auth.getSession();
+          if (!mounted) return;
+          await hydrateBackendUser(data.session);
+        }
       } finally {
         if (mounted) setAuthLoading(false);
       }
@@ -412,6 +521,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Recovery OTP emits this instead of SIGNED_IN. Never hydrate it.
+      if (event === 'PASSWORD_RECOVERY') {
+        return;
+      }
+
+      if (loadRecoveryState()) {
+        return;
+      }
+
       if (event === 'TOKEN_REFRESHED') {
         setSession(next);
         if (next) hydrateSessionRef.current = next;
@@ -419,6 +537,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_IN' && next) {
+        // Change-password reauth emits SIGNED_IN for the current account.
+        // Hydrating here can clear apiUser on a Nest failure and reset to Sign In.
+        if (suppressSameUserHydrateRef.current) {
+          if (
+            apiUserRef.current?.id &&
+            next.user?.id === apiUserRef.current.id
+          ) {
+            setSession(next);
+            hydrateSessionRef.current = next;
+          }
+          return;
+        }
         void hydrateBackendUser(next);
       }
     });
@@ -427,7 +557,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, [clearAuthenticatedState, hydrateBackendUser]);
+  }, [clearAuthenticatedState, discardInterruptedRecovery, hydrateBackendUser]);
 
   const resendSignupOtp = useCallback(async (email: string) => {
     setAuthError(null);
@@ -707,6 +837,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       locationCode?: string;
       phoneE164?: string;
     }) => {
+      if (loadRecoveryState()) {
+        throw new PasswordFlowError(
+          'Password reset is in progress.',
+          'unavailable',
+        );
+      }
       setAuthError(null);
       const { data: sessionData } = await supabase.auth.getSession();
       const active = sessionData.session;
@@ -729,6 +865,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshMe = useCallback(async () => {
+    if (loadRecoveryState()) {
+      throw new PasswordFlowError(
+        'Password reset is in progress.',
+        'unavailable',
+      );
+    }
     const epoch = authEpoch.current;
     const user = await authApi.getMe();
     if (epoch !== authEpoch.current) return user;
@@ -740,6 +882,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       setAuthError(null);
       lastHydrateErrorRef.current = null;
+      if (loadRecoveryState()) {
+        throw new PasswordFlowError(
+          'Password reset is in progress.',
+          'unavailable',
+        );
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -805,13 +953,180 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuthenticatedState();
   }, [clearAuthenticatedState]);
 
+  const completePasswordReset = useCallback(
+    async (password: string) => {
+      if (!isPasswordValid(password)) {
+        throw new PasswordFlowError(
+          'Password must be at least 8 characters and include upper, lower, number, and special character.',
+          'validation',
+        );
+      }
+      const recoveryLock = loadRecoveryState();
+      if (
+        !recoveryLock ||
+        recoveryLock.phase !== 'recovery-session' ||
+        !recoveryLock.userId
+      ) {
+        throw new PasswordFlowError(
+          'Password reset is no longer active. Request a new code.',
+          'unavailable',
+        );
+      }
+      const { data } = await supabase.auth.getSession();
+      const sessionUser = data.session?.user;
+      const email = normalizeRecoveryEmail(sessionUser?.email ?? '');
+      if (
+        !sessionUser ||
+        sessionUser.id !== recoveryLock.userId ||
+        email !== recoveryLock.email
+      ) {
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (!error) {
+          clearRecoveryState();
+          setRecovery(null);
+          clearAuthenticatedState();
+        }
+        return { status: 'rejected' as const };
+      }
+      const { error: updateError } = await (async () => {
+        try {
+          await updatePassword(password);
+          return { error: null };
+        } catch (err) {
+          return { error: err };
+        }
+      })();
+      if (updateError) throw updateError;
+      try {
+        const globalOut = await supabase.auth.signOut({ scope: 'global' });
+        if (globalOut.error) {
+          const localOut = await supabase.auth.signOut({ scope: 'local' });
+          if (localOut.error) {
+            return { status: 'sign-out-failed' as const };
+          }
+        }
+      } catch {
+        try {
+          const localOut = await supabase.auth.signOut({ scope: 'local' });
+          if (localOut.error) {
+            return { status: 'sign-out-failed' as const };
+          }
+        } catch {
+          return { status: 'sign-out-failed' as const };
+        }
+      }
+      clearRecoveryState();
+      setRecovery(null);
+      clearAuthenticatedState();
+      return { status: 'signed-out' as const };
+    },
+    [clearAuthenticatedState],
+  );
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (loadRecoveryState()) {
+        throw new PasswordFlowError(
+          'Finish or cancel password reset before changing your password.',
+          'unavailable',
+        );
+      }
+      if (!isPasswordValid(newPassword)) {
+        throw new PasswordFlowError(
+          'Password must be at least 8 characters and include upper, lower, number, and special character.',
+          'validation',
+        );
+      }
+      const { data: before } = await supabase.auth.getSession();
+      const original = before.session?.user;
+      const email = normalizeRecoveryEmail(original?.email ?? '');
+      if (!original || !email) {
+        throw new PasswordFlowError(
+          'Sign in again before changing your password.',
+          'unavailable',
+        );
+      }
+      suppressSameUserHydrateRef.current = true;
+      let data: Awaited<
+        ReturnType<typeof supabase.auth.signInWithPassword>
+      >['data'];
+      let error: Awaited<
+        ReturnType<typeof supabase.auth.signInWithPassword>
+      >['error'];
+      try {
+        const signedIn = await supabase.auth.signInWithPassword({
+          email,
+          password: currentPassword,
+        });
+        data = signedIn.data;
+        error = signedIn.error;
+      } finally {
+        suppressSameUserHydrateRef.current = false;
+      }
+      if (error) {
+        const lower = error.message.toLowerCase();
+        if (
+          lower.includes('invalid login') ||
+          lower.includes('invalid credentials')
+        ) {
+          throw new PasswordFlowError(
+            'Current password is incorrect.',
+            'current-password',
+          );
+        }
+        if (
+          lower.includes('network') ||
+          lower.includes('failed to fetch') ||
+          lower.includes('network request failed')
+        ) {
+          throw new PasswordFlowError(
+            'Network error. Check your connection and try again.',
+            'network',
+          );
+        }
+        throw new PasswordFlowError(mapAuthError(error), 'current-password');
+      }
+      const signedInId = data.user?.id;
+      const signedInEmail = normalizeRecoveryEmail(data.user?.email ?? '');
+      const { data: afterSignIn } = await supabase.auth.getSession();
+      const currentId = afterSignIn.session?.user.id;
+      const currentEmail = normalizeRecoveryEmail(
+        afterSignIn.session?.user.email ?? '',
+      );
+      if (
+        !signedInId ||
+        signedInId !== original.id ||
+        signedInEmail !== email ||
+        currentId !== original.id ||
+        currentEmail !== email
+      ) {
+        const { error: outError } = await supabase.auth.signOut({
+          scope: 'local',
+        });
+        if (!outError) clearAuthenticatedState();
+        throw new PasswordFlowError(
+          'Could not confirm this account. Sign in again.',
+          'identity',
+        );
+      }
+      await updatePassword(newPassword);
+      try {
+        const others = await supabase.auth.signOut({ scope: 'others' });
+        return { otherSessionsRevoked: !others.error };
+      } catch {
+        return { otherSessionsRevoked: false };
+      }
+    },
+    [clearAuthenticatedState],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       accountType,
       setAccountType,
-      isSignedIn: isSignedIn && Boolean(apiUser),
+      isSignedIn: isSignedIn && Boolean(apiUser) && !recovery,
       session,
-      accessToken: session?.access_token ?? null,
+      accessToken: recovery ? null : (session?.access_token ?? null),
       apiUser,
       mappedUser: apiUser ? mapApiUserToUser(apiUser) : null,
       signUpBasics,
@@ -831,12 +1146,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeSignUp,
       signIn,
       signOut,
+      recovery,
+      recoveryRestart,
+      armRecoveryVerification,
+      commitRecoverySession,
+      clearRecoveryLock,
+      discardInterruptedRecovery,
+      completePasswordReset,
+      changePassword,
     }),
     [
       accountType,
       isSignedIn,
       session,
       apiUser,
+      recovery,
+      recoveryRestart,
       signUpBasics,
       authLoading,
       authError,
@@ -853,6 +1178,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeSignUp,
       signIn,
       signOut,
+      armRecoveryVerification,
+      commitRecoverySession,
+      clearRecoveryLock,
+      discardInterruptedRecovery,
+      completePasswordReset,
+      changePassword,
     ],
   );
 

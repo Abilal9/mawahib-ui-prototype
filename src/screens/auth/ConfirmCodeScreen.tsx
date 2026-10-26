@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput as RNTextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -12,7 +11,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import Button from '../../components/ui/Button';
-import { colors, spacing, radius, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
+import OtpCodeInput, {
+  OTP_LENGTH,
+  type OtpCodeInputHandle,
+} from '../../components/auth/OtpCodeInput';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { authFailureTitle, isAuthFailure } from '../../lib/authFailure';
@@ -20,7 +23,6 @@ import { mapAuthError } from '../../lib/authErrors';
 import { clearPendingSignup } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 
-const CODE_LENGTH = 6;
 const RESEND_COOLDOWN_SEC = 60;
 const EDIT_PINK = '#F6339A';
 
@@ -43,11 +45,11 @@ export default function ConfirmCodeScreen({
     session,
     signUpBasics,
   } = useAuth();
-  const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(''));
+  const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [timer, setTimer] = useState(RESEND_COOLDOWN_SEC);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const inputRefs = useRef<(RNTextInput | null)[]>([]);
+  const otpRef = useRef<OtpCodeInputHandle>(null);
   const email = route.params?.email || '';
   const phone = route.params?.phone || '';
   const isPhone = Boolean(phone) && !email;
@@ -58,24 +60,7 @@ export default function ConfirmCodeScreen({
     return () => clearInterval(interval);
   }, [timer]);
 
-  const handleChange = (text: string, index: number) => {
-    const digit = text.replace(/\D/g, '').slice(-1);
-    const newCode = [...code];
-    newCode[index] = digit;
-    setCode(newCode);
-
-    if (digit && index < CODE_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (key: string, index: number) => {
-    if (key === 'Backspace' && !code[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const isComplete = code.every((d) => d !== '');
+  const isComplete = code.every((digit) => digit !== '');
 
   const handleChangeEmail = () => {
     clearPendingSignup();
@@ -126,8 +111,8 @@ export default function ConfirmCodeScreen({
         : mapAuthError(e);
       Alert.alert(title, message);
       if (isAuthFailure(e) && e.kind === 'email_otp') {
-        setCode(Array(CODE_LENGTH).fill(''));
-        inputRefs.current[0]?.focus();
+        setCode(Array(OTP_LENGTH).fill(''));
+        otpRef.current?.focus();
       }
     } finally {
       setLoading(false);
@@ -186,26 +171,12 @@ export default function ConfirmCodeScreen({
             : 'Enter the code from your email below.'}
         </Text>
 
-        <View style={styles.codeRow}>
-          {code.map((digit, index) => (
-            <RNTextInput
-              key={index}
-              ref={(ref) => {
-                inputRefs.current[index] = ref;
-              }}
-              style={[styles.codeBox, digit ? styles.codeBoxFilled : undefined]}
-              value={digit}
-              onChangeText={(text) => handleChange(text, index)}
-              onKeyPress={({ nativeEvent }) =>
-                handleKeyPress(nativeEvent.key, index)
-              }
-              keyboardType="number-pad"
-              maxLength={1}
-              selectTextOnFocus
-              editable={!loading}
-            />
-          ))}
-        </View>
+        <OtpCodeInput
+          ref={otpRef}
+          code={code}
+          onChange={setCode}
+          editable={!loading}
+        />
 
         <View style={styles.resendRow}>
           <Text style={styles.didntReceive}>Didn&apos;t receive the code?</Text>
@@ -285,27 +256,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 24,
     marginBottom: spacing.xxxl,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginBottom: spacing.xxl,
-  },
-  codeBox: {
-    flex: 1,
-    height: 56,
-    borderRadius: radius.button,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    textAlign: 'center',
-    ...typography.h3,
-    color: colors.text,
-  },
-  codeBoxFilled: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + '08',
   },
   resendRow: {
     alignItems: 'center',
