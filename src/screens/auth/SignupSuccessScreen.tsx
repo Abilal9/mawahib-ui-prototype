@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { isAccountSuspendedFailure } from '../../lib/authFailure';
 import { useMyProfile } from '../../context/ProfileContext';
 import { locationDisplayFields } from '../../data/location/geo';
 
@@ -63,6 +64,7 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
         routes: [{ name: 'MainTabs' }],
       });
     } catch (e) {
+      if (isAccountSuspendedFailure(e)) return;
       Alert.alert('Could not finish signup', (e as Error).message);
     } finally {
       setLoading(false);

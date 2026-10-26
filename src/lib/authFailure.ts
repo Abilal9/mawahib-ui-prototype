@@ -2,7 +2,11 @@
  * Distinguish Supabase Auth failures from Nest hydration/bootstrap failures.
  */
 
-export type AuthFailureKind = 'email_otp' | 'phone_otp' | 'backend_hydration';
+export type AuthFailureKind =
+  | 'email_otp'
+  | 'phone_otp'
+  | 'backend_hydration'
+  | 'account_suspended';
 
 export class AuthFailure extends Error {
   readonly kind: AuthFailureKind;
@@ -20,8 +24,15 @@ export function isAuthFailure(error: unknown): error is AuthFailure {
   return error instanceof AuthFailure;
 }
 
+export function isAccountSuspendedFailure(error: unknown): boolean {
+  return isAuthFailure(error) && error.kind === 'account_suspended';
+}
+
 export function authFailureTitle(error: unknown): string {
   if (isAuthFailure(error)) {
+    if (error.kind === 'account_suspended') {
+      return 'Account suspended';
+    }
     if (error.kind === 'backend_hydration') {
       return 'Signed in, but profile failed';
     }

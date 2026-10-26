@@ -89,6 +89,28 @@ signInWithPassword
 
 ---
 
+## Account suspended
+
+A valid Supabase session is not Mawahib access. Nest reads `users.account_status` on every authenticated request. `SUSPENDED` returns HTTP 403 with `code: ACCOUNT_SUSPENDED`. That is not a 401, so the app does not refresh or sign the user out.
+
+The app keeps the Supabase session and shows only **Account suspended**. Check again runs the normal `/users/me` hydration once. Log out uses `signOut({ scope: 'local' })`. Forgot Password stays available after logout because it talks to Supabase, not Nest. Signing in again while the row is still `SUSPENDED` returns to the same screen. Change Password stays inside Settings and is not reachable from the suspended screen.
+
+The phrase “reach out to support” opens `mailto:support@mawahib.io`. It is not a ticket form, and the link does not attach the session, user id, or account status. If the device cannot open a mail app, the screen shows that the address is `support@mawahib.io` and does not claim a request was sent.
+
+Dev-only status change, on a local database, for a known test user:
+
+```sql
+UPDATE users
+SET account_status = 'SUSPENDED'
+WHERE id = '<dev-user-uuid>';
+```
+
+Restore with `'ACTIVE'`. There is no admin endpoint.
+
+Accepted limits: a request that already passed the check may finish, and a signed upload or read URL issued before suspension works until it expires. New upload sessions are blocked with the rest of the API. Public profile hiding, audit history, and admin writes are later work.
+
+---
+
 ## Backend unavailable (Supabase OK, Nest down)
 
 If OTP or sign-in succeeds and a Supabase session exists, but `/users/me` or `/auth/bootstrap` fails (network, Nest down, temporary 5xx):

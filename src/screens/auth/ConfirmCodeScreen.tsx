@@ -18,7 +18,11 @@ import OtpCodeInput, {
 } from '../../components/auth/OtpCodeInput';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
-import { authFailureTitle, isAuthFailure } from '../../lib/authFailure';
+import {
+  authFailureTitle,
+  isAccountSuspendedFailure,
+  isAuthFailure,
+} from '../../lib/authFailure';
 import { mapAuthError } from '../../lib/authErrors';
 import { clearPendingSignup } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
@@ -105,6 +109,7 @@ export default function ConfirmCodeScreen({
         routes: [{ name: dest.name, params: dest.params as never }],
       });
     } catch (e) {
+      if (isAccountSuspendedFailure(e)) return;
       const title = authFailureTitle(e);
       const message = isAuthFailure(e) && e.kind === 'email_otp'
         ? 'The code you entered is incorrect or has expired. Try again or request a new code.'

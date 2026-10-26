@@ -35,18 +35,58 @@ export type ApiRequestInit = RequestInit & {
   accessToken?: string;
 };
 
-async function authHeader(
-  accessToken?: string,
-): Promise<Record<string, string>> {
-  if (accessToken) {
-    return { Authorization: `Bearer ${accessToken}` };
+export const ACCOUNT_SUSPENDED_CODE = 'ACCOUNT_SUSPENDED';
+
+export function isAccountSuspendedError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 403 &&
+    error.code === ACCOUNT_SUSPENDED_CODE
+  );
+}
+
+/** JWT `sub` without verifying the signature. Used only to ignore stale responses. */
+export function accessTokenSubject(accessToken: string): string | null {
+  const segment = accessToken.split('.')[1];
+  if (!segment) return null;
+  try {
+    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const decoded = globalThis.atob(padded);
+    const payload = JSON.parse(decoded) as { sub?: unknown };
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    return null;
   }
+}
+
+type AccountSuspendedListener = (notice: { accessToken: string }) => void;
+const accountSuspendedListeners = new Set<AccountSuspendedListener>();
+
+/** AuthContext owns suspension state. This only reports the response. */
+export function subscribeAccountSuspended(
+  listener: AccountSuspendedListener,
+): () => void {
+  accountSuspendedListeners.add(listener);
+  return () => {
+    accountSuspendedListeners.delete(listener);
+  };
+}
+
+function notifyAccountSuspended(accessToken: string): void {
+  for (const listener of accountSuspendedListeners) {
+    listener({ accessToken });
+  }
+}
+
+async function resolveAccessToken(accessToken?: string): Promise<string> {
+  if (accessToken) return accessToken;
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
     throw new ApiError(401, 'Not authenticated');
   }
-  return { Authorization: `Bearer ${token}` };
+  return token;
 }
 
 export async function apiRequest<T>(
@@ -56,8 +96,8 @@ export async function apiRequest<T>(
   const { accessToken, ...rest } = init;
   const headers = new Headers(rest.headers);
   headers.set('Content-Type', 'application/json');
-  const auth = await authHeader(accessToken);
-  Object.entries(auth).forEach(([k, v]) => headers.set(k, v));
+  const token = await resolveAccessToken(accessToken);
+  headers.set('Authorization', `Bearer ${token}`);
 
   // Paths must be root-relative (e.g. `/users/me`). Base already includes `/api/v1`.
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -78,12 +118,16 @@ export async function apiRequest<T>(
       };
       if (Array.isArray(body.message)) message = body.message.join(', ');
       else if (body.message) message = body.message;
-      throw new ApiError(res.status, message, {
+      const error = new ApiError(res.status, message, {
         code: body.code,
         skillId: body.skillId,
         nameEn: body.nameEn,
         categoryId: body.categoryId,
       });
+      if (isAccountSuspendedError(error)) {
+        notifyAccountSuspended(token);
+      }
+      throw error;
     } catch (error) {
       if (error instanceof ApiError) throw error;
     }

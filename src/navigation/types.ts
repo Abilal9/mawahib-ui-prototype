@@ -44,6 +44,7 @@ export type RootStackParamList = {
   ForgotPassword: { email?: string; autoSend?: boolean } | undefined;
   ResetPassword: undefined;
   ChangePassword: undefined;
+  AccountSuspended: undefined;
   SignUp: { preserveDraft?: boolean } | undefined;
   VerifyAccount: { email: string; phoneE164: string };
   SignupSuccess: undefined;

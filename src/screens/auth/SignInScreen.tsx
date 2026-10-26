@@ -21,7 +21,7 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { hasResumablePendingVerification } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
-import { isAuthFailure } from '../../lib/authFailure';
+import { isAccountSuspendedFailure, isAuthFailure } from '../../lib/authFailure';
 
 function isRateLimitError(error: unknown): boolean {
   const message =
@@ -106,6 +106,7 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
         routes: [{ name: dest.name, params: dest.params as never }],
       });
     } catch (e) {
+      if (isAccountSuspendedFailure(e)) return;
       Alert.alert(
         'Profile still unavailable',
         isAuthFailure(e)
@@ -134,6 +135,7 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
         routes: [{ name: dest.name, params: dest.params as never }],
       });
     } catch (e) {
+      if (isAccountSuspendedFailure(e)) return;
       const needsVerify =
         e instanceof Error &&
         ((e as Error & { needsEmailConfirmation?: boolean }).needsEmailConfirmation ||

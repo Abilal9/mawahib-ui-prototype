@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { isAccountSuspendedFailure } from '../../lib/authFailure';
+import { isAccountSuspendedError } from '../../lib/apiClient';
 import { handleAuthDeepLink } from '../../lib/authDeepLink';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import { useAuth } from '../../context/AuthContext';
@@ -20,8 +22,14 @@ import type { RootStackParamList } from '../../navigation/types';
 export default function AuthDeepLinkListener() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { refreshMe, bootstrapSession, apiUser, session, signUpBasics } =
-    useAuth();
+  const {
+    refreshMe,
+    bootstrapSession,
+    apiUser,
+    session,
+    signUpBasics,
+    accountSuspended,
+  } = useAuth();
   const handling = useRef(false);
   const initialUrlHandled = useRef(false);
   const apiUserRef = useRef(apiUser);
@@ -30,6 +38,7 @@ export default function AuthDeepLinkListener() {
   const refreshMeRef = useRef(refreshMe);
   const bootstrapSessionRef = useRef(bootstrapSession);
   const navigationRef = useRef(navigation);
+  const accountSuspendedRef = useRef(accountSuspended);
 
   apiUserRef.current = apiUser;
   sessionRef.current = session;
@@ -37,11 +46,13 @@ export default function AuthDeepLinkListener() {
   refreshMeRef.current = refreshMe;
   bootstrapSessionRef.current = bootstrapSession;
   navigationRef.current = navigation;
+  accountSuspendedRef.current = accountSuspended;
 
   useEffect(() => {
     const run = async (url: string | null) => {
       if (!url || handling.current) return;
       if (loadRecoveryState()) return;
+      if (accountSuspendedRef.current) return;
       handling.current = true;
       try {
         const result = await handleAuthDeepLink(url);
@@ -94,6 +105,9 @@ export default function AuthDeepLinkListener() {
               routes: [{ name: dest.name, params: dest.params as never }],
             });
           } catch (e) {
+            if (isAccountSuspendedError(e) || isAccountSuspendedFailure(e)) {
+              return;
+            }
             Alert.alert(
               'Signed in, but profile failed',
               e instanceof Error

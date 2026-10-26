@@ -9,7 +9,12 @@ import React, {
   ReactNode,
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { ApiError } from '../lib/apiClient';
+import {
+  accessTokenSubject,
+  ApiError,
+  isAccountSuspendedError,
+  subscribeAccountSuspended,
+} from '../lib/apiClient';
 import { AuthFailure } from '../lib/authFailure';
 import { isAuthNetworkError, mapAuthError } from '../lib/authErrors';
 import {
@@ -72,6 +77,10 @@ interface AuthContextValue {
   authLoading: boolean;
   authError: string | null;
   clearAuthError: () => void;
+  /** Backend says this Supabase session's Mawahib account is suspended. */
+  accountSuspended: boolean;
+  /** Run normal hydration once. Backend decides whether the flag clears. */
+  recheckAccountStatus: () => Promise<void>;
   /** Supabase email/password signup (email OTP confirmation required). */
   registerWithEmail: (input: {
     email: string;
@@ -231,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [accountSuspended, setAccountSuspended] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [recoveryRestart, setRecoveryRestart] = useState(false);
   type HydrateOverrides = {
@@ -248,6 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hydrateSessionRef = useRef<Session | null>(null);
   const hydrateOverridesRef = useRef<HydrateOverrides | undefined>(undefined);
   const lastHydrateErrorRef = useRef<string | null>(null);
+  const accountSuspendedRef = useRef(false);
+  const suspensionEpoch = useRef(0);
   const accountTypeRef = useRef(accountType);
   const signUpBasicsRef = useRef(signUpBasics);
   const apiUserRef = useRef(apiUser);
@@ -298,6 +310,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authEpoch.current += 1;
     hydrateSessionRef.current = null;
     hydrateOverridesRef.current = undefined;
+    accountSuspendedRef.current = false;
+    setAccountSuspended(false);
     setSession(null);
     setApiUser(null);
     setIsSignedIn(false);
@@ -321,10 +335,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuthenticatedState]);
 
   const applyApiUser = useCallback((user: ApiUser) => {
+    accountSuspendedRef.current = false;
+    setAccountSuspended(false);
     setApiUser(user);
     setAccountType(user.accountType);
     setIsSignedIn(true);
   }, []);
+
+  const markAccountSuspended = useCallback(() => {
+    suspensionEpoch.current += 1;
+    accountSuspendedRef.current = true;
+    setAccountSuspended(true);
+    setAuthError(null);
+    lastHydrateErrorRef.current = null;
+    setApiUser(null);
+    setIsSignedIn(false);
+  }, []);
+
+  const sameLiveSubject = (requestToken: string, liveToken: string | null) => {
+    if (!liveToken) return false;
+    const requestSubject = accessTokenSubject(requestToken);
+    const liveSubject = accessTokenSubject(liveToken);
+    return Boolean(
+      requestSubject && liveSubject && requestSubject === liveSubject,
+    );
+  };
+
+  useEffect(() => {
+    return subscribeAccountSuspended(({ accessToken }) => {
+      if (loadRecoveryState()) return;
+      const current = hydrateSessionRef.current?.access_token;
+      if (!current || !sameLiveSubject(accessToken, current)) return;
+      markAccountSuspended();
+    });
+  }, [markAccountSuspended]);
 
   const mergeHydrateOverrides = (
     base: HydrateOverrides | undefined,
@@ -380,6 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (loadRecoveryState()) return null;
         const accessToken = sessionSnap.access_token;
         const epochAtStart = authEpoch.current;
+        const suspensionAtStart = suspensionEpoch.current;
         const isStale = (liveToken: string | null) =>
           shouldIgnoreStaleAuthResult({
             epochAtStart,
@@ -393,6 +438,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             user = await authApi.getMe(accessToken);
           } catch (err) {
+            if (isAccountSuspendedError(err)) {
+              throw err;
+            }
             if (!(err instanceof ApiError) || err.status !== 404) {
               throw err;
             }
@@ -411,6 +459,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastHydrateErrorRef.current = null;
           if (loadRecoveryState()) return null;
           if (isStale(hydrateSessionRef.current?.access_token ?? null)) return null;
+          // A 403 observed while this request was in flight is newer than this success.
+          if (suspensionEpoch.current !== suspensionAtStart) return null;
           applyApiUser(user);
           if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
             clearPendingSignup();
@@ -422,6 +472,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isStale(liveToken)) {
             if (live.session && liveToken && liveToken !== accessToken) {
               hydrateSessionRef.current = live.session;
+            }
+            return null;
+          }
+          if (isAccountSuspendedError(err)) {
+            if (
+              epochAtStart === authEpoch.current &&
+              sameLiveSubject(accessToken, liveToken)
+            ) {
+              markAccountSuspended();
             }
             return null;
           }
@@ -478,7 +537,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hydrateInFlight.current = promise;
       return promise;
     },
-    [applyApiUser, clearAuthenticatedState],
+    [applyApiUser, clearAuthenticatedState, markAccountSuspended],
   );
 
   useEffect(() => {
@@ -699,6 +758,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phoneE164: input.phoneE164,
         });
         if (!user) {
+          if (accountSuspendedRef.current) {
+            throw new AuthFailure(
+              'account_suspended',
+              'This account is suspended.',
+            );
+          }
           const detail =
             lastHydrateErrorRef.current || 'Nest /users/me or bootstrap failed';
           const message = `Signed up but failed to load profile: ${detail}`;
@@ -756,6 +821,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
+        if (accountSuspendedRef.current) {
+          throw new AuthFailure(
+            'account_suspended',
+            'This account is suspended.',
+          );
+        }
         const detail =
           lastHydrateErrorRef.current || 'Nest /users/me or bootstrap failed';
         const message = `Email verified but failed to load profile: ${detail}`;
@@ -816,6 +887,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
+        if (accountSuspendedRef.current) {
+          throw new AuthFailure(
+            'account_suspended',
+            'This account is suspended.',
+          );
+        }
         const detail =
           lastHydrateErrorRef.current || 'Nest /users/me failed';
         const message = `Phone verified but failed to load profile: ${detail}`;
@@ -854,6 +931,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phoneE164: input?.phoneE164 ?? signUpBasicsRef.current?.phoneE164,
       });
       if (!user) {
+        if (accountSuspendedRef.current) {
+          throw new AuthFailure(
+            'account_suspended',
+            'This account is suspended.',
+          );
+        }
         throw new AuthFailure(
           'backend_hydration',
           lastHydrateErrorRef.current || 'Failed to bootstrap session',
@@ -872,8 +955,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
     }
     const epoch = authEpoch.current;
+    const suspensionAtStart = suspensionEpoch.current;
     const user = await authApi.getMe();
     if (epoch !== authEpoch.current) return user;
+    if (suspensionEpoch.current !== suspensionAtStart) return user;
     applyApiUser(user);
     return user;
   }, [applyApiUser]);
@@ -921,6 +1006,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const user = await hydrateBackendUser(data.session);
       if (!user) {
+        if (accountSuspendedRef.current) {
+          throw new AuthFailure(
+            'account_suspended',
+            'This account is suspended.',
+          );
+        }
         const detail =
           lastHydrateErrorRef.current ||
           'Nest /users/me failed after Supabase sign-in';
@@ -941,6 +1032,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(() => {
     setIsSignedIn(Boolean(apiUser));
   }, [apiUser]);
+
+  const recheckAccountStatus = useCallback(async () => {
+    if (loadRecoveryState()) return;
+    const { data } = await supabase.auth.getSession();
+    await hydrateBackendUser(data.session);
+  }, [hydrateBackendUser]);
 
   const signOut = useCallback(async () => {
     setAuthError(null);
@@ -1134,6 +1231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authLoading,
       authError,
       clearAuthError,
+      accountSuspended,
+      recheckAccountStatus,
       registerWithEmail,
       verifySignupOtp,
       resendSignupOtp,
@@ -1165,7 +1264,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpBasics,
       authLoading,
       authError,
+      accountSuspended,
       clearAuthError,
+      recheckAccountStatus,
       registerWithEmail,
       verifySignupOtp,
       resendSignupOtp,

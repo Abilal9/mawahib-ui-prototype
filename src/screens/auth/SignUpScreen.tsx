@@ -23,6 +23,7 @@ import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
+import { isAccountSuspendedFailure } from '../../lib/authFailure';
 import { isPasswordValid } from '../../lib/passwordRules';
 import {
   DIAL_COUNTRIES,
@@ -281,6 +282,7 @@ export default function SignUpScreen({
         return;
       }
     } catch (e) {
+      if (isAccountSuspendedFailure(e)) return;
       Alert.alert('Sign up failed', mapAuthError(e));
     } finally {
       setLoading(false);

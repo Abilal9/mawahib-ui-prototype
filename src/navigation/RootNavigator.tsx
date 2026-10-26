@@ -16,6 +16,7 @@ import {
   ForgotPasswordScreen,
   ResetPasswordScreen,
   ChangePasswordScreen,
+  AccountSuspendedScreen,
   SignupSuccessScreen,
   ProfileSetupScreen,
   NotificationsScreen,
@@ -130,14 +131,37 @@ function MainTabsGate() {
 }
 
 export default function RootNavigator() {
+  const { accountSuspended, recovery, isSignedIn, authLoading, session } =
+    useAuth();
+  const screenOptions = {
+    headerShown: false,
+    animation: 'slide_from_right' as const,
+    contentStyle: { backgroundColor: '#F7F9FB' },
+  };
+
+  // Recovery stays on its own screens. Suspension replaces the tree so
+  // MainTabs and deep-link resets cannot race this branch.
+  if (accountSuspended && !recovery) {
+    return (
+      <Stack.Navigator screenOptions={screenOptions}>
+        <Stack.Screen
+          name="AccountSuspended"
+          component={AccountSuspendedScreen}
+        />
+      </Stack.Navigator>
+    );
+  }
+
+  const initialRouteName = isSignedIn
+    ? 'MainTabs'
+    : !authLoading && !session
+      ? 'SignIn'
+      : 'Splash1';
+
   return (
     <Stack.Navigator
-      initialRouteName="Splash1"
-      screenOptions={{
-        headerShown: false,
-        animation: 'slide_from_right',
-        contentStyle: { backgroundColor: '#F7F9FB' },
-      }}
+      initialRouteName={initialRouteName}
+      screenOptions={screenOptions}
     >
       <Stack.Screen name="Splash1" component={SplashScreen1} />
       <Stack.Screen name="Splash2" component={SplashScreen2} />
