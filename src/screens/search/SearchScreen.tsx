@@ -39,6 +39,8 @@ import {
   ConnectionRelation,
 } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useSaved } from '../../context/SavedContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { useConnections } from '../../context/ConnectionsContext';
 import {
   exploreApi,
@@ -741,23 +743,37 @@ function TalentCard({
   );
 }
 
-function ServiceCard({
+export function ServiceCard({
   service,
   onPress,
   onProviderPress,
+  onBookmark,
 }: {
   service: Service;
   onPress: () => void;
   onProviderPress: () => void;
+  onBookmark?: () => void;
 }) {
+  const saved = useSaved();
+  const shown = saved.isSaved('service', service.id, Boolean(service.isSaved));
   const providerReviews = service.provider.reviewCount ?? 0;
   return (
     <TouchableOpacity style={styles.serviceCard} onPress={onPress} activeOpacity={0.9}>
       <ServiceMediaMosaic images={service.images} />
       <View style={styles.serviceBody}>
-        <Text style={styles.serviceTitle} numberOfLines={1}>
-          {service.title}
-        </Text>
+        <View style={styles.serviceTitleRow}>
+          <Text style={styles.serviceTitle} numberOfLines={1}>
+            {service.title}
+          </Text>
+          <BookmarkButton
+            kind="service"
+            saved={shown}
+            onPress={() => {
+              if (onBookmark) onBookmark();
+              else void saved.setDesired('service', service.id, !shown, Boolean(service.isSaved));
+            }}
+          />
+        </View>
         {service.category ? <Text style={styles.categoryText}>{service.category}</Text> : null}
         <Text style={styles.serviceDesc} numberOfLines={2}>
           {service.description}
@@ -791,7 +807,17 @@ function ServiceCard({
   );
 }
 
-function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
+export function JobCard({
+  job,
+  onPress,
+  onBookmark,
+}: {
+  job: Job;
+  onPress: () => void;
+  onBookmark?: () => void;
+}) {
+  const saved = useSaved();
+  const shown = saved.isSaved('job', job.id, Boolean(job.isSaved));
   const badge = jobTypeBadge(job.type);
   return (
     <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.9}>
@@ -820,8 +846,18 @@ function JobCard({ job, onPress }: { job: Job; onPress: () => void }) {
         />
         {job.postedAt ? <Text style={styles.jobMeta}>Posted {postedLabel(job.postedAt)}</Text> : null}
       </View>
-      <View style={[styles.jobBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
-        <Text style={[styles.jobBadgeText, { color: badge.text }]}>{badge.label}</Text>
+      <View style={styles.jobAside}>
+        <BookmarkButton
+          kind="job"
+          saved={shown}
+          onPress={() => {
+            if (onBookmark) onBookmark();
+            else void saved.setDesired('job', job.id, !shown, Boolean(job.isSaved));
+          }}
+        />
+        <View style={[styles.jobBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+          <Text style={[styles.jobBadgeText, { color: badge.text }]}>{badge.label}</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -961,7 +997,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   serviceBody: { padding: spacing.md, gap: 4 },
-  serviceTitle: { ...typography.body, color: colors.text, fontWeight: '600' },
+  serviceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  serviceTitle: { ...typography.body, color: colors.text, fontWeight: '600', flex: 1 },
   categoryText: { ...typography.caption, color: colors.primary },
   serviceDesc: { ...typography.bodySmall, color: colors.textSecondary },
   providerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
@@ -994,6 +1036,7 @@ const styles = StyleSheet.create({
   jobTitle: { ...typography.body, color: colors.text, fontWeight: '600' },
   jobCompany: { ...typography.bodySmall, color: colors.textSecondary },
   jobMeta: { ...typography.caption, color: colors.textTertiary },
+  jobAside: { alignItems: 'flex-end', gap: spacing.sm },
   jobBadge: {
     alignSelf: 'flex-start',
     borderWidth: 1,

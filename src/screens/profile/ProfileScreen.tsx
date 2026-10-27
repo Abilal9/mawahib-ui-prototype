@@ -29,6 +29,7 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { getAboutCompletionState } from '../../utils/aboutCompletion';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useSaved } from '../../context/SavedContext';
 import { useConnections } from '../../context/ConnectionsContext';
 import { postService } from '../../services/postService';
 import {
@@ -50,6 +51,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, aboutHydrated, profileError, refreshProfessionalProfile } =
     useMyProfile();
+  const saved = useSaved();
   const { connectedUsers } = useConnections();
   const [userPosts, setUserPosts] = useState<Post[]>([]);
 
@@ -411,6 +413,11 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                   <ProfileFeedPost
                     key={post.id}
                     post={post}
+                    saved={saved.isSaved('post', post.id, post.isSaved)}
+                    onBookmark={() => {
+                      const shown = saved.isSaved('post', post.id, post.isSaved);
+                      void saved.setDesired('post', post.id, !shown, post.isSaved);
+                    }}
                     onPress={() => navigation.navigate('PostDetail', { postId: post.id })}
                     onAuthorPress={() =>
                       openUserProfile(navigation, post.author.id, user.id)

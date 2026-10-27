@@ -35,6 +35,7 @@ export interface ExploreServiceRow {
   images: string[];
   exploreTag: string | null;
   provider: ExploreProfile;
+  isSaved?: boolean;
 }
 
 function profileToUser(p: ExploreProfile): User {
@@ -90,6 +91,7 @@ export function mapExploreService(row: ExploreServiceRow): Service {
     reviewCount: row.reviewCount,
     images: row.images,
     exploreTag: row.exploreTag || undefined,
+    isSaved: row.isSaved,
   };
 }
 

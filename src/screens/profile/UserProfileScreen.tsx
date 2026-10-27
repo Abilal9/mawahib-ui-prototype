@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,7 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { ProfileTab, Post } from '../../data/types';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useSaved } from '../../context/SavedContext';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { postService } from '../../services/postService';
@@ -63,6 +65,7 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
     refreshIfStale,
   } = useConnections();
   const { user: me } = useMyProfile();
+  const saved = useSaved();
   const visitorProfessional = useVisitorProfessionalProfile(route.params.userId);
   const visitorUser = useVisitorUser(route.params.userId);
   const user = visitorUser.user;
@@ -464,6 +467,27 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                     <View style={styles.serviceBody}>
                       <View style={styles.serviceTitleRow}>
                         <Text style={styles.serviceTitle}>{service.title}</Text>
+                        <BookmarkButton
+                          kind="service"
+                          saved={saved.isSaved(
+                            'service',
+                            service.id,
+                            Boolean(service.isSaved),
+                          )}
+                          onPress={() => {
+                            const shown = saved.isSaved(
+                              'service',
+                              service.id,
+                              Boolean(service.isSaved),
+                            );
+                            void saved.setDesired(
+                              'service',
+                              service.id,
+                              !shown,
+                              Boolean(service.isSaved),
+                            );
+                          }}
+                        />
                         {(service.reviewCount ?? 0) > 0 ? (
                           <TouchableOpacity
                             style={styles.ratingInline}
@@ -528,6 +552,11 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                     <ProfileFeedPost
                       key={post.id}
                       post={post}
+                      saved={saved.isSaved('post', post.id, post.isSaved)}
+                      onBookmark={() => {
+                        const shown = saved.isSaved('post', post.id, post.isSaved);
+                        void saved.setDesired('post', post.id, !shown, post.isSaved);
+                      }}
                       onPress={() =>
                         navigation.navigate('PostDetail', { postId: post.id })
                       }

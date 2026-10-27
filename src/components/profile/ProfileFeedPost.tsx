@@ -6,12 +6,15 @@ import { toImageSource } from '../../utils/image';
 import UserAvatar from '../ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
 import { Post } from '../../data/types';
+import BookmarkButton from '../ui/BookmarkButton';
 import { displayProfileTitle } from '../../constants/profile';
 
 type ProfileFeedPostProps = {
   post: Post;
   onPress: () => void;
   onAuthorPress: () => void;
+  saved?: boolean;
+  onBookmark?: () => void;
 };
 
 /** Full-width post preview used on own + visitor profile Posts tabs. */
@@ -19,6 +22,8 @@ export default function ProfileFeedPost({
   post,
   onPress,
   onAuthorPress,
+  saved = false,
+  onBookmark,
 }: ProfileFeedPostProps) {
   const truncated =
     post.caption.length > 110 ? `${post.caption.slice(0, 110)}...` : post.caption;
@@ -59,7 +64,9 @@ export default function ProfileFeedPost({
         </View>
         <Ionicons name="arrow-redo-outline" size={18} color={colors.textSecondary} />
         <View style={{ flex: 1 }} />
-        <Ionicons name="bookmark-outline" size={18} color={colors.textSecondary} />
+        {onBookmark ? (
+          <BookmarkButton kind="post" saved={saved} onPress={onBookmark} size={18} idleColor={colors.textSecondary} />
+        ) : null}
       </View>
     </TouchableOpacity>
   );

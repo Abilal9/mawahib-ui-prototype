@@ -103,6 +103,7 @@ export interface Job {
   exploreTag?: string;
   /** Poster verification, when the listing payload includes it. */
   companyVerified?: boolean;
+  isSaved?: boolean;
 }
 
 /** Alias for catalog Job — distinguishes from UserJob (in-app engagement) */
@@ -186,6 +187,7 @@ export interface Service {
   priceLabel?: string;
   /** Explore filter chip */
   exploreTag?: string;
+  isSaved?: boolean;
 }
 
 /** Prefer CatalogService when clarifying vs ServiceOffering */

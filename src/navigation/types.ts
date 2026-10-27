@@ -84,6 +84,7 @@ export type RootStackParamList = {
   };
   Calendar: undefined;
   Connections: { userId?: string } | undefined;
+  Saved: undefined;
   Reviews: { userId?: string } | undefined;
   Documentation: undefined;
   ChangeLanguage: undefined;

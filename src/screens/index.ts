@@ -72,6 +72,7 @@ export { default as ServiceDetailScreen } from './profile/ServiceDetailScreen';
 export { default as RequestServiceScreen } from './profile/RequestServiceScreen';
 export { default as CalendarScreen } from './profile/CalendarScreen';
 export { default as ConnectionsScreen } from './profile/ConnectionsScreen';
+export { default as SavedScreen } from './saved/SavedScreen';
 export { default as ReviewsScreen } from './profile/ReviewsScreen';
 export { default as DocumentationScreen } from './profile/DocumentationScreen';
 export { default as ChangeLanguageScreen } from './profile/ChangeLanguageScreen';

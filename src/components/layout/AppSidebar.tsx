@@ -27,10 +27,11 @@ const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.82;
 const PRIMARY_LINKS: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  route: 'Profile' | 'Connections';
+  route: 'Profile' | 'Connections' | 'Saved';
 }[] = [
   { icon: 'person-outline', label: 'My Profile', route: 'Profile' },
   { icon: 'people-outline', label: 'My Connections', route: 'Connections' },
+  { icon: 'bookmark-outline', label: 'Saved', route: 'Saved' },
 ];
 
 const FOOTER_LINKS: {
@@ -98,6 +99,7 @@ export default function AppSidebar() {
       | 'Documentation'
       | 'Settings'
       | 'ChangeLanguage'
+      | 'Saved'
   ) => {
     close();
     setTimeout(() => {

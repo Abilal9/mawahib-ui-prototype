@@ -43,6 +43,7 @@ import {
   RequestServiceScreen,
   CalendarScreen,
   ConnectionsScreen,
+  SavedScreen,
   ReviewsScreen,
   DocumentationScreen,
   ChangeLanguageScreen,
@@ -208,6 +209,7 @@ export default function RootNavigator() {
       <Stack.Screen name="RequestService" component={RequestServiceScreen} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
       <Stack.Screen name="Connections" component={ConnectionsScreen} />
+      <Stack.Screen name="Saved" component={SavedScreen} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} />
       <Stack.Screen name="Documentation" component={DocumentationScreen} />
       <Stack.Screen name="ChangeLanguage" component={ChangeLanguageScreen} />

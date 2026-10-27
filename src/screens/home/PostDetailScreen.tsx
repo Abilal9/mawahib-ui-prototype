@@ -27,6 +27,8 @@ import { colors, spacing, radius, typography, fontFamily } from '../../theme';
 import { Comment, Post } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
+import { useSaved } from '../../context/SavedContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 
@@ -46,9 +48,9 @@ export default function PostDetailScreen({
     addComment,
     deleteComment,
     toggleLike,
-    toggleSave,
     softDelete,
   } = usePosts();
+  const saved = useSaved();
   const focusComments = route.params.focusComments === true;
   const postId = route.params.postId;
   const { user, removePostId } = useMyProfile();
@@ -403,17 +405,16 @@ export default function PostDetailScreen({
               <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
+          <BookmarkButton
+            kind="post"
+            saved={saved.isSaved('post', post.id, post.isSaved)}
+            size={24}
+            idleColor={colors.text}
             onPress={() => {
-              void toggleSave(post.id);
+              const shown = saved.isSaved('post', post.id, post.isSaved);
+              void saved.setDesired('post', post.id, !shown, post.isSaved);
             }}
-          >
-            <Ionicons
-              name={post.isSaved ? 'bookmark' : 'bookmark-outline'}
-              size={24}
-              color={post.isSaved ? colors.primary : colors.text}
-            />
-          </TouchableOpacity>
+          />
         </View>
 
         {post.likes > 0 ? (

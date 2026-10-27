@@ -93,6 +93,8 @@ function ServiceHero({
 }
 import { catalogService } from '../../services';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useSaved } from '../../context/SavedContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { ScreenProps } from '../../navigation/types';
 import { useVisitorProfessionalProfile } from '../../hooks/useVisitorProfessionalProfile';
@@ -111,6 +113,7 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
   const ownerUserId = route.params.userId;
   const isVisitorView = Boolean(ownerUserId);
   const { user: me, content, removeService } = useMyProfile();
+  const saved = useSaved();
   const visitorUser = useVisitorUser(isVisitorView ? ownerUserId : undefined);
   const owner = visitorUser.user ?? undefined;
   const visitor = useVisitorProfessionalProfile(
@@ -184,6 +187,30 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
           <View style={styles.content}>
             <View style={styles.titleRow}>
               <Text style={styles.title}>{profileOffering.title}</Text>
+              {profileOffering.status !== 'draft' &&
+              profileOffering.status !== 'archived' ? (
+                <BookmarkButton
+                  kind="service"
+                  saved={saved.isSaved(
+                    'service',
+                    profileOffering.id,
+                    Boolean(profileOffering.isSaved),
+                  )}
+                  onPress={() => {
+                    const shown = saved.isSaved(
+                      'service',
+                      profileOffering.id,
+                      Boolean(profileOffering.isSaved),
+                    );
+                    void saved.setDesired(
+                      'service',
+                      profileOffering.id,
+                      !shown,
+                      Boolean(profileOffering.isSaved),
+                    );
+                  }}
+                />
+              ) : null}
               {!isVisitorView ? (
                 <View style={styles.ownerActions}>
                   <TouchableOpacity
@@ -339,7 +366,26 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
           {service.category ? (
             <Text style={styles.category}>{service.category}</Text>
           ) : null}
-          <Text style={styles.title}>{service.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{service.title}</Text>
+            <BookmarkButton
+              kind="service"
+              saved={saved.isSaved('service', service.id, Boolean(service.isSaved))}
+              onPress={() => {
+                const shown = saved.isSaved(
+                  'service',
+                  service.id,
+                  Boolean(service.isSaved),
+                );
+                void saved.setDesired(
+                  'service',
+                  service.id,
+                  !shown,
+                  Boolean(service.isSaved),
+                );
+              }}
+            />
+          </View>
 
           <TouchableOpacity
             style={styles.providerRow}

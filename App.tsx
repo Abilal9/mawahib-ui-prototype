@@ -8,6 +8,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/context/AuthContext';
+import { SavedProvider } from './src/context/SavedContext';
 import { SidebarProvider } from './src/context/SidebarContext';
 import { CreateMenuProvider } from './src/context/CreateMenuContext';
 import { ProfileProvider } from './src/context/ProfileContext';
@@ -73,7 +74,9 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <AppProviders />
+          <SavedProvider>
+            <AppProviders />
+          </SavedProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

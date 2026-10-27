@@ -130,6 +130,8 @@ export interface ServiceOffering {
   categoryName?: string | null;
   customCategory?: string | null;
   taxonomySkills?: Array<{ id: string; name: string }>;
+  status?: 'draft' | 'published' | 'archived';
+  isSaved?: boolean;
 }
 
 /** @deprecated Prefer ServiceOffering — kept for existing imports */

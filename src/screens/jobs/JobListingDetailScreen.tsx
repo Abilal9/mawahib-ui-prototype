@@ -32,6 +32,8 @@ import {
 } from '../../services/marketplaceApi';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useSaved } from '../../context/SavedContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { useMarketplaceSuccess } from '../../hooks/useMarketplaceSuccess';
 import { ScreenProps } from '../../navigation/types';
 import { JobListing } from '../../data/types';
@@ -54,6 +56,7 @@ export default function JobListingDetailScreen({
     refresh,
   } = useUserJobs();
   const { apiUser } = useAuth();
+  const saved = useSaved();
   const { listingId } = route.params;
   const [job, setJob] = useState<JobListing | undefined>(() =>
     jobService.getByIdSync(listingId),
@@ -400,7 +403,31 @@ export default function JobListingDetailScreen({
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Job Details</Text>
-        <View style={styles.headerButton} />
+        {apiListing &&
+        apiListing.status !== 'draft' &&
+        apiListing.status !== 'archived' ? (
+          <BookmarkButton
+            kind="job"
+            saved={saved.isSaved('job', listingId, Boolean(apiListing.isSaved))}
+            size={24}
+            idleColor={colors.text}
+            onPress={() => {
+              const shown = saved.isSaved(
+                'job',
+                listingId,
+                Boolean(apiListing.isSaved),
+              );
+              void saved.setDesired(
+                'job',
+                listingId,
+                !shown,
+                Boolean(apiListing.isSaved),
+              );
+            }}
+          />
+        ) : (
+          <View style={styles.headerButton} />
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>

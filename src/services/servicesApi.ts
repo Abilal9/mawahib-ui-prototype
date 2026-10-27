@@ -33,6 +33,8 @@ export interface ApiServiceOffering {
   categoryName?: string | null;
   customCategory?: string | null;
   taxonomySkills?: Array<{ id: string; name: string }>;
+  status?: 'draft' | 'published' | 'archived';
+  isSaved?: boolean;
 }
 
 export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
@@ -67,6 +69,8 @@ export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
     categoryName: api.categoryName ?? null,
     customCategory: api.customCategory ?? null,
     taxonomySkills: api.taxonomySkills ?? [],
+    status: api.status,
+    isSaved: api.isSaved,
   };
 }
 

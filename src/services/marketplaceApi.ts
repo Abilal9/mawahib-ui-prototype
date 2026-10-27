@@ -76,6 +76,7 @@ export interface ApiJobListing {
   createdAt: string;
   updatedAt: string;
   poster: ApiPoster;
+  isSaved?: boolean;
 }
 
 export interface ApiJobListingsPage {
@@ -342,6 +343,7 @@ export function mapApiListingToJob(api: ApiJobListing): JobListing {
     logo: api.poster.avatarUrl ?? undefined,
     exploreTag: api.exploreTag ?? undefined,
     companyVerified: api.poster.isVerified,
+    isSaved: api.isSaved,
   };
 }
 

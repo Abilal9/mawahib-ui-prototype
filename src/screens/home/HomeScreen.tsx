@@ -14,6 +14,7 @@ import {
 import { Image } from 'expo-image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { Ionicons } from '@expo/vector-icons';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import AppHeader from '../../components/ui/AppHeader';
@@ -21,6 +22,7 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { useSidebar } from '../../context/SidebarContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { usePosts } from '../../context/PostsContext';
+import { useSaved } from '../../context/SavedContext';
 import { useConnections } from '../../context/ConnectionsContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { catalogService, jobService } from '../../services';
@@ -155,13 +157,11 @@ function FeedPostCard({
           <Ionicons name="share-outline" size={20} color={colors.textTertiary} />
         </TouchableOpacity>
         <View style={styles.feedActionSpacer} />
-        <TouchableOpacity onPress={onBookmark} hitSlop={8}>
-          <Ionicons
-            name={post.isSaved ? 'bookmark' : 'bookmark-outline'}
-            size={20}
-            color={post.isSaved ? colors.primary : colors.textTertiary}
-          />
-        </TouchableOpacity>
+        <BookmarkButton
+          kind="post"
+          saved={post.isSaved}
+          onPress={onBookmark}
+        />
       </View>
     </TouchableOpacity>
   );
@@ -377,9 +377,9 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     refresh: refreshFeed,
     loadMore,
     toggleLike,
-    toggleSave,
     patchLocalPost,
   } = usePosts();
+  const saved = useSaved();
   const { requestConnect, acceptRequest, refresh: refreshConnections } =
     useConnections();
   const { unreadCount } = useNotifications();
@@ -481,10 +481,12 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
     navigation.navigate('SearchTab', { contentType });
   };
 
-  const renderFeedPost = (post: Post) => (
+  const renderFeedPost = (post: Post) => {
+    const shownSaved = saved.isSaved('post', post.id, post.isSaved);
+    return (
     <FeedPostCard
       key={post.id}
-      post={post}
+      post={{ ...post, isSaved: shownSaved }}
       onPress={() => openPostDetail(post.id)}
       onLike={() => {
         void toggleLike(post.id);
@@ -492,7 +494,7 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
       onComment={() => openPostDetail(post.id, true)}
       onShare={() => sharePost(post)}
       onBookmark={() => {
-        void toggleSave(post.id);
+        void saved.setDesired('post', post.id, !shownSaved, post.isSaved);
       }}
       onAuthorPress={() => openUserProfile(navigation, post.author.id, me.id)}
       onConnect={() => {
@@ -531,7 +533,8 @@ export default function HomeScreen({ navigation }: TabScreenProps<'HomeTab'>) {
       }}
       onPressLikes={() => setLikesPostId(post.id)}
     />
-  );
+    );
+  };
 
   return (
     <ScreenContainer padded={false} safeBottom={false} safeTop={false}>

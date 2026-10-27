@@ -12,6 +12,7 @@ import { Alert } from 'react-native';
 import { Comment, Post } from '../data/types';
 import { ApiError } from '../lib/apiClient';
 import { useAuth } from './AuthContext';
+import { useSaved } from './SavedContext';
 import { postService } from '../services/postService';
 
 interface PostsContextValue {
@@ -41,6 +42,7 @@ const PostsContext = createContext<PostsContextValue | undefined>(undefined);
 
 export function PostsProvider({ children }: { children: ReactNode }) {
   const { isSignedIn } = useAuth();
+  const saved = useSaved();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -193,33 +195,15 @@ export function PostsProvider({ children }: { children: ReactNode }) {
 
   const toggleSave = useCallback(
     async (postId: string) => {
-      if (engagementInFlight.current.has(`save:${postId}`)) return;
       const current = postsRef.current.find((p) => p.id === postId);
       if (!current) return;
-      engagementInFlight.current.add(`save:${postId}`);
-      const nextSaved = !current.isSaved;
+      const shown = saved.isSaved('post', postId, current.isSaved);
+      const nextSaved = !shown;
       patchLocalPost(postId, { isSaved: nextSaved });
-      try {
-        const eng = nextSaved
-          ? await postService.save(postId)
-          : await postService.unsave(postId);
-        patchLocalPost(postId, {
-          likes: eng.likeCount,
-          comments: eng.commentCount,
-          isLiked: eng.isLiked,
-          isSaved: eng.isSaved,
-        });
-      } catch (e) {
-        patchLocalPost(postId, { isSaved: current.isSaved });
-        Alert.alert(
-          'Could not update save',
-          e instanceof Error ? e.message : 'Please try again',
-        );
-      } finally {
-        engagementInFlight.current.delete(`save:${postId}`);
-      }
+      const ok = await saved.setDesired('post', postId, nextSaved, current.isSaved);
+      if (!ok) patchLocalPost(postId, { isSaved: current.isSaved });
     },
-    [patchLocalPost],
+    [patchLocalPost, saved],
   );
 
   const softDelete = useCallback(async (postId: string) => {
