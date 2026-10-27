@@ -1,4 +1,5 @@
 import { ServiceOffering, ServicePackage } from '../data/types';
+import { ratingFields, type ReviewAggregate } from '../utils/reviewSummary';
 import { apiRequest } from '../lib/apiClient';
 
 export interface ApiServiceOffering {
@@ -7,8 +8,7 @@ export interface ApiServiceOffering {
   description: string;
   category: string | null;
   currency: string;
-  rating: number;
-  reviewCount: number;
+  reviewSummary: ReviewAggregate;
   images: string[];
   mediaAssetIds: string[];
   packages: Array<{
@@ -37,13 +37,28 @@ export interface ApiServiceOffering {
   isSaved?: boolean;
 }
 
+export interface ApiServiceReview {
+  id: string;
+  contextLabel: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+  reviewer: {
+    id: string;
+    displayName: string;
+    username: string;
+    isVerified: boolean;
+    avatarUrl: string | null;
+    title: string | null;
+  };
+}
+
 export function mapServiceOffering(api: ApiServiceOffering): ServiceOffering {
   return {
     id: api.id,
     title: api.title,
     description: api.description,
-    rating: api.rating,
-    reviewCount: api.reviewCount,
+    ...ratingFields(api.reviewSummary),
     images: api.images,
     mediaAssetIds: api.mediaAssetIds,
     currency: api.currency,
@@ -169,6 +184,17 @@ export const servicesApi = {
 
   remove(id: string): Promise<void> {
     return apiRequest<void>(`/users/me/services/${id}`, { method: 'DELETE' });
+  },
+
+  listReviews(
+    serviceId: string,
+    params?: { cursor?: string; limit?: number },
+  ): Promise<{ items: ApiServiceReview[]; nextCursor: string | null }> {
+    const qs = new URLSearchParams();
+    if (params?.cursor) qs.set('cursor', params.cursor);
+    if (params?.limit != null) qs.set('limit', String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/services/${serviceId}/reviews${suffix}`);
   },
 
   reorder(serviceIds: string[]): Promise<ApiServiceOffering[]> {

@@ -1,4 +1,10 @@
 import { Service, Talent, User } from '../data/types';
+import {
+  headlineAggregate,
+  ratingFields,
+  type ReviewAggregate,
+  type ReviewSummaryPair,
+} from '../utils/reviewSummary';
 import { displayCategory, displayPrice } from '../domain/truthfulFacts';
 import { apiRequest } from '../lib/apiClient';
 
@@ -18,8 +24,7 @@ export interface ExploreProfile {
   followersCount: number;
   followingCount: number;
   postsCount: number;
-  ratingAvg: number;
-  ratingCount: number;
+  reviewSummary: ReviewSummaryPair;
 }
 
 export interface ExploreServiceRow {
@@ -30,8 +35,7 @@ export interface ExploreServiceRow {
   price: number | null;
   currency: string;
   duration: string;
-  rating: number;
-  reviewCount: number;
+  reviewSummary: ReviewAggregate;
   images: string[];
   exploreTag: string | null;
   provider: ExploreProfile;
@@ -54,8 +58,8 @@ function profileToUser(p: ExploreProfile): User {
     posts: p.postsCount,
     isVerified: p.isVerified,
     title: p.title || undefined,
-    rating: p.ratingAvg,
-    reviewCount: p.ratingCount,
+    reviewSummary: p.reviewSummary,
+    ...ratingFields(headlineAggregate(p)),
   };
 }
 
@@ -65,8 +69,7 @@ export function mapExploreTalent(p: ExploreProfile): Talent {
     id: `talent-${p.id}`,
     user,
     category: p.title || p.skills[0] || 'Talent',
-    rating: p.ratingAvg,
-    reviewCount: p.ratingCount,
+    ...ratingFields(headlineAggregate(p)),
     // Not shown. Mawahib has no hourly rate or mutual-connection data yet.
     hourlyRate: 0,
     skills: p.skills,
@@ -87,8 +90,7 @@ export function mapExploreService(row: ExploreServiceRow): Service {
     duration: row.duration,
     category: displayCategory(row.category),
     provider: profileToUser(row.provider),
-    rating: row.rating,
-    reviewCount: row.reviewCount,
+    ...ratingFields(row.reviewSummary),
     images: row.images,
     exploreTag: row.exploreTag || undefined,
     isSaved: row.isSaved,

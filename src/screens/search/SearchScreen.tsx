@@ -756,7 +756,7 @@ export function ServiceCard({
 }) {
   const saved = useSaved();
   const shown = saved.isSaved('service', service.id, Boolean(service.isSaved));
-  const providerReviews = service.provider.reviewCount ?? 0;
+  const serviceReviews = service.reviewCount ?? 0;
   return (
     <TouchableOpacity style={styles.serviceCard} onPress={onPress} activeOpacity={0.9}>
       <ServiceMediaMosaic images={service.images} />
@@ -788,11 +788,13 @@ export function ServiceCard({
         {service.provider.location ? (
           <Text style={styles.serviceMeta}>{service.provider.location}</Text>
         ) : null}
-        {providerReviews > 0 ? (
+        {serviceReviews > 0 ? (
           <Text style={styles.providerRating}>
-            Provider · {(service.provider.rating ?? 0).toFixed(1)} ({providerReviews})
+            {service.rating.toFixed(1)} ({serviceReviews === 1 ? '1 review' : `${serviceReviews} reviews`})
           </Text>
-        ) : null}
+        ) : (
+          <Text style={styles.providerRating}>No reviews yet</Text>
+        )}
         {service.duration ? <Text style={styles.serviceMeta}>{service.duration}</Text> : null}
         {service.price != null ? (
           <MoneyAmount

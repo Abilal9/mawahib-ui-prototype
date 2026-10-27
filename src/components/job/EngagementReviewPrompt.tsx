@@ -2,12 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { reviewByLabel } from '../../utils/reviewSummary';
 
 interface Props {
   /** Other party's display name. */
   otherName: string;
   /** The viewer's existing rating; when set the prompt becomes read-only. */
   existingRating?: number;
+  canSubmit?: boolean;
+  windowClosesAt?: string | null;
+  published?: boolean;
   onSelectRating: (rating: number) => void;
   /** Smaller stars for list cards. */
   compact?: boolean;
@@ -21,6 +25,9 @@ interface Props {
 export default function EngagementReviewPrompt({
   otherName,
   existingRating,
+  canSubmit,
+  windowClosesAt,
+  published,
   onSelectRating,
   compact,
 }: Props) {
@@ -40,7 +47,7 @@ export default function EngagementReviewPrompt({
   if (reviewed) {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.label}>Your review</Text>
+        <Text style={styles.label}>Submitted</Text>
         <View style={styles.row}>
           {[1, 2, 3, 4, 5].map((v) => (
             <Ionicons
@@ -51,12 +58,30 @@ export default function EngagementReviewPrompt({
             />
           ))}
         </View>
+        {published ? null : (
+          <Text style={styles.label}>
+            Your review will stay private until the other person submits theirs
+            or the 14-day review period ends.
+          </Text>
+        )}
       </View>
     );
   }
 
+  if (!canSubmit) {
+    return (
+      <View style={styles.wrap}>
+        <Text style={styles.label}>Review period ended</Text>
+      </View>
+    );
+  }
+
+  const deadline = reviewByLabel(windowClosesAt);
+
   return (
     <View style={styles.wrap}>
+      <Text style={styles.label}>Leave a review</Text>
+      {deadline ? <Text style={styles.label}>{deadline}</Text> : null}
       <Text style={styles.label}>How was it working with {otherName}?</Text>
       <View style={styles.row}>
         {[1, 2, 3, 4, 5].map((v) => (

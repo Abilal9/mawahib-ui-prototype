@@ -22,6 +22,11 @@ export interface User {
   title?: string;
   rating?: number;
   reviewCount?: number;
+  /** Published reviews received as provider and as client. */
+  reviewSummary?: {
+    asProvider: { average: number | null; count: number };
+    asClient: { average: number | null; count: number };
+  };
   /** talent | business. Present on Explore profiles. */
   accountType?: string;
 }

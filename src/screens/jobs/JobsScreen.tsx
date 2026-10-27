@@ -286,6 +286,9 @@ function JobFlowCard({
             compact
             otherName={job.counterpart.name}
             existingRating={job.rating}
+            canSubmit={job.reviewState?.canSubmit}
+            windowClosesAt={job.reviewState?.windowClosesAt}
+            published={job.reviewState?.published}
             onSelectRating={(value) => onStarPress?.(value)}
           />
         </>
@@ -540,10 +543,7 @@ export default function JobsScreen({
                       showReviewPrompt={
                         section.key === 'completed' &&
                         job.status === 'completed' &&
-                        (job.reviewState
-                          ? job.reviewState.canReview ||
-                            !!job.reviewState.myReview
-                          : true)
+                        !!job.reviewState?.eligible
                       }
                       onPress={() => openJob(job)}
                       onCounterpartPress={() =>

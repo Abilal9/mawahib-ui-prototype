@@ -39,7 +39,7 @@ export function mapApiReviewToItem(
     body: review.body,
     images: (review.media ?? [])
       .map((item) => item.url)
-      .filter((url) => url.length > 0)
+      .filter((url): url is string => typeof url === 'string' && url.length > 0)
       .slice(0, 4),
   };
 }

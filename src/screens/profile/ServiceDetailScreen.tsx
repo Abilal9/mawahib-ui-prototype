@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,11 @@ import CurrencyIcon from '../../components/ui/CurrencyIcon';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
+import {
+  servicesApi,
+  type ApiServiceReview,
+} from '../../services/servicesApi';
+import { formatReviewAverage, reviewCountLabel } from '../../utils/reviewSummary';
 
 function ServiceHero({
   images,
@@ -142,6 +147,22 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
 
   const [activePackage, setActivePackage] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [serviceReviews, setServiceReviews] = useState<ApiServiceReview[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void servicesApi
+      .listReviews(route.params.serviceId, { limit: 20 })
+      .then((page) => {
+        if (!cancelled) setServiceReviews(page.items);
+      })
+      .catch(() => {
+        if (!cancelled) setServiceReviews([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.params.serviceId]);
 
   if (isVisitorView && visitor.loading) {
     return (
@@ -230,6 +251,24 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
               ) : null}
             </View>
             <Text style={styles.description}>{profileOffering.description}</Text>
+            {(profileOffering.reviewCount ?? 0) > 0 ? (
+              <Text style={styles.description}>
+                {formatReviewAverage(profileOffering.rating)} (
+                {reviewCountLabel(profileOffering.reviewCount ?? 0)})
+              </Text>
+            ) : (
+              <Text style={styles.description}>No reviews yet</Text>
+            )}
+            {serviceReviews.map((review) => (
+              <View key={review.id}>
+                <Text style={styles.description}>
+                  {review.reviewer.displayName} · {review.rating.toFixed(1)}
+                </Text>
+                {review.body ? (
+                  <Text style={styles.description}>{review.body}</Text>
+                ) : null}
+              </View>
+            ))}
           </View>
 
           <View style={styles.stickyTabsShell}>
@@ -406,7 +445,8 @@ export default function ServiceDetailScreen({ route, navigation }: ScreenProps<'
                   <>
                     <Ionicons name="star" size={14} color={colors.warning} />
                     <Text style={styles.rating}>
-                      {service.rating} ({service.reviewCount} reviews)
+                      {formatReviewAverage(service.rating)} (
+                      {reviewCountLabel(service.reviewCount ?? 0)})
                     </Text>
                   </>
                 ) : (

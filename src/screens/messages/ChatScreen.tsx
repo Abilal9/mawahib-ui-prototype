@@ -387,7 +387,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   }, [work, peer]);
 
   const showRateCta =
-    Boolean(work) && !writable && work?.canReview === true;
+    Boolean(work) && !writable && work?.canSubmit === true;
 
   const canSend =
     (text.trim().length > 0 || pendingAttachments.length > 0) && !sending;

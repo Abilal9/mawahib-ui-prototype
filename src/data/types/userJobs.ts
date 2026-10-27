@@ -96,17 +96,20 @@ export interface UserJob {
   details?: UserJobDetails;
   /**
    * Canonical review eligibility from the engagement. When present, screens
-   * must use `canReview` instead of inferring it from status and review lists.
+   * must use `canSubmit` instead of inferring it from status and review lists.
    */
   reviewState?: {
-    canReview: boolean;
+    eligible: boolean;
+    canSubmit: boolean;
+    windowClosesAt: string | null;
+    published: boolean;
     myReview: { id: string; rating: number; body: string; createdAt: string } | null;
-    otherPartyReview: {
+    counterpartReview?: {
       id: string;
       rating: number;
       body: string;
       createdAt: string;
-    } | null;
+    };
   } | null;
   /** The viewer's own review of the other party (set once it exists). */
   rating?: number;

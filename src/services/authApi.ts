@@ -8,6 +8,11 @@ import type {
 import { AccountType } from '../context/AuthContext';
 import { apiRequest } from '../lib/apiClient';
 import {
+  EMPTY_REVIEW_SUMMARY,
+  headlineAggregate,
+  type ReviewSummaryPair,
+} from '../utils/reviewSummary';
+import {
   currencyForCountry,
   normalizeCountryCode,
   normalizeCurrencyCode,
@@ -26,8 +31,7 @@ export interface ApiUser {
   connectionsCount?: number;
   followingCount: number;
   postsCount: number;
-  ratingAvg: number;
-  ratingCount: number;
+  reviewSummary: ReviewSummaryPair;
   bio: string;
   title: string | null;
   locationCity: string | null;
@@ -101,6 +105,11 @@ export function mapApiUserToUser(api: ApiUser): User {
       : countryCode
         ? currencyForCountry(countryCode)
         : null;
+  const reviewSummary = api.reviewSummary ?? EMPTY_REVIEW_SUMMARY;
+  const headline = headlineAggregate({
+    accountType: api.accountType,
+    reviewSummary,
+  });
 
   return {
     id: api.id,
@@ -124,8 +133,10 @@ export function mapApiUserToUser(api: ApiUser): User {
     posts: api.postsCount,
     isVerified: api.isVerified,
     title: api.title || undefined,
-    rating: api.ratingAvg,
-    reviewCount: api.ratingCount,
+    accountType: api.accountType,
+    reviewSummary,
+    rating: headline.average ?? undefined,
+    reviewCount: headline.count,
   };
 }
 

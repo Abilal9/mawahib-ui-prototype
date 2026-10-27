@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import ActionBusyOverlay from '../../components/ui/ActionBusyOverlay';
 import SuccessConfirmationModal from '../../components/ui/SuccessConfirmationModal';
 import { colors, spacing, radius, typography } from '../../theme';
 import UserAvatar from '../../components/ui/UserAvatar';
+import { useAuth } from '../../context/AuthContext';
 import { useUserJobs } from '../../context/UserJobsContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { openUserProfile } from '../../utils/openUserProfile';
@@ -46,6 +47,7 @@ export default function WriteReviewScreen({
   navigation,
 }: ScreenProps<'WriteReview'>) {
   const { getJobById, refresh } = useUserJobs();
+  const { apiUser } = useAuth();
   const { user: me } = useMyProfile();
   const job =
     getJobById(route.params.jobId) ??
@@ -54,10 +56,15 @@ export default function WriteReviewScreen({
       : undefined);
 
   const engagementId = route.params.engagementId ?? job?.engagementId;
-  const canSubmit = Boolean(engagementId);
+  const alreadySubmitted = Boolean(job?.reviewState?.myReview);
+  const windowOpen = !job?.reviewState || job.reviewState.canSubmit;
+  const canSubmit = Boolean(engagementId) && windowOpen && !alreadySubmitted;
 
-  const initial =
-    route.params.initialRating ?? job?.rating ?? 0;
+  const initial = route.params.initialRating ?? 0;
+  const authorId = apiUser?.id ?? null;
+  const authorRef = useRef(authorId);
+  const boundAuthor = useRef(authorId);
+  authorRef.current = authorId;
 
   const [rating, setRating] = useState(initial);
   const [text, setText] = useState(job?.reviewText ?? '');
@@ -66,6 +73,16 @@ export default function WriteReviewScreen({
   const [images, setImages] = useState<ReviewImageDraft[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  if (boundAuthor.current !== authorId) {
+    boundAuthor.current = authorId;
+    setRating(0);
+    setText('');
+    setImages([]);
+    setImageError(null);
+    setSubmitted(false);
+    setSubmitting(false);
+  }
 
   useEffect(() => {
     setRating(initial);
@@ -96,6 +113,7 @@ export default function WriteReviewScreen({
 
   const addImage = async () => {
     if (submitting) return;
+    const owner = authorRef.current;
     setImageError(null);
     if (images.length >= MAX_REVIEW_IMAGES) {
       setImageError(`You can add up to ${MAX_REVIEW_IMAGES} photos.`);
@@ -103,7 +121,7 @@ export default function WriteReviewScreen({
     }
     try {
       const picked = await pickLocalImage();
-      if (!picked) return;
+      if (!picked || authorRef.current !== owner) return;
       if (!REVIEW_IMAGE_MIME_TYPES.includes(picked.mimeType.toLowerCase())) {
         setImageError('Only JPG and PNG photos can be added.');
         return;
@@ -121,8 +139,22 @@ export default function WriteReviewScreen({
     setImages((prev) => prev.filter((img) => img.key !== key));
   };
 
+  const confirmSubmit = () => {
+    if (rating < 1 || rating > 5) return;
+    Alert.alert(
+      'Submit review?',
+      "You won't be able to edit this review after submitting.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Submit', onPress: () => void onSubmit() },
+      ],
+    );
+  };
+
   const onSubmit = async () => {
     if (!engagementId || submitting) return;
+    const owner = authorRef.current;
+    const engagementForOwner = engagementId;
     if (rating < 1 || rating > 5) {
       Alert.alert('Rating required', 'Please choose a star rating.');
       return;
@@ -132,6 +164,7 @@ export default function WriteReviewScreen({
       // Upload each photo once; remember its asset id so retries are cheap.
       const uploaded: ReviewImageDraft[] = [];
       for (const img of images) {
+        if (authorRef.current !== owner) return;
         if (img.mediaAssetId) {
           uploaded.push(img);
           continue;
@@ -143,6 +176,7 @@ export default function WriteReviewScreen({
           fileName: img.fileName,
           purpose: 'review',
         });
+        if (authorRef.current !== owner) return;
         uploaded.push({ ...img, mediaAssetId: result.mediaAssetId });
         setImages((prev) =>
           prev.map((p) =>
@@ -150,14 +184,16 @@ export default function WriteReviewScreen({
           ),
         );
       }
+      if (authorRef.current !== owner) return;
       const mediaAssetIds = uploaded
         .map((img) => img.mediaAssetId)
         .filter((id): id is string => Boolean(id));
-      await marketplaceApi.createEngagementReview(engagementId, {
+      await marketplaceApi.createEngagementReview(engagementForOwner, {
         rating,
         body: text.trim() || undefined,
         mediaAssetIds: mediaAssetIds.length > 0 ? mediaAssetIds : undefined,
       });
+      if (authorRef.current !== owner) return;
       void refresh();
       setSubmitted(true);
     } catch (e) {
@@ -242,6 +278,13 @@ export default function WriteReviewScreen({
               ? `How was it working with ${otherName}?`
               : 'How was your experience?'}
           </Text>
+          {job?.reviewState && !windowOpen && !alreadySubmitted ? (
+            <Text style={styles.privacyCopy}>Review period ended</Text>
+          ) : null}
+          <Text style={styles.privacyCopy}>
+            Your review will stay private until the other person submits theirs
+            or the 14-day review period ends.
+          </Text>
           <Text style={styles.sectionLabel}>Your rating</Text>
           <View style={styles.starsRow}>
             {Array.from({ length: 5 }).map((_, i) => {
@@ -250,9 +293,12 @@ export default function WriteReviewScreen({
               return (
                 <TouchableOpacity
                   key={value}
-                  onPress={() => setRating(value)}
+                  onPress={() => {
+                    if (canSubmit) setRating(value);
+                  }}
                   activeOpacity={0.75}
                   hitSlop={6}
+                  disabled={!canSubmit}
                 >
                   <Ionicons
                     name="star"
@@ -276,10 +322,11 @@ export default function WriteReviewScreen({
               onChangeText={setText}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              maxLength={500}
+              maxLength={2000}
+              editable={canSubmit}
             />
           </View>
-          <Text style={styles.charCount}>{text.length}/500</Text>
+          <Text style={styles.charCount}>{text.length}/2000</Text>
 
           <Text style={styles.sectionLabel}>
             Photos (optional · up to {MAX_REVIEW_IMAGES})
@@ -324,8 +371,8 @@ export default function WriteReviewScreen({
               title="Submit review"
               fullWidth
               loading={submitting}
-              disabled={submitting || rating < 1}
-              onPress={() => void onSubmit()}
+              disabled={submitting || rating < 1 || alreadySubmitted}
+              onPress={confirmSubmit}
             />
           ) : (
             <Button
@@ -485,6 +532,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     minHeight: 100,
     padding: 0,
+  },
+  privacyCopy: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   charCount: {
     ...typography.caption,

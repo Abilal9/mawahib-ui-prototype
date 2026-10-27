@@ -16,6 +16,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import MoneyAmount from '../../components/ui/MoneyAmount';
 import ProfileTabs from '../../components/profile/ProfileTabs';
 import ProfileCollapsingHeader from '../../components/profile/ProfileCollapsingHeader';
+import { reviewCountLabel } from '../../utils/reviewSummary';
 import ProfileHeaderChrome, {
   PROFILE_FIXED_BAR_BODY,
 } from '../../components/profile/ProfileHeaderChrome';
@@ -349,10 +350,12 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
                               {service.rating.toFixed(1)}
                             </Text>
                             <Text style={styles.reviewCount}>
-                              ({service.reviewCount})
+                              ({reviewCountLabel(service.reviewCount ?? 0)})
                             </Text>
                           </TouchableOpacity>
-                        ) : null}
+                        ) : (
+                          <Text style={styles.reviewCount}>No reviews yet</Text>
+                        )}
                       </View>
                       <Text style={styles.serviceDesc} numberOfLines={2}>
                         {service.description}

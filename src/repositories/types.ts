@@ -10,7 +10,6 @@ import {
   Message,
   Notification,
   ProfileContent,
-  ReviewsBundle,
   ConnectionRelation,
 } from '../data/types';
 import { UserJob } from '../data/types/userJobs';
@@ -79,10 +78,6 @@ export interface ProfileRepository {
   getEmptyContent(): ProfileContent;
   getVisitorContent(userId: string): ProfileContent;
   getSeedUser(): User;
-}
-
-export interface ReviewRepository {
-  getForUser(userId?: string): ReviewsBundle;
 }
 
 export interface ConnectionRepository {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useMyProfile } from '../../context/ProfileContext';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
 import { openUserProfile } from '../../utils/openUserProfile';
 import { buildReviewsSummaryFromProfile } from '../../utils/profileRating';
+import { reviewCountLabel } from '../../utils/reviewSummary';
 import { ScreenProps } from '../../navigation/types';
 import { ApiError } from '../../lib/apiClient';
 import {
@@ -28,7 +29,7 @@ import {
 } from '../../services/marketplaceApi';
 import { buildReviewsBundleFromApi } from '../../utils/reviewsMapping';
 
-const REVIEWS_PAGE_SIZE = 100;
+const REVIEWS_PAGE_SIZE = 20;
 /** Safety cap so a pathological profile cannot loop forever. */
 const REVIEWS_MAX_PAGES = 10;
 
@@ -56,33 +57,59 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
   const [apiTotal, setApiTotal] = useState(0);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [role, setRole] = useState<'provider' | 'client'>('provider');
+  const loadGen = useRef(0);
+  const boundTarget = useRef(targetId);
+
+  if (boundTarget.current !== targetId) {
+    boundTarget.current = targetId;
+    loadGen.current += 1;
+    setApiReviews(null);
+  }
+
+  const headlineRole = user?.accountType === 'business' ? 'client' : 'provider';
+  const secondary =
+    user?.reviewSummary &&
+    (headlineRole === 'provider'
+      ? user.reviewSummary.asClient.count
+      : user.reviewSummary.asProvider.count) > 0;
 
   const loadReviews = useCallback(async () => {
+    const gen = ++loadGen.current;
+    const forUser = targetId;
     setReviewsLoading(true);
     setReviewsError(null);
     try {
       const collected: ApiUserReview[] = [];
-      let total = 0;
+      let cursor: string | undefined;
       for (let page = 0; page < REVIEWS_MAX_PAGES; page += 1) {
-        const result = await marketplaceApi.listReviewsForUser(targetId, {
-          take: REVIEWS_PAGE_SIZE,
-          skip: collected.length,
+        const result = await marketplaceApi.listReviewsForUser(forUser, {
+          role,
+          limit: REVIEWS_PAGE_SIZE,
+          cursor,
         });
-        total = result.total;
+        if (gen !== loadGen.current || boundTarget.current !== forUser) return;
         collected.push(...result.items);
-        if (collected.length >= total || result.items.length === 0) break;
+        if (!result.nextCursor || result.items.length === 0) break;
+        cursor = result.nextCursor;
       }
+      if (gen !== loadGen.current || boundTarget.current !== forUser) return;
       setApiReviews(collected);
-      setApiTotal(total);
+      setApiTotal(collected.length);
     } catch (e) {
+      if (gen !== loadGen.current || boundTarget.current !== forUser) return;
       setApiReviews(null);
       setReviewsError(
         e instanceof ApiError ? e.message : 'Could not load reviews',
       );
     } finally {
-      setReviewsLoading(false);
+      if (gen === loadGen.current) setReviewsLoading(false);
     }
-  }, [targetId]);
+  }, [targetId, role]);
+
+  useEffect(() => {
+    setRole(headlineRole);
+  }, [targetId, headlineRole]);
 
   useEffect(() => {
     void loadReviews();
@@ -147,7 +174,9 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{bundle.total} reviews</Text>
+          <Text style={styles.headerTitle}>
+            {bundle.total === 0 ? 'No reviews yet' : reviewCountLabel(bundle.total)}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity

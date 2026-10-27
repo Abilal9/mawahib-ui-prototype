@@ -1,23 +1,27 @@
 import { User } from '../data/types';
 import type { ReviewDistribution, ReviewsBundle } from '../data/types/reviews';
+import {
+  headlineAggregate,
+  type ReviewAggregate,
+} from './reviewSummary';
 
-/** Honest rating presence — schema defaults ratingAvg to 0, so count is canonical. */
+/** True when the account-type headline role has at least one published review. */
 export function hasRealReviews(
-  user: Pick<User, 'reviewCount' | 'rating'> | null | undefined,
+  user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): boolean {
-  return (user?.reviewCount ?? 0) > 0;
+  return headlineAggregate(user).count > 0;
 }
 
-/** Rating value only when reviewCount > 0; otherwise null (not a real average). */
+/** Headline average, or null when that role has no published reviews. */
 export function displayableRating(
-  user: Pick<User, 'reviewCount' | 'rating'> | null | undefined,
+  user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): number | null {
-  if (!hasRealReviews(user)) return null;
-  return user?.rating ?? 0;
+  const headline: ReviewAggregate = headlineAggregate(user);
+  return headline.count > 0 ? headline.average : null;
 }
 
 export function formatRatingValue(rating: number): string {
-  return rating.toFixed(rating % 1 === 0 ? 0 : 1);
+  return rating.toFixed(1);
 }
 
 export function emptyReviewDistribution(): ReviewDistribution[] {
@@ -35,12 +39,12 @@ export function emptyReviewDistribution(): ReviewDistribution[] {
  * Never invents review rows or distribution from ratingAvg.
  */
 export function buildReviewsSummaryFromProfile(
-  user: Pick<User, 'reviewCount' | 'rating'> | null | undefined,
+  user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): ReviewsBundle {
-  const total = user?.reviewCount ?? 0;
-  const hasReviews = total > 0;
+  const headline = headlineAggregate(user);
+  const total = headline.count;
   return {
-    average: hasReviews ? (user?.rating ?? 0) : 0,
+    average: total > 0 ? (headline.average ?? 0) : 0,
     total,
     distribution: emptyReviewDistribution(),
     reviews: [],

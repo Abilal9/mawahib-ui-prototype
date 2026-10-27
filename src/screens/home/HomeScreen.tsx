@@ -281,11 +281,15 @@ function ServiceMatchCard({
             <View style={styles.ratingInline}>
               <Ionicons name="star" size={12} color={colors.warning} />
               <Text style={styles.ratingInlineText}>
-                Provider · {service.rating.toFixed(1)}
+                {service.rating.toFixed(1)}
               </Text>
-              <Text style={styles.ratingCountText}>({service.reviewCount})</Text>
+              <Text style={styles.ratingCountText}>
+                ({service.reviewCount === 1 ? '1 review' : `${service.reviewCount} reviews`})
+              </Text>
             </View>
-          ) : null}
+          ) : (
+            <Text style={styles.ratingCountText}>No reviews yet</Text>
+          )}
           <Text style={styles.jobCompany} numberOfLines={1}>
             {service.provider.name}
           </Text>

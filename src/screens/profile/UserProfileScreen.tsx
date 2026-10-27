@@ -13,6 +13,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import BookmarkButton from '../../components/ui/BookmarkButton';
+import { reviewCountLabel } from '../../utils/reviewSummary';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -501,10 +502,12 @@ export default function UserProfileScreen({ route, navigation }: ScreenProps<'Us
                               {service.rating.toFixed(1)}
                             </Text>
                             <Text style={styles.reviewCount}>
-                              ({service.reviewCount})
+                              ({reviewCountLabel(service.reviewCount ?? 0)})
                             </Text>
                           </TouchableOpacity>
-                        ) : null}
+                        ) : (
+                          <Text style={styles.reviewCount}>No reviews yet</Text>
+                        )}
                       </View>
                       <Text style={styles.serviceDesc} numberOfLines={2}>
                         {service.description}

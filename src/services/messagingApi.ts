@@ -30,7 +30,9 @@ export interface WorkContext {
   /** Present after the viewer submitted a review (1–5). */
   viewerReviewRating?: number | null;
   /** Server answer: this viewer may still submit their one review. */
-  canReview?: boolean;
+  canSubmit?: boolean;
+  windowClosesAt?: string | null;
+  published?: boolean;
 }
 
 export interface ApiConversation {

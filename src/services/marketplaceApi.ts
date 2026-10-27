@@ -218,14 +218,12 @@ export interface ApiUserReview {
 export interface ApiReviewMedia {
   id: string;
   mimeType: string;
-  url: string;
+  url: string | null;
 }
 
 export interface ApiUserReviewsPage {
   items: ApiUserReview[];
-  total: number;
-  take: number;
-  skip: number;
+  nextCursor: string | null;
 }
 
 export interface ApiReviewStateReview {
@@ -233,13 +231,17 @@ export interface ApiReviewStateReview {
   rating: number;
   body: string;
   createdAt: string;
+  media?: Array<{ id: string; mediaAssetId?: string; mimeType: string }>;
 }
 
 /** Server-owned review eligibility for the current user on one engagement. */
 export interface ApiReviewState {
-  canReview: boolean;
+  eligible: boolean;
+  canSubmit: boolean;
+  windowClosesAt: string | null;
+  published: boolean;
   myReview: ApiReviewStateReview | null;
-  otherPartyReview: ApiReviewStateReview | null;
+  counterpartReview?: ApiReviewStateReview;
 }
 
 export interface ApiEngagementReview {
@@ -563,12 +565,14 @@ export const marketplaceApi = {
 
   listReviewsForUser(
     userId: string,
-    params?: { take?: number; skip?: number },
+    params: { role: 'provider' | 'client'; cursor?: string; limit?: number },
   ): Promise<ApiUserReviewsPage> {
     const qs = new URLSearchParams();
-    if (params?.take != null) qs.set('take', String(params.take));
-    if (params?.skip != null) qs.set('skip', String(params.skip));
-    const suffix = qs.toString() ? `?${qs.toString()}` : '';
-    return apiRequest<ApiUserReviewsPage>(`/users/${userId}/reviews${suffix}`);
+    qs.set('role', params.role);
+    if (params.cursor) qs.set('cursor', params.cursor);
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    return apiRequest<ApiUserReviewsPage>(
+      `/users/${userId}/reviews?${qs.toString()}`,
+    );
   },
 };

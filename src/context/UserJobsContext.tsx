@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -340,6 +341,10 @@ export function mapListingToPostedUserJob(
 
 export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   const { mappedUser, apiUser, isSignedIn } = useAuth();
+  const userId = apiUser?.id ?? null;
+  const userIdRef = useRef(userId);
+  const fetchGen = useRef(0);
+  const boundUser = useRef(userId);
   const [jobs, setJobs] = useState<UserJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -347,6 +352,17 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   const [appActive, setAppActive] = useState(
     AppState.currentState === 'active',
   );
+
+  userIdRef.current = userId;
+  let shownJobs = jobs;
+  if (boundUser.current !== userId) {
+    boundUser.current = userId;
+    fetchGen.current += 1;
+    shownJobs = [];
+    setJobs([]);
+    setUnread({ sent: 0, received: 0 });
+    setError(null);
+  }
 
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
@@ -357,12 +373,15 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshUnread = useCallback(async () => {
-    if (!isSignedIn || !apiUser) {
-      setUnread({ sent: 0, received: 0 });
+    const gen = fetchGen.current;
+    const forUser = userIdRef.current;
+    if (!isSignedIn || !forUser) {
+      if (gen === fetchGen.current) setUnread({ sent: 0, received: 0 });
       return;
     }
     try {
       const summary = await workRequestApi.unreadSummary();
+      if (gen !== fetchGen.current || userIdRef.current !== forUser) return;
       setUnread({
         sent: summary.sentUnread,
         received: summary.receivedUnread,
@@ -370,12 +389,16 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Badge counts are cosmetic; a failed poll should not surface an error.
     }
-  }, [apiUser, isSignedIn]);
+  }, [isSignedIn]);
 
   const refresh = useCallback(async () => {
-    if (!isSignedIn || !apiUser || !mappedUser) {
-      setJobs([]);
-      setUnread({ sent: 0, received: 0 });
+    const forUser = userIdRef.current;
+    const gen = ++fetchGen.current;
+    if (!isSignedIn || !apiUser || !mappedUser || !forUser) {
+      if (gen === fetchGen.current) {
+        setJobs([]);
+        setUnread({ sent: 0, received: 0 });
+      }
       return;
     }
     setLoading(true);
@@ -387,9 +410,10 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         // Posted listings are a side panel; losing them must not empty the inbox.
         marketplaceApi.listMyListings().catch(() => [] as ApiJobListing[]),
       ]);
+      if (gen !== fetchGen.current || userIdRef.current !== forUser) return;
 
       const requests = [...sent, ...received].map((request) =>
-        mapWorkRequestToUserJob(request, apiUser.id),
+        mapWorkRequestToUserJob(request, forUser),
       );
       const posted = myListings.map((listing) =>
         mapListingToPostedUserJob(listing, mappedUser),
@@ -401,12 +425,15 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
         ),
       );
     } catch (e) {
+      if (gen !== fetchGen.current || userIdRef.current !== forUser) return;
       setError(e instanceof ApiError ? e.message : 'Failed to load your jobs');
       setJobs([]);
     } finally {
-      setLoading(false);
+      if (gen === fetchGen.current) setLoading(false);
     }
-    await refreshUnread();
+    if (gen === fetchGen.current && userIdRef.current === forUser) {
+      await refreshUnread();
+    }
   }, [apiUser, isSignedIn, mappedUser, refreshUnread]);
 
   useEffect(() => {
@@ -419,14 +446,14 @@ export function UserJobsProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<UserJobsContextValue>(
     () => ({
-      jobs,
+      jobs: shownJobs,
       loading,
       error,
       unread,
       refresh,
       refreshUnread,
       getJobById: (id) =>
-        jobs.find((j) => j.id === id || j.requestId === id),
+        shownJobs.find((j) => j.id === id || j.requestId === id),
       applyToListing: async (listingId) => {
         const existing = jobs.find(
           (j) =>

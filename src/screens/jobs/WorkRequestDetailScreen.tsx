@@ -1641,15 +1641,16 @@ export default function WorkRequestDetailScreen({
 
         {isCompletedEngagement &&
         request.workEngagementId &&
-        (request.reviewState
-          ? request.reviewState.canReview || !!request.reviewState.myReview
-          : true) ? (
+        !!request.reviewState?.eligible ? (
           <View style={styles.reviewCard}>
             <EngagementReviewPrompt
               otherName={request.counterparty?.displayName ?? 'the other party'}
               existingRating={
                 request.reviewState?.myReview?.rating ?? reviewJob?.rating
               }
+              canSubmit={request.reviewState?.canSubmit}
+              windowClosesAt={request.reviewState?.windowClosesAt}
+              published={request.reviewState?.published}
               onSelectRating={(rating) =>
                 openEngagementReview(navigation, {
                   jobId: request.id,

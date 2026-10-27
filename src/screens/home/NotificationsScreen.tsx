@@ -431,7 +431,7 @@ export default function NotificationsScreen({ navigation }: ScreenProps<'Notific
         renderItem={({ item }) => {
           const linked = item.userJobId ? getJobById(item.userJobId) : undefined;
           const showRating = linked?.reviewState
-            ? linked.reviewState.canReview
+            ? linked.reviewState.canSubmit
             : !!item.showRating;
           return (
           <NotificationItem

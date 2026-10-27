@@ -6,4 +6,3 @@ export * from './messages';
 export * from './notifications';
 export * from './services';
 export * from './talents';
-export * from './reviews';

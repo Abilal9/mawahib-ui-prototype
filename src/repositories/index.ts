@@ -12,7 +12,6 @@ export type {
   MessageRepository,
   NotificationRepository,
   ProfileRepository,
-  ReviewRepository,
   ConnectionRepository,
   CatalogRepository,
   CreatePostInput,
@@ -25,7 +24,6 @@ export { mockUserJobRepository } from './mock/mockUserJobRepository';
 export { mockMessageRepository } from './mock/mockMessageRepository';
 export { mockNotificationRepository } from './mock/mockNotificationRepository';
 export { mockProfileRepository } from './mock/mockProfileRepository';
-export { mockReviewRepository } from './mock/mockReviewRepository';
 export { mockConnectionRepository } from './mock/mockConnectionRepository';
 export { mockCatalogRepository } from './mock/mockCatalogRepository';
 
@@ -36,7 +34,6 @@ import { mockUserJobRepository } from './mock/mockUserJobRepository';
 import { mockMessageRepository } from './mock/mockMessageRepository';
 import { mockNotificationRepository } from './mock/mockNotificationRepository';
 import { mockProfileRepository } from './mock/mockProfileRepository';
-import { mockReviewRepository } from './mock/mockReviewRepository';
 import { mockConnectionRepository } from './mock/mockConnectionRepository';
 import { mockCatalogRepository } from './mock/mockCatalogRepository';
 
@@ -49,7 +46,6 @@ export const repositories = {
   messages: mockMessageRepository,
   notifications: mockNotificationRepository,
   profile: mockProfileRepository,
-  reviews: mockReviewRepository,
   connections: mockConnectionRepository,
   catalog: mockCatalogRepository,
 };
