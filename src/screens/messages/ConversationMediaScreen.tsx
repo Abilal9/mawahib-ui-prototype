@@ -123,7 +123,7 @@ export default function ConversationMediaScreen({
                 style={styles.footerSpinner}
                 color={colors.primary}
               />
-            ) : null
+            ) : undefined
           }
           renderItem={({ item, index }) => {
             const col = index % COLUMNS;

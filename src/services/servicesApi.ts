@@ -97,8 +97,10 @@ const TIER_API: Record<ServicePackage['name'], 'basic' | 'standard' | 'premium'>
   };
 
 export const servicesApi = {
-  listMine(): Promise<ApiServiceOffering[]> {
-    return apiRequest<ApiServiceOffering[]>('/users/me/services');
+  listMine(accessToken?: string): Promise<ApiServiceOffering[]> {
+    return apiRequest<ApiServiceOffering[]>('/users/me/services', {
+      accessToken,
+    });
   },
 
   listForUser(userId: string): Promise<ApiServiceOffering[]> {
@@ -119,9 +121,12 @@ export const servicesApi = {
     categoryId: string;
     customCategory?: string | null;
     skillIds?: string[];
-  }): Promise<ApiServiceOffering> {
+  },
+  accessToken?: string,
+  ): Promise<ApiServiceOffering> {
     return apiRequest<ApiServiceOffering>('/users/me/services', {
       method: 'POST',
+      accessToken,
       body: JSON.stringify({
         title: input.title,
         description: input.description,
@@ -159,9 +164,11 @@ export const servicesApi = {
       customCategory?: string | null;
       skillIds?: string[];
     },
+    accessToken?: string,
   ): Promise<ApiServiceOffering> {
     return apiRequest<ApiServiceOffering>(`/users/me/services/${id}`, {
       method: 'PATCH',
+      accessToken,
       body: JSON.stringify({
         title: input.title,
         description: input.description,
@@ -182,8 +189,11 @@ export const servicesApi = {
     });
   },
 
-  remove(id: string): Promise<void> {
-    return apiRequest<void>(`/users/me/services/${id}`, { method: 'DELETE' });
+  remove(id: string, accessToken?: string): Promise<void> {
+    return apiRequest<void>(`/users/me/services/${id}`, {
+      method: 'DELETE',
+      accessToken,
+    });
   },
 
   listReviews(
@@ -197,9 +207,13 @@ export const servicesApi = {
     return apiRequest(`/services/${serviceId}/reviews${suffix}`);
   },
 
-  reorder(serviceIds: string[]): Promise<ApiServiceOffering[]> {
+  reorder(
+    serviceIds: string[],
+    accessToken?: string,
+  ): Promise<ApiServiceOffering[]> {
     return apiRequest<ApiServiceOffering[]>('/users/me/services/order', {
       method: 'PUT',
+      accessToken,
       body: JSON.stringify({ serviceIds }),
     });
   },

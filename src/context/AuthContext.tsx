@@ -112,7 +112,7 @@ interface AuthContextValue {
     locationCode?: string;
     phoneE164?: string;
   }) => Promise<ApiUser>;
-  refreshMe: () => Promise<ApiUser>;
+  refreshMe: (accessToken?: string) => Promise<ApiUser>;
   signInWithEmail: (email: string, password: string) => Promise<ApiUser>;
   /** Resume verification for an unverified email (resend + pending context). */
   resumeEmailVerification: (email: string) => Promise<void>;
@@ -947,7 +947,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [hydrateBackendUser],
   );
 
-  const refreshMe = useCallback(async () => {
+  const refreshMe = useCallback(async (accessToken?: string) => {
     if (loadRecoveryState()) {
       throw new PasswordFlowError(
         'Password reset is in progress.',
@@ -956,9 +956,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const epoch = authEpoch.current;
     const suspensionAtStart = suspensionEpoch.current;
-    const user = await authApi.getMe();
+    const user = await authApi.getMe(accessToken);
     if (epoch !== authEpoch.current) return user;
     if (suspensionEpoch.current !== suspensionAtStart) return user;
+    if (accessToken) {
+      const tracked = hydrateSessionRef.current?.access_token ?? null;
+      if (
+        shouldIgnoreStaleAuthResult({
+          epochAtStart: epoch,
+          epochNow: authEpoch.current,
+          requestToken: accessToken,
+          trackedToken: tracked,
+          liveToken: tracked,
+        })
+      ) {
+        return user;
+      }
+    }
     applyApiUser(user);
     return user;
   }, [applyApiUser]);

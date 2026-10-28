@@ -7,6 +7,7 @@ import SplashLoadingDots from '../../components/onboarding/SplashLoadingDots';
 import { colors } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { resolveColdStartDestination } from '../../lib/coldStartRoute';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import {
@@ -21,7 +22,15 @@ import {
  */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { authLoading, isSignedIn, apiUser, session, signUpBasics, recoveryRestart } = useAuth();
+  const {
+    authLoading,
+    isSignedIn,
+    apiUser,
+    session,
+    authError,
+    signUpBasics,
+    recoveryRestart,
+  } = useAuth();
   const [minSplashDone, setMinSplashDone] = useState(false);
 
   useEffect(() => {
@@ -38,16 +47,26 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   useEffect(() => {
     if (authLoading || !minSplashDone) return;
 
-    if (loadRecoveryState() || recoveryRestart) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
+    const pending = loadPendingSignup();
+    const destination = resolveColdStartDestination({
+      recovery: Boolean(loadRecoveryState() || recoveryRestart),
+      isSignedIn: Boolean(isSignedIn && apiUser),
+      apiUser,
+      session,
+      authError,
+      pendingEmail: pending?.email ?? null,
+      pendingResumable: Boolean(
+        pending?.email && hasResumablePendingVerification(pending.email),
+      ),
+    });
+
+    if (destination.kind === 'welcome') {
+      navigation.replace('Welcome', { step: 1 });
       return;
     }
 
-    if (isSignedIn && apiUser) {
-      const dest = resolvePostAuthDestination({
+    if (destination.kind === 'hydrated' && apiUser) {
+      const restored = resolvePostAuthDestination({
         flow: 'restore',
         apiUser,
         session,
@@ -55,38 +74,32 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
       });
       navigation.reset({
         index: 0,
-        routes: [{ name: dest.name, params: dest.params as never }],
+        routes: [{ name: restored.name, params: restored.params as never }],
       });
       return;
     }
 
-    // Restore ConfirmCode only when a recent successful OTP send is on record.
-    // Do not imply a new code was just sent.
-    const pending = loadPendingSignup();
-    if (
-      pending?.email &&
-      !isSignedIn &&
-      hasResumablePendingVerification(pending.email)
-    ) {
+    if (destination.kind === 'confirm-code') {
       navigation.reset({
         index: 0,
         routes: [
-          {
-            name: 'ConfirmCode',
-            params: { email: pending.email },
-          },
+          { name: 'ConfirmCode', params: { email: destination.email } },
         ],
       });
       return;
     }
 
-    navigation.replace('Welcome', { step: 1 });
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'SignIn' }],
+    });
   }, [
     authLoading,
     minSplashDone,
     isSignedIn,
     apiUser,
     session,
+    authError,
     signUpBasics,
     navigation,
     recoveryRestart,

@@ -27,21 +27,27 @@ export function mapPortfolioProject(api: ApiPortfolioProject): PortfolioProject 
 }
 
 export const portfolioApi = {
-  listMine(): Promise<ApiPortfolioProject[]> {
-    return apiRequest<ApiPortfolioProject[]>('/users/me/portfolio');
+  listMine(accessToken?: string): Promise<ApiPortfolioProject[]> {
+    return apiRequest<ApiPortfolioProject[]>('/users/me/portfolio', {
+      accessToken,
+    });
   },
 
   listForUser(userId: string): Promise<ApiPortfolioProject[]> {
     return apiRequest<ApiPortfolioProject[]>(`/users/${userId}/portfolio`);
   },
 
-  create(input: {
-    title: string;
-    description?: string;
-    mediaAssetIds: string[];
-  }): Promise<ApiPortfolioProject> {
+  create(
+    input: {
+      title: string;
+      description?: string;
+      mediaAssetIds: string[];
+    },
+    accessToken?: string,
+  ): Promise<ApiPortfolioProject> {
     return apiRequest<ApiPortfolioProject>('/users/me/portfolio', {
       method: 'POST',
+      accessToken,
       body: JSON.stringify({
         title: input.title,
         description: input.description,
@@ -57,9 +63,11 @@ export const portfolioApi = {
       description?: string;
       mediaAssetIds?: string[];
     },
+    accessToken?: string,
   ): Promise<ApiPortfolioProject> {
     return apiRequest<ApiPortfolioProject>(`/users/me/portfolio/${id}`, {
       method: 'PATCH',
+      accessToken,
       body: JSON.stringify({
         title: input.title,
         description: input.description,
@@ -68,13 +76,20 @@ export const portfolioApi = {
     });
   },
 
-  remove(id: string): Promise<void> {
-    return apiRequest<void>(`/users/me/portfolio/${id}`, { method: 'DELETE' });
+  remove(id: string, accessToken?: string): Promise<void> {
+    return apiRequest<void>(`/users/me/portfolio/${id}`, {
+      method: 'DELETE',
+      accessToken,
+    });
   },
 
-  reorder(projectIds: string[]): Promise<ApiPortfolioProject[]> {
+  reorder(
+    projectIds: string[],
+    accessToken?: string,
+  ): Promise<ApiPortfolioProject[]> {
     return apiRequest<ApiPortfolioProject[]>('/users/me/portfolio/order', {
       method: 'PUT',
+      accessToken,
       body: JSON.stringify({ projectIds }),
     });
   },

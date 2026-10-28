@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  type ScrollViewInstance,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -55,7 +56,7 @@ export default function PostDetailScreen({
   const postId = route.params.postId;
   const { user, removePostId } = useMyProfile();
   const isFocused = useIsFocused();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const commentsY = useRef(0);
   const [post, setPost] = useState<Post | undefined>(() => getPostById(postId));
   const [loading, setLoading] = useState(!post);

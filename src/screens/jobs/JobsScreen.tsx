@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  type ScrollViewInstance,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -317,11 +318,11 @@ export default function JobsScreen({
     completed: 'most-recent',
     posted: 'most-recent',
   });
-  const pagerRef = useRef<ScrollView>(null);
+  const pagerRef = useRef<ScrollViewInstance>(null);
   const pendingSection = useRef<UserJobSection | null>(null);
   const [landingNonce, setLandingNonce] = useState(0);
   const scrollOffsets = useRef<Record<string, number>>({});
-  const sectionScrollRefs = useRef<Record<string, ScrollView | null>>({});
+  const sectionScrollRefs = useRef<Record<string, ScrollViewInstance | null>>({});
   const activePageRef = useRef(activePage);
   activePageRef.current = activePage;
 

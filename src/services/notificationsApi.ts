@@ -37,25 +37,30 @@ export interface MarkAllReadResult {
 }
 
 export const notificationsApi = {
-  list(): Promise<ApiNotification[]> {
-    return apiRequest<ApiNotification[]>('/users/me/notifications');
-  },
-
-  unreadSummary(): Promise<NotificationUnreadSummary> {
-    return apiRequest<NotificationUnreadSummary>(
-      '/users/me/notifications/unread-summary',
-    );
-  },
-
-  markRead(id: string): Promise<ApiNotification> {
-    return apiRequest<ApiNotification>(`/users/me/notifications/${id}/read`, {
-      method: 'POST',
+  list(accessToken?: string): Promise<ApiNotification[]> {
+    return apiRequest<ApiNotification[]>('/users/me/notifications', {
+      accessToken,
     });
   },
 
-  markAllRead(): Promise<MarkAllReadResult> {
+  unreadSummary(accessToken?: string): Promise<NotificationUnreadSummary> {
+    return apiRequest<NotificationUnreadSummary>(
+      '/users/me/notifications/unread-summary',
+      { accessToken },
+    );
+  },
+
+  markRead(id: string, accessToken?: string): Promise<ApiNotification> {
+    return apiRequest<ApiNotification>(`/users/me/notifications/${id}/read`, {
+      method: 'POST',
+      accessToken,
+    });
+  },
+
+  markAllRead(accessToken?: string): Promise<MarkAllReadResult> {
     return apiRequest<MarkAllReadResult>('/users/me/notifications/read-all', {
       method: 'POST',
+      accessToken,
     });
   },
 };

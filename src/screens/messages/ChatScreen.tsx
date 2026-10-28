@@ -783,7 +783,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                   <View style={styles.olderLoading}>
                     <ActivityIndicator size="small" color={colors.primary} />
                   </View>
-                ) : null
+                ) : undefined
               }
               renderItem={({ item }) => {
                 if (item.kind === 'divider') {

@@ -1,5 +1,4 @@
 import * as Linking from 'expo-linking';
-import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { supabase } from './supabase';
 import { mapDeepLinkAuthError } from './authErrors';
 import { loadPendingSignup } from './pendingSignup';
@@ -11,8 +10,25 @@ export type AuthDeepLinkResult =
   | { type: 'link-rejected' }
   | { type: 'ignored' };
 
+/** Same query-and-hash parse expo-auth-session used before SDK 58 hid it. */
+function getQueryParams(input: string): {
+  errorCode: string | null;
+  params: Record<string, string>;
+} {
+  const url = new URL(input, 'https://phony.example');
+  const errorCode = url.searchParams.get('errorCode');
+  url.searchParams.delete('errorCode');
+  const params = Object.fromEntries(url.searchParams);
+  if (url.hash) {
+    new URLSearchParams(url.hash.replace(/^#/, '')).forEach((value, key) => {
+      params[key] = value;
+    });
+  }
+  return { errorCode, params };
+}
+
 function callbackType(url: string): string | null {
-  const { params } = QueryParams.getQueryParams(url);
+  const { params } = getQueryParams(url);
   const type = params.type;
   return typeof type === 'string' ? type : null;
 }
@@ -102,7 +118,7 @@ export async function handleAuthDeepLink(url: string): Promise<AuthDeepLinkResul
     return { type: 'recovery-rejected' };
   }
 
-  const { params, errorCode } = QueryParams.getQueryParams(url);
+  const { params, errorCode } = getQueryParams(url);
   const errorMessage = mapDeepLinkAuthError({
     ...params,
     error_code: errorCode || params.error_code,

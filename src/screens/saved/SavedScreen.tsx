@@ -105,7 +105,7 @@ export default function SavedScreen({ navigation }: ScreenProps<'Saved'>) {
             </View>
           ) : bucket.loaded ? (
             <Text style={styles.empty}>{EMPTY[tab]}</Text>
-          ) : null
+          ) : undefined
         }
         ListFooterComponent={
           bucket.loading && bucket.items.length > 0 ? (
@@ -117,7 +117,7 @@ export default function SavedScreen({ navigation }: ScreenProps<'Saved'>) {
             >
               <Text style={styles.retry}>{bucket.error} · Retry</Text>
             </TouchableOpacity>
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => {
           if (tab === 'posts') {

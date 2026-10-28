@@ -132,8 +132,7 @@ function MainTabsGate() {
 }
 
 export default function RootNavigator() {
-  const { accountSuspended, recovery, isSignedIn, authLoading, session } =
-    useAuth();
+  const { accountSuspended, recovery } = useAuth();
   const screenOptions = {
     headerShown: false,
     animation: 'slide_from_right' as const,
@@ -153,11 +152,10 @@ export default function RootNavigator() {
     );
   }
 
-  const initialRouteName = isSignedIn
-    ? 'MainTabs'
-    : !authLoading && !session
-      ? 'SignIn'
-      : 'Splash1';
+  // Cold start always opens Splash1. Splash2 chooses Welcome, Home, or
+  // Sign In only after session restore finishes, so font timing cannot
+  // skip the intro on a signed-out launch.
+  const initialRouteName = 'Splash1';
 
   return (
     <Stack.Navigator

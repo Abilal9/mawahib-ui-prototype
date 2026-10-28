@@ -570,7 +570,7 @@ export default function SearchScreen({ navigation, route }: TabScreenProps<'Sear
               <TouchableOpacity onPress={retry} style={styles.footer}>
                 <Text style={styles.retry}>{bucket.error} · Retry</Text>
               </TouchableOpacity>
-            ) : null
+            ) : undefined
           }
           renderItem={({ item }) => {
             if (item.kind === 'talent') {

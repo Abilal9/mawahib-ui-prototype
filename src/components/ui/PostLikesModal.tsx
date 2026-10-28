@@ -124,7 +124,7 @@ export default function PostLikesModal({
                     style={{ marginVertical: spacing.md }}
                     color={colors.primary}
                   />
-                ) : null
+                ) : undefined
               }
               renderItem={({ item }) => (
                 <TouchableOpacity

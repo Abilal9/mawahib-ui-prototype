@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from 'react';
@@ -18,6 +19,8 @@ import {
   User,
 } from '../data/types';
 import { useAuth } from './AuthContext';
+import { shouldIgnoreStaleIdentityResult } from './identityGuard';
+import { accessTokenSubject } from '../lib/apiClient';
 import {
   authApi,
   mapApiUserToUser,
@@ -282,33 +285,82 @@ function aboutPayloadFromContent(content: ProfileContent): NonNullable<UpdateMeP
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { apiUser, mappedUser, isSignedIn, accessToken, refreshMe } = useAuth();
+  const userId = apiUser?.id ?? null;
+  const userIdRef = useRef(userId);
+  const accessTokenRef = useRef(accessToken);
+  const epochRef = useRef(0);
+  const boundUser = useRef(userId);
+  accessTokenRef.current = accessToken;
   const [content, setContent] = useState<ProfileContent>(emptyProfileContent);
   const [user, setUser] = useState<User>(emptyUser);
   const [aboutHydrated, setAboutHydrated] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Clear private profile fields in this render when the account changes.
+  // In-flight responses compare user id and epoch before they write.
+  userIdRef.current = userId;
+  let shownContent = content;
+  let shownUser = user;
+  let shownAboutHydrated = aboutHydrated;
+  let shownProfileLoading = profileLoading;
+  let shownProfileError = profileError;
+  if (boundUser.current !== userId) {
+    boundUser.current = userId;
+    epochRef.current += 1;
+    shownContent = emptyProfileContent();
+    shownUser = emptyUser();
+    shownAboutHydrated = false;
+    shownProfileLoading = false;
+    shownProfileError = null;
+    setContent(shownContent);
+    setUser(shownUser);
+    setAboutHydrated(false);
+    setProfileLoading(false);
+    setProfileError(null);
+  }
+
+  const dropped = (startedUserId: string | null, epochAtStart: number) =>
+    shouldIgnoreStaleIdentityResult({
+      startedUserId,
+      currentUserId: userIdRef.current,
+      epochAtStart,
+      epochNow: epochRef.current,
+    });
+
+  // Capture the token before any await. apiRequest must not call getSession()
+  // later, or a switch during that lookup would send this request as the next user.
+  const tokenFor = (startedUserId: string | null) => {
+    const token = accessTokenRef.current;
+    if (!startedUserId || !token) return null;
+    if (accessTokenSubject(token) !== startedUserId) return null;
+    return token;
+  };
+
   const hydrateFromApiUser = useCallback((next: ApiUser) => {
     const mapped = mapApiUserToUser(next);
-    setUser(mapped);
-    setContent((prev) => ({
-      ...prev,
-      bio: next.bio ?? '',
-      talents: (next.skills ?? prev.talents).slice(),
-      talentSelections: selectionsFromProfile({
-        skills: next.skills ?? prev.talents,
-        skillSelections: next.skillSelections,
-      }),
-      languages:
-        next.about?.languages?.map((l) => ({
-          ...l,
-          flag: l.flag ?? '',
-        })) ?? prev.languages,
-      education: next.about?.education ?? prev.education,
-      experience: next.about?.experience ?? prev.experience,
-      certifications: next.about?.certifications ?? prev.certifications,
-    }));
-    setAboutHydrated(true);
+    setUser((prev) => (next.id === userIdRef.current ? mapped : prev));
+    setContent((prev) => {
+      if (next.id !== userIdRef.current) return prev;
+      return {
+        ...prev,
+        bio: next.bio ?? '',
+        talents: (next.skills ?? prev.talents).slice(),
+        talentSelections: selectionsFromProfile({
+          skills: next.skills ?? prev.talents,
+          skillSelections: next.skillSelections,
+        }),
+        languages:
+          next.about?.languages?.map((l) => ({
+            ...l,
+            flag: l.flag ?? '',
+          })) ?? prev.languages,
+        education: next.about?.education ?? prev.education,
+        experience: next.about?.experience ?? prev.experience,
+        certifications: next.about?.certifications ?? prev.certifications,
+      };
+    });
+    setAboutHydrated((prev) => (next.id === userIdRef.current ? true : prev));
   }, []);
 
   const clearLocalProfile = useCallback(() => {
@@ -319,25 +371,35 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfessionalProfile = useCallback(async () => {
-    if (!isSignedIn || !accessToken) return;
+    const startedUserId = userIdRef.current;
+    const epochAtStart = epochRef.current;
+    const token = tokenFor(startedUserId);
+    if (!startedUserId || !token || !isSignedIn) return;
     setProfileLoading(true);
     setProfileError(null);
     try {
       const [portfolio, services] = await Promise.all([
-        portfolioApi.listMine(),
-        servicesApi.listMine(),
+        portfolioApi.listMine(token),
+        servicesApi.listMine(token),
       ]);
-      setContent((prev) => ({
-        ...prev,
-        portfolio: portfolio.map(mapPortfolioProject),
-        services: services.map(mapServiceOffering),
-      }));
+      if (dropped(startedUserId, epochAtStart)) return;
+      setContent((prev) => {
+        if (dropped(startedUserId, epochAtStart)) return prev;
+        return {
+          ...prev,
+          portfolio: portfolio.map(mapPortfolioProject),
+          services: services.map(mapServiceOffering),
+        };
+      });
     } catch (err) {
+      if (dropped(startedUserId, epochAtStart)) return;
       setProfileError(
         err instanceof Error ? err.message : 'Failed to load portfolio/services',
       );
     } finally {
-      setProfileLoading(false);
+      if (!dropped(startedUserId, epochAtStart)) {
+        setProfileLoading(false);
+      }
     }
   }, [accessToken, isSignedIn]);
 
@@ -358,12 +420,24 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const persistMe = useCallback(
     async (payload: UpdateMePayload) => {
-      if (!accessToken || !isSignedIn) {
+      const startedUserId = userIdRef.current;
+      const epochAtStart = epochRef.current;
+      const token = tokenFor(startedUserId);
+      if (!startedUserId || !token || !accessToken || !isSignedIn) {
         throw new Error('You are not signed in.');
       }
-      await authApi.updateMe(payload);
+      await authApi.updateMe(payload, token);
+      if (dropped(startedUserId, epochAtStart)) {
+        throw new Error('You are not signed in.');
+      }
       // Canonical hydrate from Nest so Auth + Profile stay aligned.
-      const refreshed = await refreshMe();
+      const refreshed = await refreshMe(token);
+      if (
+        dropped(startedUserId, epochAtStart) ||
+        refreshed.id !== startedUserId
+      ) {
+        throw new Error('You are not signed in.');
+      }
       hydrateFromApiUser(refreshed);
     },
     [accessToken, hydrateFromApiUser, isSignedIn, refreshMe],
@@ -378,13 +452,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ProfileContextValue>(
     () => ({
-      user: mappedUser ?? user,
-      content,
-      aboutHydrated,
-      profileLoading,
-      profileError,
+      user: mappedUser ?? shownUser,
+      content: shownContent,
+      aboutHydrated: shownAboutHydrated,
+      profileLoading: shownProfileLoading,
+      profileError: shownProfileError,
       refreshProfessionalProfile,
       applySignupProfile: ({ name, location, countryCode, locationCode }) => {
+        if (userIdRef.current) return;
         setContent(emptyProfileContent());
         setUser({
           ...emptyUser(),
@@ -414,12 +489,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         });
       },
       setBio: async (bio) => {
-        setContent((prev) => ({ ...prev, bio }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return { ...prev, bio };
+        });
         await persistMe({ bio });
       },
       setLanguages: async (languages) => {
-        const next = { ...content, languages };
-        setContent(next);
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const next = { ...shownContent, languages };
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return next;
+        });
         await persistAboutLists(next);
       },
       setTalents: async (talents) => {
@@ -429,116 +520,261 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         await persistMe(skillSelectionPayload(skills));
       },
       setEducation: async (education) => {
-        const next = { ...content, education };
-        setContent(next);
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const next = { ...shownContent, education };
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return next;
+        });
         await persistAboutLists(next);
       },
       setExperience: async (experience) => {
-        const next = { ...content, experience };
-        setContent(next);
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const next = { ...shownContent, experience };
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return next;
+        });
         await persistAboutLists(next);
       },
       setCertifications: async (certifications) => {
-        const next = { ...content, certifications };
-        setContent(next);
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const next = { ...shownContent, certifications };
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return next;
+        });
         await persistAboutLists(next);
       },
       addPortfolioProject: async (input) => {
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
         const created = mapPortfolioProject(
-          await portfolioApi.create({
-            title: input.title,
-            description: input.description,
-            mediaAssetIds: input.mediaAssetIds,
-          }),
+          await portfolioApi.create(
+            {
+              title: input.title,
+              description: input.description,
+              mediaAssetIds: input.mediaAssetIds,
+            },
+            token,
+          ),
         );
-        setContent((prev) => ({
-          ...prev,
-          portfolio: [created, ...prev.portfolio],
-        }));
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            portfolio: [created, ...prev.portfolio],
+          };
+        });
         return created;
       },
       setPortfolio: async (portfolio) => {
-        const ordered = await portfolioApi.reorder(portfolio.map((p) => p.id));
-        setContent((prev) => ({
-          ...prev,
-          portfolio: ordered.map(mapPortfolioProject),
-        }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const ordered = await portfolioApi.reorder(
+          portfolio.map((p) => p.id),
+          token,
+        );
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            portfolio: ordered.map(mapPortfolioProject),
+          };
+        });
       },
       updatePortfolioProject: async (projectId, input) => {
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
         const updated = mapPortfolioProject(
-          await portfolioApi.update(projectId, {
-            title: input.title,
-            description: input.description,
-            mediaAssetIds: input.mediaAssetIds,
-          }),
-        );
-        setContent((prev) => ({
-          ...prev,
-          portfolio: prev.portfolio.map((p) =>
-            p.id === projectId ? updated : p,
+          await portfolioApi.update(
+            projectId,
+            {
+              title: input.title,
+              description: input.description,
+              mediaAssetIds: input.mediaAssetIds,
+            },
+            token,
           ),
-        }));
+        );
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            portfolio: prev.portfolio.map((p) =>
+              p.id === projectId ? updated : p,
+            ),
+          };
+        });
         return updated;
       },
       removePortfolioProject: async (projectId) => {
-        await portfolioApi.remove(projectId);
-        setContent((prev) => ({
-          ...prev,
-          portfolio: prev.portfolio.filter((p) => p.id !== projectId),
-        }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        await portfolioApi.remove(projectId, token);
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            portfolio: prev.portfolio.filter((p) => p.id !== projectId),
+          };
+        });
       },
       addService: async (input) => {
-        const created = mapServiceOffering(await servicesApi.create(input));
-        setContent((prev) => ({
-          ...prev,
-          services: [created, ...prev.services],
-        }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const created = mapServiceOffering(await servicesApi.create(input, token));
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            services: [created, ...prev.services],
+          };
+        });
         return created;
       },
       setServices: async (services) => {
-        const ordered = await servicesApi.reorder(services.map((s) => s.id));
-        setContent((prev) => ({
-          ...prev,
-          services: ordered.map(mapServiceOffering),
-        }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        const ordered = await servicesApi.reorder(
+          services.map((s) => s.id),
+          token,
+        );
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            services: ordered.map(mapServiceOffering),
+          };
+        });
       },
       updateService: async (serviceId, input) => {
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
         const updated = mapServiceOffering(
-          await servicesApi.update(serviceId, input),
+          await servicesApi.update(serviceId, input, token),
         );
-        setContent((prev) => ({
-          ...prev,
-          services: prev.services.map((s) =>
-            s.id === serviceId ? updated : s,
-          ),
-        }));
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            services: prev.services.map((s) =>
+              s.id === serviceId ? updated : s,
+            ),
+          };
+        });
         return updated;
       },
       removeService: async (serviceId) => {
-        await servicesApi.remove(serviceId);
-        setContent((prev) => ({
-          ...prev,
-          services: prev.services.filter((s) => s.id !== serviceId),
-        }));
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        const token = tokenFor(startedUserId);
+        if (!token || dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        await servicesApi.remove(serviceId, token);
+        if (dropped(startedUserId, epochAtStart)) {
+          throw new Error('You are not signed in.');
+        }
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            services: prev.services.filter((s) => s.id !== serviceId),
+          };
+        });
       },
-      removePostId: (postId) =>
-        setContent((prev) => ({
-          ...prev,
-          postIds: prev.postIds.filter((id) => id !== postId),
-        })),
-      addPostId: (postId) =>
-        setContent((prev) => ({
-          ...prev,
-          postIds: [postId, ...prev.postIds],
-        })),
+      removePostId: (postId) => {
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            postIds: prev.postIds.filter((id) => id !== postId),
+          };
+        });
+      },
+      addPostId: (postId) => {
+        const startedUserId = userIdRef.current;
+        const epochAtStart = epochRef.current;
+        setContent((prev) => {
+          if (dropped(startedUserId, epochAtStart)) return prev;
+          return {
+            ...prev,
+            postIds: [postId, ...prev.postIds],
+          };
+        });
+      },
     }),
     [
-      content,
-      user,
+      shownContent,
+      shownUser,
       mappedUser,
-      aboutHydrated,
-      profileLoading,
-      profileError,
+      shownAboutHydrated,
+      shownProfileLoading,
+      shownProfileError,
       refreshProfessionalProfile,
       hydrateFromApiUser,
       clearLocalProfile,

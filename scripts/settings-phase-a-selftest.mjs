@@ -108,7 +108,7 @@ const refreshBody = auth.slice(
 assert.match(refreshBody, /const epoch = authEpoch\.current/);
 assert.match(refreshBody, /if \(epoch !== authEpoch\.current\) return user/);
 const epochAt = refreshBody.indexOf('const epoch = authEpoch.current');
-const getMeAt = refreshBody.indexOf('authApi.getMe()');
+const getMeAt = refreshBody.indexOf('authApi.getMe(accessToken)');
 const applyAt = refreshBody.indexOf('applyApiUser(user)');
 assert.equal(epochAt > 0 && getMeAt > epochAt && applyAt > getMeAt, true);
 const throwAt = signOutBody.indexOf('throw new Error');

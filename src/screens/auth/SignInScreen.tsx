@@ -19,6 +19,7 @@ import { RootStackScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { useMyProfile } from '../../context/ProfileContext';
 import { mapAuthError } from '../../lib/authErrors';
+import { showsProfileRetry } from '../../lib/coldStartRoute';
 import { hasResumablePendingVerification } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import { isAccountSuspendedFailure, isAuthFailure } from '../../lib/authFailure';
@@ -67,7 +68,12 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
   const [retrying, setRetrying] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const canSubmit = email.trim().length > 0 && password.trim().length > 0 && !loading && !recovery;
-  const backendUnavailable = Boolean(session && !apiUser && authError && !recovery);
+  const backendUnavailable = showsProfileRetry({
+    session,
+    apiUser,
+    authError,
+    recovery: Boolean(recovery),
+  });
 
   useEffect(() => {
     if (route.params?.notice !== 'password-updated') return;

@@ -214,21 +214,21 @@ export function mapApiNotification(api: ApiNotification): Notification {
 }
 
 export const notificationService = {
-  async list(): Promise<Notification[]> {
-    const items = await notificationsApi.list();
+  async list(accessToken?: string): Promise<Notification[]> {
+    const items = await notificationsApi.list(accessToken);
     return items.map(mapApiNotification);
   },
 
-  async markRead(id: string): Promise<void> {
-    await notificationsApi.markRead(id);
+  async markRead(id: string, accessToken?: string): Promise<void> {
+    await notificationsApi.markRead(id, accessToken);
   },
 
-  async markAllRead(): Promise<void> {
-    await notificationsApi.markAllRead();
+  async markAllRead(accessToken?: string): Promise<void> {
+    await notificationsApi.markAllRead(accessToken);
   },
 
-  async unreadCount(): Promise<number> {
-    const summary = await notificationsApi.unreadSummary();
+  async unreadCount(accessToken?: string): Promise<number> {
+    const summary = await notificationsApi.unreadSummary(accessToken);
     return summary.unreadCount;
   },
 };

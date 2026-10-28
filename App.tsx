@@ -23,20 +23,21 @@ import { colors } from './src/theme';
 SplashScreen.preventAutoHideAsync();
 
 function AppProviders() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const fontsReady = fontsLoaded || fontError != null;
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsReady]);
 
-  if (!fontsLoaded) {
+  if (!fontsReady) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />

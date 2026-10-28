@@ -3,8 +3,8 @@ import {
   View,
   TextInput,
   StyleSheet,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
+  type TextInputInstance,
+  type TextInputKeyPressEvent,
 } from 'react-native';
 import { colors, radius, spacing, typography } from '../../theme';
 
@@ -31,7 +31,7 @@ function emptyCode(): string[] {
  */
 const OtpCodeInput = forwardRef<OtpCodeInputHandle, OtpCodeInputProps>(
   function OtpCodeInput({ code, onChange, editable = true }, ref) {
-    const inputRefs = useRef<(TextInput | null)[]>([]);
+    const inputRefs = useRef<(TextInputInstance | null)[]>([]);
     const boxes = Array.from(
       { length: OTP_LENGTH },
       (_, index) => code[index] ?? '',
@@ -74,7 +74,7 @@ const OtpCodeInput = forwardRef<OtpCodeInputHandle, OtpCodeInputProps>(
     };
 
     const handleKeyPress = (
-      event: NativeSyntheticEvent<TextInputKeyPressEventData>,
+      event: TextInputKeyPressEvent,
       index: number,
     ) => {
       if (event.nativeEvent.key === 'Backspace' && !boxes[index] && index > 0) {

@@ -4,9 +4,10 @@
  * Nest API base URL is resolved HERE (not in the Metro client dotenv merge),
  * so `npm run start:local` / `start:railway` shell values always win over
  * `.env` / `.env.development`. See docs/API_ENV.md.
+ *
+ * Export a function so Expo passes the static app.json config in. Spreading
+ * that config keeps plugins, icons, and the bundle id from app.json.
  */
-const appJson = require('./app.json');
-
 const LOCAL_API_BASE_URL = 'http://localhost:3000/api/v1';
 const RAILWAY_API_BASE_URL =
   'https://mawahib-backend-production.up.railway.app/api/v1';
@@ -39,16 +40,12 @@ function resolveApiBaseUrl() {
   return LOCAL_API_BASE_URL;
 }
 
-const apiBaseUrl = resolveApiBaseUrl();
-
-/** @type {import('expo/config').ExpoConfig} */
-const expoConfig = {
-  ...appJson.expo,
+/** @type {import('expo/config').ConfigContext} */
+module.exports = ({ config }) => ({
+  ...config,
   extra: {
-    ...(appJson.expo.extra || {}),
+    ...(config.extra || {}),
     /** Canonical Nest API root including `/api/v1` (no trailing slash). */
-    apiBaseUrl,
+    apiBaseUrl: resolveApiBaseUrl(),
   },
-};
-
-module.exports = { expo: expoConfig };
+});
