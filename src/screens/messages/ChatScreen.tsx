@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Alert,
@@ -16,6 +17,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -30,16 +32,25 @@ import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { coerceByteSize, formatBytes } from '../../utils/formatBytes';
 import { colors, spacing, radius, typography } from '../../theme';
-import { CHAT_POLL_MS, MESSAGE_BODY_MAX_LENGTH } from '../../config/messaging';
+import {
+  CHAT_POLL_MS,
+  MAX_MESSAGE_ATTACHMENTS,
+  MESSAGE_ATTACHMENT_MAX_BYTES,
+  MESSAGE_BODY_MAX_LENGTH,
+  MESSAGE_DOCUMENT_MIME_TYPE,
+  MESSAGE_IMAGE_MIME_TYPES,
+} from '../../config/messaging';
 import { usePolling } from '../../hooks/usePolling';
 import { createClientId } from '../../lib/clientId';
 import { ApiError } from '../../lib/apiClient';
 import {
   pickLocalDocument,
-  pickLocalImage,
+  pickLocalImages,
   uploadLocalFile,
   type LocalPickedFile,
 } from '../../lib/uploadMedia';
+import { useIdentityGeneration } from '../../hooks/useIdentityGeneration';
+import { useAuth } from '../../context/AuthContext';
 import { messageService } from '../../services/messageService';
 import type {
   ApiConversation,
@@ -53,7 +64,40 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { openEngagementReview } from '../../utils/openEngagementReview';
 import { ScreenProps } from '../../navigation/types';
 
-type PendingAttachment = LocalPickedFile & { id: string };
+type PendingAttachment = LocalPickedFile & {
+  id: string;
+  mediaAssetId?: string;
+  error?: string;
+};
+
+type MessageImageMime = (typeof MESSAGE_IMAGE_MIME_TYPES)[number];
+
+function attachmentRejection(
+  file: LocalPickedFile,
+  kind: 'image' | 'document',
+): string | null {
+  if (
+    !Number.isFinite(file.byteSize) ||
+    file.byteSize < 1 ||
+    file.byteSize > MESSAGE_ATTACHMENT_MAX_BYTES
+  ) {
+    return `${file.fileName} is larger than 20 MB.`;
+  }
+  if (
+    kind === 'image' &&
+    !MESSAGE_IMAGE_MIME_TYPES.includes(file.mimeType as MessageImageMime)
+  ) {
+    return `${file.fileName} is not a supported photo. Use JPEG, PNG, or WebP.`;
+  }
+  if (
+    kind === 'document' &&
+    file.mimeType !== MESSAGE_DOCUMENT_MIME_TYPE &&
+    !MESSAGE_IMAGE_MIME_TYPES.includes(file.mimeType as MessageImageMime)
+  ) {
+    return `${file.fileName} is not a supported file. Use a PDF or a photo.`;
+  }
+  return null;
+}
 
 type ChatRow =
   | { kind: 'divider'; id: string }
@@ -81,10 +125,12 @@ function mergeMessages(existing: ApiMessage[], incoming: ApiMessage[]): ApiMessa
     const prev = byId.get(m.id);
     byId.set(m.id, prev ? { ...prev, ...m } : m);
   }
-  return Array.from(byId.values()).sort(
-    (a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
+  return Array.from(byId.values()).sort((a, b) => {
+    const delta =
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (delta !== 0) return delta;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
 }
 
 function isImageMime(mimeType: string | null | undefined): boolean {
@@ -113,28 +159,41 @@ function AttachmentBlocks({
 }: {
   attachments: MessageAttachment[];
   isMe: boolean;
-  onOpenImage: (url: string) => void;
+  onOpenImage: (attachmentId: string) => void;
 }) {
   if (!attachments?.length) return null;
+  const images = attachments.filter(
+    (a) => isImageMime(a.mimeType) && Boolean(a.url),
+  );
+  const files = attachments.filter((a) => !images.includes(a));
   return (
     <View style={styles.attachmentStack}>
-      {attachments.map((a) => {
-        const url = a.url ?? undefined;
-        const size = coerceByteSize(a.byteSize);
-        if (isImageMime(a.mimeType) && url) {
-          return (
+      {images.length > 0 ? (
+        <View style={images.length > 1 ? styles.imageGrid : undefined}>
+          {images.map((a) => (
             <TouchableOpacity
               key={a.id}
               activeOpacity={0.85}
-              onPress={() => onOpenImage(url)}
+              onPress={() => onOpenImage(a.id)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="Open photo"
             >
               <Image
-                source={{ uri: url }}
-                style={styles.messageImage}
+                source={{ uri: a.url ?? '' }}
+                style={
+                  images.length > 1 ? styles.messageImageTile : styles.messageImage
+                }
                 contentFit="cover"
               />
             </TouchableOpacity>
-          );
+          ))}
+        </View>
+      ) : null}
+      {files.map((a) => {
+        const url = a.url ?? undefined;
+        const size = coerceByteSize(a.byteSize);
+        if (isImageMime(a.mimeType) && url) {
+          return null;
         }
         if (isPdfMime(a.mimeType) || a.fileName) {
           return (
@@ -183,6 +242,11 @@ function AttachmentBlocks({
 export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const conversationId = route.params.conversationId;
   const { user: me } = useMyProfile();
+  const { apiUser } = useAuth();
+  const myId = apiUser?.id || me.id;
+  const insets = useSafeAreaInsets();
+  const { userId, identityChanged, snapshot, isStale } =
+    useIdentityGeneration(conversationId);
   const { refresh: refreshUnread } = useMessagingUnread();
   const [conversation, setConversation] = useState<ApiConversation | null>(
     null,
@@ -204,6 +268,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   );
   const [focused, setFocused] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
@@ -219,6 +285,35 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const nearBottomRef = useRef(true);
   const pendingScrollTargetRef = useRef<'end' | 'divider' | null>(null);
   const loadingOlderRef = useRef(false);
+  const sendingRef = useRef(false);
+  const clientMessageIdRef = useRef<string | null>(null);
+
+  if (identityChanged) {
+    sendingRef.current = false;
+    clientMessageIdRef.current = null;
+    setConversation(null);
+    setMessages([]);
+    setText('');
+    setPendingAttachments([]);
+    setLoading(true);
+    setSending(false);
+    setLoadFailed(false);
+    setMissing(false);
+    setOlderCursor(null);
+    setHasNewBelow(false);
+    setUnreadDividerBeforeId(null);
+  }
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const scrollToLatest = useCallback((animated = true) => {
     requestAnimationFrame(() => {
@@ -228,12 +323,16 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
 
   const refreshLatest = useCallback(
     async (opts: { initial?: boolean } = {}) => {
+      const started = snapshot();
+      if (!started.userId || isStale(started.userId, started.epoch)) return;
       try {
         const [conv, page] = await Promise.all([
           messageService.getConversation(conversationId),
           messageService.getMessages(conversationId, { limit: 50 }),
         ]);
+        if (isStale(started.userId, started.epoch)) return;
         setConversation(conv);
+        setLoadFailed(false);
         const chronological = [...page.items].reverse();
         setMessages((prev) => {
           const prevNewest = prev[prev.length - 1]?.id;
@@ -263,7 +362,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
             (m) =>
               m.kind === 'user' &&
               m.senderId &&
-              m.senderId !== me.id &&
+              m.senderId !== started.userId &&
               (!lastReadAt || new Date(m.createdAt) > new Date(lastReadAt)),
           );
           setUnreadDividerBeforeId(firstUnread?.id ?? null);
@@ -271,29 +370,36 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         }
         setMissing(false);
         await messageService.markRead(conversationId).catch(() => undefined);
-        void refreshUnread();
+        if (!isStale(started.userId, started.epoch)) void refreshUnread();
       } catch (e) {
-        if (e instanceof ApiError && e.status === 404) {
+        if (isStale(started.userId, started.epoch)) return;
+        if (e instanceof ApiError && (e.status === 404 || e.status === 403)) {
           setMissing(true);
+          setLoadFailed(false);
         } else {
           console.warn('[chat] load failed', e);
+          setLoadFailed(true);
         }
       } finally {
-        setLoading(false);
+        if (!isStale(started.userId, started.epoch)) setLoading(false);
       }
     },
-    [conversationId, me.id, refreshUnread, scrollToLatest],
+    [conversationId, isStale, refreshUnread, scrollToLatest, snapshot],
   );
 
   const loadOlder = useCallback(async () => {
     if (!olderCursor || loadingOlderRef.current) return;
+    const started = snapshot();
+    if (!started.userId || isStale(started.userId, started.epoch)) return;
+    const cursor = olderCursor;
     loadingOlderRef.current = true;
     setLoadingOlder(true);
     try {
       const page = await messageService.getMessages(conversationId, {
-        cursor: olderCursor,
+        cursor,
         limit: 50,
       });
+      if (isStale(started.userId, started.epoch)) return;
       const chronological = [...page.items].reverse();
       setMessages((prev) => mergeMessages(chronological, prev));
       setOlderCursor(page.nextCursor);
@@ -301,9 +407,9 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       console.warn('[chat] load older failed', e);
     } finally {
       loadingOlderRef.current = false;
-      setLoadingOlder(false);
+      if (!isStale(started.userId, started.epoch)) setLoadingOlder(false);
     }
-  }, [conversationId, olderCursor]);
+  }, [conversationId, isStale, olderCursor, snapshot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -321,6 +427,10 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       };
     }, [refreshLatest]),
   );
+
+  useEffect(() => {
+    void refreshLatest({ initial: true });
+  }, [userId, conversationId, refreshLatest]);
 
   usePolling(
     () => void refreshLatest({ initial: false }),
@@ -358,25 +468,25 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
     return rows;
   }, [messages, unreadDividerBeforeId]);
 
-  const galleryUrls = useMemo(() => {
-    const urls: string[] = [];
+  const gallery = useMemo(() => {
+    const items: { id: string; url: string }[] = [];
     for (const message of messages) {
       for (const a of message.attachments ?? []) {
         if (isImageMime(a.mimeType) && a.url) {
-          urls.push(a.url);
+          items.push({ id: a.id, url: a.url });
         }
       }
     }
-    return urls;
+    return items;
   }, [messages]);
 
   const openImage = useCallback(
-    (url: string) => {
-      const index = galleryUrls.indexOf(url);
+    (attachmentId: string) => {
+      const index = gallery.findIndex((item) => item.id === attachmentId);
       setLightboxIndex(index >= 0 ? index : 0);
       setLightboxOpen(true);
     },
-    [galleryUrls],
+    [gallery],
   );
 
   const headerSubtitle = useMemo(() => {
@@ -462,47 +572,83 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   };
 
   const send = async () => {
+    if (sendingRef.current) return;
+    const started = snapshot();
     const trimmed = text.trim();
-    const pending = pendingAttachments;
+    const pending = pendingAttachments.map((file) => ({ ...file }));
     if (!trimmed && pending.length === 0) return;
-    if (!writable || sending) return;
+    if (!writable) return;
+    if (!started.userId || isStale(started.userId, started.epoch)) return;
 
     if (trimmed.length > MESSAGE_BODY_MAX_LENGTH) {
-      // Keep text + pending attachments; do not upload yet.
       setToast('Message is too long. Please make it shorter.');
       return;
     }
+    if (pending.length > MAX_MESSAGE_ATTACHMENTS) {
+      setToast(`You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files.`);
+      return;
+    }
 
+    sendingRef.current = true;
     setSending(true);
-    const clientMessageId = createClientId();
+    const clientMessageId = clientMessageIdRef.current ?? createClientId();
+    clientMessageIdRef.current = clientMessageId;
+    const live = () => !isStale(started.userId, started.epoch);
     try {
       const mediaAssetIds: string[] = [];
       for (const file of pending) {
-        const uploaded = await uploadLocalFile({
-          uri: file.uri,
-          mimeType: file.mimeType,
-          byteSize: file.byteSize,
-          fileName: file.fileName,
-          purpose: 'message',
-        });
-        mediaAssetIds.push(uploaded.mediaAssetId);
+        if (!live()) return;
+        if (file.mediaAssetId) {
+          mediaAssetIds.push(file.mediaAssetId);
+          continue;
+        }
+        try {
+          const uploaded = await uploadLocalFile({
+            uri: file.uri,
+            mimeType: file.mimeType,
+            byteSize: file.byteSize,
+            fileName: file.fileName,
+            purpose: 'message',
+          });
+          if (!live()) return;
+          file.mediaAssetId = uploaded.mediaAssetId;
+          file.error = undefined;
+          mediaAssetIds.push(uploaded.mediaAssetId);
+          setPendingAttachments(pending.map((item) => ({ ...item })));
+        } catch (uploadError) {
+          file.error =
+            uploadError instanceof Error
+              ? uploadError.message
+              : 'Upload failed';
+          if (live()) {
+            setPendingAttachments(pending.map((item) => ({ ...item })));
+          }
+          throw uploadError;
+        }
       }
 
+      if (!live()) return;
       const created = await messageService.sendMessage(conversationId, {
         body: trimmed || undefined,
         mediaAssetIds: mediaAssetIds.length > 0 ? mediaAssetIds : undefined,
         clientMessageId,
       });
+      if (!live()) return;
       setMessages((prev) => mergeMessages(prev, [created]));
       setText('');
       setPendingAttachments([]);
+      clientMessageIdRef.current = null;
       nearBottomRef.current = true;
       setHasNewBelow(false);
       scrollToLatest(true);
+      await messageService.markRead(conversationId).catch(() => undefined);
+      if (!live()) return;
       const refreshed = await messageService.getConversation(conversationId);
+      if (!live()) return;
       setConversation(refreshed);
       void refreshUnread();
     } catch (e) {
+      if (!live()) return;
       const message =
         e instanceof ApiError || e instanceof Error
           ? e.message
@@ -512,32 +658,64 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       } else {
         Alert.alert('Could not send', message);
       }
-      // Keep pending attachments on upload/send failure.
     } finally {
-      setSending(false);
+      if (live()) {
+        sendingRef.current = false;
+        setSending(false);
+      }
     }
   };
 
-  const addPendingLocal = (local: LocalPickedFile | null) => {
-    if (!local) return;
-    setPendingAttachments((prev) => [
-      ...prev,
-      {
-        id: createClientId(),
-        uri: local.uri,
-        mimeType: local.mimeType,
-        byteSize: local.byteSize,
-        fileName: local.fileName,
-      },
-    ]);
+  const addPendingFiles = (
+    files: LocalPickedFile[],
+    kind: 'image' | 'document',
+  ) => {
+    const accepted: PendingAttachment[] = [];
+    const rejected: string[] = [];
+    for (const file of files) {
+      const reason = attachmentRejection(file, kind);
+      if (reason) rejected.push(reason);
+      else {
+        accepted.push({
+          id: createClientId(),
+          uri: file.uri,
+          mimeType: file.mimeType,
+          byteSize: file.byteSize,
+          fileName: file.fileName,
+        });
+      }
+    }
+    setPendingAttachments((prev) => {
+      const room = MAX_MESSAGE_ATTACHMENTS - prev.length;
+      const next = accepted.slice(0, Math.max(0, room));
+      if (accepted.length > next.length) {
+        rejected.push(
+          `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files in one message.`,
+        );
+      }
+      if (rejected.length > 0) {
+        queueMicrotask(() =>
+          Alert.alert('Some files were not added', rejected.join('\n')),
+        );
+      }
+      return [...prev, ...next];
+    });
   };
 
   const pickPhoto = async () => {
     setAttachMenuOpen(false);
+    const room = MAX_MESSAGE_ATTACHMENTS - pendingAttachments.length;
+    if (room < 1) {
+      Alert.alert(
+        'Attachment limit',
+        `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files in one message.`,
+      );
+      return;
+    }
     setAttaching(true);
     try {
-      const local = await pickLocalImage();
-      addPendingLocal(local);
+      const files = await pickLocalImages(room);
+      if (files.length > 0) addPendingFiles(files, 'image');
     } catch (e) {
       Alert.alert(
         'Could not attach',
@@ -550,10 +728,18 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
 
   const pickDocument = async () => {
     setAttachMenuOpen(false);
+    const room = MAX_MESSAGE_ATTACHMENTS - pendingAttachments.length;
+    if (room < 1) {
+      Alert.alert(
+        'Attachment limit',
+        `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files in one message.`,
+      );
+      return;
+    }
     setAttaching(true);
     try {
       const local = await pickLocalDocument();
-      addPendingLocal(local);
+      if (local) addPendingFiles([local], 'document');
     } catch (e) {
       Alert.alert(
         'Could not attach',
@@ -566,6 +752,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
 
   const onAttach = () => {
     if (!writable || attaching || sending) return;
+    Keyboard.dismiss();
     setAttachMenuOpen(true);
   };
 
@@ -617,7 +804,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   }
 
   return (
-    <ScreenContainer padded={false}>
+    <ScreenContainer padded={false} safeBottom={false}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity
@@ -826,7 +1013,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                     <View style={styles.systemRow}>{systemBody}</View>
                   );
                 }
-                const isMe = message.senderId === me.id;
+                const isMe = message.senderId === myId;
                 return (
                   <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
                     <View
@@ -878,14 +1065,34 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           </View>
         )}
 
-        {!writable ? (
+        {loadFailed && !conversation && !loading ? (
+          <View style={styles.readOnlyBar}>
+            <Text style={styles.readOnlyText}>Could not load this conversation.</Text>
+            <TouchableOpacity
+              onPress={() => void refreshLatest({ initial: true })}
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+            >
+              <Text style={styles.retryText}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : conversation && !writable ? (
           <View style={styles.readOnlyBar}>
             <Text style={styles.readOnlyText}>
               This conversation is read-only.
             </Text>
           </View>
-        ) : (
-          <View style={styles.composer}>
+        ) : conversation ? (
+          <View
+            style={[
+              styles.composer,
+              {
+                paddingBottom: keyboardOpen
+                  ? spacing.sm
+                  : Math.max(insets.bottom, spacing.sm),
+              },
+            ]}
+          >
             {pendingAttachments.length > 0 ? (
               <View style={styles.pendingRow}>
                 {pendingAttachments.map((a) => (
@@ -922,6 +1129,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                       }
                       hitSlop={8}
                       disabled={sending}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${a.fileName}`}
                     >
                       <Ionicons
                         name="close-circle"
@@ -929,6 +1138,18 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                         color={colors.textSecondary}
                       />
                     </TouchableOpacity>
+                    {a.error ? (
+                      <Text style={styles.pendingError} numberOfLines={2}>
+                        Failed
+                      </Text>
+                    ) : null}
+                    {sending && !a.mediaAssetId && !a.error ? (
+                      <ActivityIndicator
+                        style={styles.pendingSpinner}
+                        size="small"
+                        color={colors.primary}
+                      />
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -938,6 +1159,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                 style={styles.attachButton}
                 onPress={onAttach}
                 disabled={attaching || sending}
+                accessibilityRole="button"
+                accessibilityLabel="Add attachment"
               >
                 {attaching ? (
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -956,6 +1179,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                 value={text}
                 onChangeText={setText}
                 multiline
+                maxLength={MESSAGE_BODY_MAX_LENGTH}
                 editable={!sending}
               />
               <TouchableOpacity
@@ -965,12 +1189,14 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                 ]}
                 onPress={() => void send()}
                 disabled={!canSend}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
               >
                 <Ionicons name="send" size={20} color={colors.white} />
               </TouchableOpacity>
             </View>
           </View>
-        )}
+        ) : null}
       </KeyboardAvoidingView>
 
       <ConfirmActionModal
@@ -1013,7 +1239,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
 
       <ChatImageLightbox
         visible={lightboxOpen}
-        images={galleryUrls}
+        images={gallery.map((item) => item.url)}
         initialIndex={lightboxIndex}
         onClose={() => setLightboxOpen(false)}
       />
@@ -1029,7 +1255,10 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           onPress={() => setAttachMenuOpen(false)}
         >
           <Pressable
-            style={styles.attachMenu}
+            style={[
+              styles.attachMenu,
+              { marginBottom: Math.max(insets.bottom, spacing.md) + 64 },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
             <TouchableOpacity
@@ -1224,9 +1453,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   attachmentStack: { gap: spacing.sm },
+  imageGrid: {
+    width: 200,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
   messageImage: {
     width: 200,
     height: 160,
+    borderRadius: radius.button,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  messageImageTile: {
+    width: 98,
+    height: 98,
     borderRadius: radius.button,
     backgroundColor: 'rgba(0,0,0,0.08)',
   },
@@ -1289,6 +1530,17 @@ const styles = StyleSheet.create({
   },
   pendingItem: {
     position: 'relative',
+  },
+  pendingError: {
+    ...typography.caption,
+    color: colors.error,
+    marginTop: 2,
+    maxWidth: 64,
+  },
+  pendingSpinner: {
+    position: 'absolute',
+    top: 22,
+    left: 22,
   },
   pendingThumb: {
     width: 64,
@@ -1355,6 +1607,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  retryText: {
+    ...typography.label,
+    color: colors.primary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   missingWrap: {
     flex: 1,

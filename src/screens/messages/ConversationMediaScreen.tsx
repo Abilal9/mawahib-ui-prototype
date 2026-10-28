@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ChatImageLightbox from '../../components/messaging/ChatImageLightbox';
 import { colors, spacing, typography } from '../../theme';
 import { messagingApi, type ConversationMediaItem } from '../../services/messagingApi';
+import { useIdentityGeneration } from '../../hooks/useIdentityGeneration';
 import { ScreenProps } from '../../navigation/types';
 
 const COLUMNS = 3;
@@ -26,6 +27,8 @@ export default function ConversationMediaScreen({
   route,
 }: ScreenProps<'ConversationMedia'>) {
   const { conversationId } = route.params;
+  const { userId, identityChanged, snapshot, isStale } =
+    useIdentityGeneration(conversationId);
   const { width } = useWindowDimensions();
   const cellSize = Math.floor((width - GAP * (COLUMNS - 1)) / COLUMNS);
 
@@ -33,25 +36,39 @@ export default function ConversationMediaScreen({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const loadingMoreRef = useRef(false);
+
+  if (identityChanged) {
+    setItems([]);
+    setNextCursor(null);
+    setLoading(true);
+    setLoadingMore(false);
+    setLoadError(false);
+    setLightboxOpen(false);
+  }
 
   const loadFirst = useCallback(async () => {
+    const started = snapshot();
+    if (!started.userId || isStale(started.userId, started.epoch)) return;
     setLoading(true);
     try {
       const page = await messagingApi.listConversationMedia(conversationId, {
         limit: 40,
       });
+      if (isStale(started.userId, started.epoch)) return;
       setItems(page.items);
       setNextCursor(page.nextCursor);
+      setLoadError(false);
     } catch (e) {
       console.warn('[conversation-media] load failed', e);
-      setItems([]);
-      setNextCursor(null);
+      if (!isStale(started.userId, started.epoch)) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!isStale(started.userId, started.epoch)) setLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, isStale, snapshot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,20 +76,33 @@ export default function ConversationMediaScreen({
     }, [loadFirst]),
   );
 
+  useEffect(() => {
+    void loadFirst();
+  }, [userId, loadFirst]);
+
   const loadMore = async () => {
-    if (!nextCursor || loadingMore || loading) return;
+    if (!nextCursor || loadingMoreRef.current || loading) return;
+    const started = snapshot();
+    if (!started.userId || isStale(started.userId, started.epoch)) return;
+    const cursor = nextCursor;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const page = await messagingApi.listConversationMedia(conversationId, {
-        cursor: nextCursor,
+        cursor,
         limit: 40,
       });
-      setItems((prev) => [...prev, ...page.items]);
+      if (isStale(started.userId, started.epoch)) return;
+      setItems((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...page.items.filter((item) => !seen.has(item.id))];
+      });
       setNextCursor(page.nextCursor);
     } catch (e) {
       console.warn('[conversation-media] load more failed', e);
     } finally {
-      setLoadingMore(false);
+      loadingMoreRef.current = false;
+      if (!isStale(started.userId, started.epoch)) setLoadingMore(false);
     }
   };
 
@@ -82,7 +112,10 @@ export default function ConversationMediaScreen({
 
   const openAt = (item: ConversationMediaItem) => {
     if (!item.url) return;
-    const index = urls.indexOf(item.url);
+    const visible = items.filter(
+      (entry) => typeof entry.url === 'string' && entry.url.length > 0,
+    );
+    const index = visible.findIndex((entry) => entry.id === item.id);
     setLightboxIndex(index >= 0 ? index : 0);
     setLightboxOpen(true);
   };
@@ -115,7 +148,20 @@ export default function ConversationMediaScreen({
           onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={
-            <Text style={styles.empty}>No media has been shared yet.</Text>
+            loadError ? (
+              <View>
+                <Text style={styles.empty}>Could not load media.</Text>
+                <TouchableOpacity
+                  onPress={() => void loadFirst()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Text style={styles.retry}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.empty}>No media has been shared yet.</Text>
+            )
           }
           ListFooterComponent={
             loadingMore ? (
@@ -185,6 +231,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xxl,
     paddingHorizontal: spacing.lg,
+  },
+  retry: {
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   footerSpinner: { marginVertical: spacing.lg },
 });

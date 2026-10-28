@@ -35,6 +35,39 @@ async function ensureLibraryPermission(): Promise<boolean> {
   return requested.granted;
 }
 
+/**
+ * Pick one or more photos in a single library session.
+ * `selectionLimit` is the remaining room in the message, not an unlimited pick.
+ * Cancel returns an empty list.
+ */
+export async function pickLocalImages(
+  selectionLimit: number,
+): Promise<LocalPickedFile[]> {
+  if (selectionLimit < 1) return [];
+  const ok = await ensureLibraryPermission();
+  if (!ok) {
+    throw new Error('Photo library permission is required to upload images');
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    quality: 0.85,
+    allowsMultipleSelection: true,
+    selectionLimit,
+  });
+  if (result.canceled || !result.assets?.length) return [];
+
+  const selected = result.assets.slice(0, selectionLimit);
+  const files: LocalPickedFile[] = [];
+  for (const asset of selected) {
+    const mimeType = guessMime(asset.uri, asset.mimeType);
+    const byteSize = asset.fileSize ?? (await fileSize(asset.uri));
+    const fileName = asset.fileName ?? `upload${extensionForMime(mimeType)}`;
+    files.push({ uri: asset.uri, mimeType, byteSize, fileName });
+  }
+  return files;
+}
+
 /** Pick an image without uploading. */
 export async function pickLocalImage(): Promise<LocalPickedFile | null> {
   const ok = await ensureLibraryPermission();

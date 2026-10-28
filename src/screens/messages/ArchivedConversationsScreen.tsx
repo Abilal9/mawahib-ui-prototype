@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,11 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import { toImageSource } from '../../utils/image';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
-import { messageService } from '../../services/messageService';
+import {
+  conversationPreview,
+  messageService,
+} from '../../services/messageService';
+import { useIdentityGeneration } from '../../hooks/useIdentityGeneration';
 import type { ApiConversation } from '../../services/messagingApi';
 import { useAuth } from '../../context/AuthContext';
 import { useMessagingUnread } from '../../context/MessagingUnreadContext';
@@ -43,27 +47,42 @@ export default function ArchivedConversationsScreen({
   navigation,
 }: ScreenProps<'ArchivedConversations'>) {
   const { isSignedIn } = useAuth();
+  const { userId, identityChanged, snapshot, isStale } =
+    useIdentityGeneration('archived');
   const { refresh: refreshUnread } = useMessagingUnread();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  if (identityChanged) {
+    setConversations([]);
+    setLoading(true);
+    setLoadError(false);
+  }
+
   const load = useCallback(async () => {
-    if (!isSignedIn) {
-      setConversations([]);
-      setLoading(false);
+    const started = snapshot();
+    if (!isSignedIn || !started.userId || isStale(started.userId, started.epoch)) {
+      if (!isStale(started.userId, started.epoch)) {
+        setConversations([]);
+        setLoading(false);
+      }
       return;
     }
     try {
       const items = await messageService.listConversations(undefined, 'archived');
+      if (isStale(started.userId, started.epoch)) return;
       setConversations(items);
+      setLoadError(false);
       void refreshUnread();
     } catch (e) {
       console.warn('[archived] load failed', e);
+      if (!isStale(started.userId, started.epoch)) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!isStale(started.userId, started.epoch)) setLoading(false);
     }
-  }, [isSignedIn, refreshUnread]);
+  }, [isSignedIn, isStale, refreshUnread, snapshot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,6 +90,10 @@ export default function ArchivedConversationsScreen({
       void load();
     }, [load]),
   );
+
+  useEffect(() => {
+    void load();
+  }, [userId, load]);
 
   const restore = async (id: string) => {
     setBusyId(id);
@@ -160,17 +183,27 @@ export default function ArchivedConversationsScreen({
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <Text style={styles.empty}>No archived conversations.</Text>
+            loadError ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.empty}>Could not load archived conversations.</Text>
+                <TouchableOpacity
+                  onPress={() => void load()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Text style={styles.retry}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.empty}>No archived conversations.</Text>
+            )
           }
           renderItem={({ item }) => {
             const name =
               item.type === 'work' && item.workContext?.title
                 ? item.peer?.displayName ?? 'Job chat'
                 : item.peer?.displayName ?? 'Conversation';
-            const subtitle =
-              item.type === 'work' && item.workContext?.title
-                ? item.workContext.title
-                : item.lastMessagePreview || 'No messages yet';
+            const subtitle = conversationPreview(item);
             return (
               <TouchableOpacity
                 style={styles.conversation}
@@ -258,12 +291,19 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.h3, color: colors.text },
   list: { paddingHorizontal: spacing.screen, paddingBottom: 120, flexGrow: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyWrap: { alignItems: 'center' },
   empty: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xxl,
     paddingHorizontal: spacing.lg,
+  },
+  retry: {
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   conversation: {
     flexDirection: 'row',

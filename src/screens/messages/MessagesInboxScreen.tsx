@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,9 +22,11 @@ import { colors, spacing, radius, typography } from '../../theme';
 import { INBOX_POLL_MS } from '../../config/messaging';
 import { usePolling } from '../../hooks/usePolling';
 import {
+  conversationPreview,
   isConversationUnread,
   messageService,
 } from '../../services/messageService';
+import { useIdentityGeneration } from '../../hooks/useIdentityGeneration';
 import type { ApiConversation } from '../../services/messagingApi';
 import { useAuth } from '../../context/AuthContext';
 import { useMessagingUnread } from '../../context/MessagingUnreadContext';
@@ -50,31 +53,53 @@ export default function MessagesInboxScreen({
   navigation,
 }: TabScreenProps<'MessagesTab'>) {
   const { isSignedIn } = useAuth();
+  const { userId, identityChanged, snapshot, isStale } =
+    useIdentityGeneration('inbox');
   const { refresh: refreshUnread } = useMessagingUnread();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [focused, setFocused] = useState(false);
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!isSignedIn) {
-      setConversations([]);
-      setLoading(false);
+  if (identityChanged) {
+    setConversations([]);
+    setLoading(true);
+    setRefreshing(false);
+    setLoadError(false);
+  }
+
+  const load = useCallback(async (mode: 'poll' | 'refresh' = 'poll') => {
+    const started = snapshot();
+    if (!started.userId || isStale(started.userId, started.epoch)) {
+      if (!isStale(started.userId, started.epoch)) {
+        setConversations([]);
+        setLoading(false);
+        setRefreshing(false);
+      }
       return;
     }
+    if (mode === 'refresh') setRefreshing(true);
     try {
       const items = await messageService.listConversations(undefined, 'inbox');
+      if (isStale(started.userId, started.epoch)) return;
       setConversations(items);
+      setLoadError(false);
       void refreshUnread();
     } catch (e) {
       console.warn('[inbox] load failed', e);
+      if (!isStale(started.userId, started.epoch)) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!isStale(started.userId, started.epoch)) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [isSignedIn, refreshUnread]);
+  }, [isStale, refreshUnread, snapshot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,7 +113,11 @@ export default function MessagesInboxScreen({
     }, [load]),
   );
 
-  usePolling(load, INBOX_POLL_MS, focused && isSignedIn);
+  useEffect(() => {
+    void load('poll');
+  }, [userId, load]);
+
+  usePolling(() => void load('poll'), INBOX_POLL_MS, focused && isSignedIn && Boolean(userId));
 
   const confirmArchive = async () => {
     if (!archiveTargetId) return;
@@ -156,11 +185,31 @@ export default function MessagesInboxScreen({
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={() => setSwipedId(null)}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load('refresh')}
+              tintColor={colors.primary}
+            />
+          }
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              No conversations yet. Connect with someone or start a job to
-              message here.
-            </Text>
+            loadError ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.empty}>Could not load conversations.</Text>
+                <TouchableOpacity
+                  onPress={() => void load('refresh')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Text style={styles.retry}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.empty}>
+                No conversations yet. Connect with someone or start a job to
+                message here.
+              </Text>
+            )
           }
           renderItem={({ item }) => {
             const unread = isConversationUnread(item);
@@ -168,10 +217,7 @@ export default function MessagesInboxScreen({
               item.type === 'work' && item.workContext?.title
                 ? item.peer?.displayName ?? 'Job chat'
                 : item.peer?.displayName ?? 'Conversation';
-            const subtitle =
-              item.type === 'work' && item.workContext?.title
-                ? item.workContext.title
-                : item.lastMessagePreview || 'No messages yet';
+            const subtitle = conversationPreview(item);
             return (
               <ConversationSwipeRow
                 open={swipedId === item.id}
@@ -272,12 +318,19 @@ const styles = StyleSheet.create({
   },
   list: { paddingHorizontal: spacing.screen, paddingBottom: 120, flexGrow: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyWrap: { alignItems: 'center' },
   empty: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xxl,
     paddingHorizontal: spacing.lg,
+  },
+  retry: {
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   conversation: {
     flexDirection: 'row',

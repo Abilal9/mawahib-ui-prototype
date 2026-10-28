@@ -9,9 +9,9 @@ import React, {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { INBOX_POLL_MS } from '../config/messaging';
+import { useIdentityGeneration } from '../hooks/useIdentityGeneration';
 import { usePolling } from '../hooks/usePolling';
 import { messageService } from '../services/messageService';
-import { useAuth } from './AuthContext';
 
 interface MessagingUnreadContextValue {
   unreadCount: number;
@@ -27,15 +27,21 @@ const MessagingUnreadContext = createContext<
  * App-wide messaging unread badge source.
  * Nest `/users/me/conversations/unread-summary` returns the number of
  * inbox conversations with unread messages (not total unread messages).
- * Survives restarts; archived/deleted threads are excluded server-side.
+ * A late response from the previous account is dropped.
  */
 export function MessagingUnreadProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useAuth();
+  const { userId, isSignedIn, identityChanged, snapshot, isStale } =
+    useIdentityGeneration('unread');
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [appActive, setAppActive] = useState(
     AppState.currentState === 'active',
   );
+
+  if (identityChanged) {
+    setUnreadCount(0);
+    setLoading(false);
+  }
 
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
@@ -46,26 +52,31 @@ export function MessagingUnreadProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!isSignedIn) {
-      setUnreadCount(0);
+    const started = snapshot();
+    if (!started.userId || isStale(started.userId, started.epoch)) {
+      if (!isStale(started.userId, started.epoch)) {
+        setUnreadCount(0);
+        setLoading(false);
+      }
       return;
     }
     setLoading(true);
     try {
       const summary = await messageService.unreadSummary();
+      if (isStale(started.userId, started.epoch)) return;
       setUnreadCount(summary.unreadCount);
     } catch (e) {
       console.warn('[messaging-unread] refresh failed', e);
     } finally {
-      setLoading(false);
+      if (!isStale(started.userId, started.epoch)) setLoading(false);
     }
-  }, [isSignedIn]);
+  }, [isStale, snapshot]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [userId, refresh]);
 
-  usePolling(refresh, INBOX_POLL_MS, isSignedIn && appActive);
+  usePolling(refresh, INBOX_POLL_MS, isSignedIn && Boolean(userId) && appActive);
 
   const value = useMemo(
     () => ({ unreadCount, loading, refresh }),

@@ -69,7 +69,10 @@ export function ConnectionsProvider({
   const { mappedUser, apiUser, isSignedIn } = useAuth();
   const { notifications, loading: notificationsLoading } = useNotifications();
   const me = mappedUser?.id || apiUser?.id || '';
+  const meRef = useRef(me);
   const epoch = useRef(0);
+  const boundMe = useRef(me);
+  meRef.current = me;
   const lastOk = useRef(0);
   const inflight = useRef<Promise<void> | null>(null);
   const inflightEpoch = useRef<number | null>(null);
@@ -90,6 +93,29 @@ export function ConnectionsProvider({
   >({});
   const [loading, setLoading] = useState(false);
   const [mutationBusy, setMutationBusy] = useState(false);
+
+  let shownConnectedUsers = connectedUsers;
+  let shownIncomingUsers = incomingUsers;
+  let shownOutgoingIds = outgoingIds;
+  let shownIncomingRequestByUser = incomingRequestByUser;
+  let shownOutgoingRequestByUser = outgoingRequestByUser;
+  let shownConversationByPeer = conversationByPeer;
+  if (boundMe.current !== me) {
+    boundMe.current = me;
+    epoch.current += 1;
+    shownConnectedUsers = [];
+    shownIncomingUsers = [];
+    shownOutgoingIds = [];
+    shownIncomingRequestByUser = {};
+    shownOutgoingRequestByUser = {};
+    shownConversationByPeer = {};
+    setConnectedUsers([]);
+    setIncomingUsers([]);
+    setOutgoingIds([]);
+    setIncomingRequestByUser({});
+    setOutgoingRequestByUser({});
+    setConversationByPeer({});
+  }
 
   const connectedIds = useMemo(
     () => connectedUsers.map((u) => u.id),
@@ -163,7 +189,7 @@ export function ConnectionsProvider({
     } catch (e) {
       console.warn('[connections] refresh failed', e);
     } finally {
-      setLoading(false);
+      if (started === epoch.current) setLoading(false);
     }
     })();
 
@@ -430,12 +456,19 @@ export function ConnectionsProvider({
           }
         })();
       },
-      getConversationId: (userId) => conversationByPeer[userId],
+      getConversationId: (userId) => shownConversationByPeer[userId],
       openOrCreateConversation: async (peerUserId) => {
-        const existing = conversationByPeer[peerUserId];
+        const owner = meRef.current;
+        const started = epoch.current;
+        const existing = shownConversationByPeer[peerUserId];
         if (existing) return existing;
         const conversationId =
           await connectionService.openConversation(peerUserId);
+        if (owner !== meRef.current || started !== epoch.current) {
+          throw new Error(
+            'This account changed before the conversation opened.',
+          );
+        }
         setConversationByPeer((prev) => ({
           ...prev,
           [peerUserId]: conversationId,
@@ -448,8 +481,12 @@ export function ConnectionsProvider({
     connectedIds,
     outgoingIds,
     incomingIds,
-    connectedUsers,
-    incomingUsers,
+    shownConnectedUsers,
+    shownIncomingUsers,
+    shownOutgoingIds,
+    shownIncomingRequestByUser,
+    shownOutgoingRequestByUser,
+    shownConversationByPeer,
     loading,
     mutationBusy,
     refresh,

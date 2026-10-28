@@ -38,6 +38,15 @@ export function isConversationUnread(c: ApiConversation): boolean {
   return new Date(c.lastMessageAt).getTime() > new Date(c.lastReadAt).getTime();
 }
 
+/** Inbox subtitle. A real last message wins over the job title. */
+export function conversationPreview(c: ApiConversation): string {
+  const raw = c.lastMessagePreview?.trim() ?? '';
+  if (raw === '[attachment]') return 'Photo';
+  if (raw) return raw;
+  if (c.type === 'work' && c.workContext?.title) return c.workContext.title;
+  return 'No messages yet';
+}
+
 export const messageService = {
   listConversations(
     type?: 'connection' | 'work',
