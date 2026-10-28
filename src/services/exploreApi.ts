@@ -1,6 +1,6 @@
 import { Service, Talent, User } from '../data/types';
 import {
-  headlineAggregate,
+  overallAggregate,
   ratingFields,
   type ReviewAggregate,
   type ReviewSummaryPair,
@@ -59,7 +59,7 @@ function profileToUser(p: ExploreProfile): User {
     isVerified: p.isVerified,
     title: p.title || undefined,
     reviewSummary: p.reviewSummary,
-    ...ratingFields(headlineAggregate(p)),
+    ...ratingFields(overallAggregate(p)),
   };
 }
 
@@ -69,7 +69,7 @@ export function mapExploreTalent(p: ExploreProfile): Talent {
     id: `talent-${p.id}`,
     user,
     category: p.title || p.skills[0] || 'Talent',
-    ...ratingFields(headlineAggregate(p)),
+    ...ratingFields(overallAggregate(p)),
     // Not shown. Mawahib has no hourly rate or mutual-connection data yet.
     hourlyRate: 0,
     skills: p.skills,

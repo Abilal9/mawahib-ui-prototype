@@ -200,6 +200,8 @@ export interface ApiUserReview {
   id: string;
   /** Public-safe label. Not a private engagement title. */
   contextLabel: string;
+  /** Engagement role of the person who received the review. */
+  receivedAs?: 'provider' | 'client';
   rating: number;
   body: string;
   createdAt: string;
@@ -565,10 +567,14 @@ export const marketplaceApi = {
 
   listReviewsForUser(
     userId: string,
-    params: { role: 'provider' | 'client'; cursor?: string; limit?: number },
+    params: {
+      role?: 'provider' | 'client';
+      cursor?: string;
+      limit?: number;
+    },
   ): Promise<ApiUserReviewsPage> {
     const qs = new URLSearchParams();
-    qs.set('role', params.role);
+    if (params.role) qs.set('role', params.role);
     if (params.cursor) qs.set('cursor', params.cursor);
     if (params.limit != null) qs.set('limit', String(params.limit));
     return apiRequest<ApiUserReviewsPage>(

@@ -1,53 +1,42 @@
 export interface ReviewAggregate {
   average: number | null;
   count: number;
+  /** Published counts for star values 1 through 5. */
+  stars?: [number, number, number, number, number];
 }
 
 export interface ReviewSummaryPair {
+  overall: ReviewAggregate;
   asProvider: ReviewAggregate;
   asClient: ReviewAggregate;
 }
 
 export const EMPTY_AGGREGATE: ReviewAggregate = { average: null, count: 0 };
 
+function emptyUserAggregate(): ReviewAggregate {
+  return { average: null, count: 0, stars: [0, 0, 0, 0, 0] };
+}
+
 export const EMPTY_REVIEW_SUMMARY: ReviewSummaryPair = {
-  asProvider: EMPTY_AGGREGATE,
-  asClient: EMPTY_AGGREGATE,
+  overall: emptyUserAggregate(),
+  asProvider: emptyUserAggregate(),
+  asClient: emptyUserAggregate(),
 };
 
 type RatedUser = {
-  accountType?: string;
   reviewSummary?: ReviewSummaryPair;
   rating?: number;
   reviewCount?: number;
 };
 
-/** Talent headlines use provider-received reviews. Business headlines use client-received reviews. */
-export function headlineAggregate(user: RatedUser | null | undefined): ReviewAggregate {
-  if (!user) return EMPTY_AGGREGATE;
-  if (user.reviewSummary) {
-    return user.accountType === 'business'
-      ? user.reviewSummary.asClient
-      : user.reviewSummary.asProvider;
-  }
-  const count = user.reviewCount ?? 0;
+/** Every published review this person received, as talent or as client. */
+export function overallAggregate(user: RatedUser | null | undefined): ReviewAggregate {
+  if (user?.reviewSummary?.overall) return user.reviewSummary.overall;
+  const count = user?.reviewCount ?? 0;
   return {
-    average: count > 0 ? (user.rating ?? null) : null,
+    average: count > 0 ? (user?.rating ?? null) : null,
     count,
   };
-}
-
-/** The other role, only when it has published reviews. */
-export function secondaryAggregate(
-  user: RatedUser | null | undefined,
-): (ReviewAggregate & { role: 'provider' | 'client' }) | null {
-  if (!user?.reviewSummary) return null;
-  const business = user.accountType === 'business';
-  const aggregate = business
-    ? user.reviewSummary.asProvider
-    : user.reviewSummary.asClient;
-  if (aggregate.count <= 0) return null;
-  return { ...aggregate, role: business ? 'provider' : 'client' };
 }
 
 export function reviewCountLabel(count: number): string {

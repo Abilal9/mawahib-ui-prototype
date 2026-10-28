@@ -30,6 +30,8 @@ import { openUserProfile } from '../../utils/openUserProfile';
 import { getAboutCompletionState } from '../../utils/aboutCompletion';
 import { colors, spacing, radius, typography } from '../../theme';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useAuth } from '../../context/AuthContext';
+import { accessTokenSubject } from '../../lib/apiClient';
 import { useSaved } from '../../context/SavedContext';
 import { useConnections } from '../../context/ConnectionsContext';
 import { postService } from '../../services/postService';
@@ -52,12 +54,17 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { user, content, aboutHydrated, profileError, refreshProfessionalProfile } =
     useMyProfile();
+  const { accessToken, refreshMe } = useAuth();
   const saved = useSaved();
   const { connectedUsers } = useConnections();
   const [userPosts, setUserPosts] = useState<Post[]>([]);
 
   useFocusEffect(
     useCallback(() => {
+      const token = accessToken;
+      if (token && accessTokenSubject(token) === user.id) {
+        void refreshMe(token).catch(() => undefined);
+      }
       let cancelled = false;
       void (async () => {
         try {
@@ -70,7 +77,7 @@ export default function ProfileScreen({ navigation }: ScreenProps<'Profile'>) {
       return () => {
         cancelled = true;
       };
-    }, [user.id]),
+    }, [user.id, accessToken, refreshMe]),
   );
 
   const aboutCompletion = useMemo(

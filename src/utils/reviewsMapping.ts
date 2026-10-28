@@ -41,6 +41,7 @@ export function mapApiReviewToItem(
       .map((item) => item.url)
       .filter((url): url is string => typeof url === 'string' && url.length > 0)
       .slice(0, 4),
+    receivedAs: review.receivedAs,
   };
 }
 

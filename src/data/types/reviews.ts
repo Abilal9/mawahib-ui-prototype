@@ -10,6 +10,8 @@ export interface ReviewItem {
   image?: string;
   /** Review photos, original upload order, at most four. */
   images?: string[];
+  /** Engagement role of the person who received the review. */
+  receivedAs?: 'provider' | 'client';
 }
 
 /** Canonical review entity alias */

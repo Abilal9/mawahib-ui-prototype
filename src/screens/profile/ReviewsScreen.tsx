@@ -12,15 +12,25 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { colors, spacing, radius, typography } from '../../theme';
-import { ReviewItem } from '../../data/types';
+import { ReviewDistribution, ReviewItem, User } from '../../data/types';
 import { useMyProfile } from '../../context/ProfileContext';
+import { useAuth } from '../../context/AuthContext';
 import { useVisitorUser } from '../../hooks/useVisitorUser';
+import { accessTokenSubject } from '../../lib/apiClient';
 import { openUserProfile } from '../../utils/openUserProfile';
-import { buildReviewsSummaryFromProfile } from '../../utils/profileRating';
-import { reviewCountLabel } from '../../utils/reviewSummary';
+import {
+  buildReviewsSummaryFromProfile,
+  emptyReviewDistribution,
+} from '../../utils/profileRating';
+import {
+  EMPTY_AGGREGATE,
+  reviewCountLabel,
+  type ReviewAggregate,
+} from '../../utils/reviewSummary';
 import { ScreenProps } from '../../navigation/types';
 import { ApiError } from '../../lib/apiClient';
 import {
@@ -34,6 +44,40 @@ const REVIEWS_PAGE_SIZE = 20;
 const REVIEWS_MAX_PAGES = 10;
 
 type SortKey = 'newest' | 'highest' | 'lowest';
+type RoleFilter = 'all' | 'provider' | 'client';
+
+const ROLE_OPTIONS: { value: RoleFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'provider', label: 'As Talent' },
+  { value: 'client', label: 'As Client' },
+];
+
+function aggregateFor(
+  filter: RoleFilter,
+  summary: User['reviewSummary'] | undefined,
+): ReviewAggregate {
+  if (!summary) return EMPTY_AGGREGATE;
+  if (filter === 'provider') return summary.asProvider;
+  if (filter === 'client') return summary.asClient;
+  return summary.overall ?? EMPTY_AGGREGATE;
+}
+
+function distributionFromStars(
+  stars: readonly number[] | undefined,
+  total: number,
+): ReviewDistribution[] | null {
+  if (!stars || stars.length !== 5) return null;
+  return ([5, 4, 3, 2, 1] as const).map((star) => ({
+    stars: star,
+    percent: total === 0 ? 0 : (stars[star - 1] ?? 0) / total,
+  }));
+}
+
+function receivedRoleLabel(role: ReviewItem['receivedAs']): string | null {
+  if (role === 'provider') return 'As Talent';
+  if (role === 'client') return 'As Client';
+  return null;
+}
 
 /**
  * Reviews list backed by GET /users/:id/reviews. Never loads
@@ -41,11 +85,14 @@ type SortKey = 'newest' | 'highest' | 'lowest';
  */
 export default function ReviewsScreen({ navigation, route }: ScreenProps<'Reviews'>) {
   const { user: me } = useMyProfile();
+  const { accessToken, refreshMe } = useAuth();
   const targetId = route.params?.userId ?? me.id;
   const isOwn = targetId === me.id;
-  const { user: visitor, loading: visitorLoading } = useVisitorUser(
-    isOwn ? undefined : targetId,
-  );
+  const {
+    user: visitor,
+    loading: visitorLoading,
+    refresh: refreshVisitor,
+  } = useVisitorUser(isOwn ? undefined : targetId);
   const user = isOwn ? me : visitor;
 
   const [sort, setSort] = useState<SortKey>('newest');
@@ -55,66 +102,105 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
 
   const [apiReviews, setApiReviews] = useState<ApiUserReview[] | null>(null);
   const [apiTotal, setApiTotal] = useState(0);
+  const [listComplete, setListComplete] = useState(false);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
-  const [role, setRole] = useState<'provider' | 'client'>('provider');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const loadGen = useRef(0);
   const boundTarget = useRef(targetId);
+  const boundRole = useRef<RoleFilter>(roleFilter);
 
   if (boundTarget.current !== targetId) {
     boundTarget.current = targetId;
+    boundRole.current = 'all';
     loadGen.current += 1;
     setApiReviews(null);
+    setListComplete(false);
+    if (roleFilter !== 'all') setRoleFilter('all');
+  } else if (boundRole.current !== roleFilter) {
+    boundRole.current = roleFilter;
+    loadGen.current += 1;
+    setApiReviews(null);
+    setListComplete(false);
   }
-
-  const headlineRole = user?.accountType === 'business' ? 'client' : 'provider';
-  const secondary =
-    user?.reviewSummary &&
-    (headlineRole === 'provider'
-      ? user.reviewSummary.asClient.count
-      : user.reviewSummary.asProvider.count) > 0;
 
   const loadReviews = useCallback(async () => {
     const gen = ++loadGen.current;
     const forUser = targetId;
+    const forRole = boundRole.current;
     setReviewsLoading(true);
     setReviewsError(null);
     try {
       const collected: ApiUserReview[] = [];
       let cursor: string | undefined;
+      let complete = false;
       for (let page = 0; page < REVIEWS_MAX_PAGES; page += 1) {
         const result = await marketplaceApi.listReviewsForUser(forUser, {
-          role,
+          ...(forRole === 'all' ? {} : { role: forRole }),
           limit: REVIEWS_PAGE_SIZE,
           cursor,
         });
-        if (gen !== loadGen.current || boundTarget.current !== forUser) return;
+        if (
+          gen !== loadGen.current ||
+          boundTarget.current !== forUser ||
+          boundRole.current !== forRole
+        ) {
+          return;
+        }
         collected.push(...result.items);
-        if (!result.nextCursor || result.items.length === 0) break;
+        if (!result.nextCursor || result.items.length === 0) {
+          complete = true;
+          break;
+        }
         cursor = result.nextCursor;
       }
-      if (gen !== loadGen.current || boundTarget.current !== forUser) return;
+      if (
+        gen !== loadGen.current ||
+        boundTarget.current !== forUser ||
+        boundRole.current !== forRole
+      ) {
+        return;
+      }
       setApiReviews(collected);
       setApiTotal(collected.length);
+      setListComplete(complete);
     } catch (e) {
-      if (gen !== loadGen.current || boundTarget.current !== forUser) return;
+      if (
+        gen !== loadGen.current ||
+        boundTarget.current !== forUser ||
+        boundRole.current !== forRole
+      ) {
+        return;
+      }
       setApiReviews(null);
+      setListComplete(false);
       setReviewsError(
         e instanceof ApiError ? e.message : 'Could not load reviews',
       );
     } finally {
       if (gen === loadGen.current) setReviewsLoading(false);
     }
-  }, [targetId, role]);
-
-  useEffect(() => {
-    setRole(headlineRole);
-  }, [targetId, headlineRole]);
+  }, [targetId, roleFilter]);
 
   useEffect(() => {
     void loadReviews();
   }, [loadReviews]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!isOwn) {
+        refreshVisitor();
+        return;
+      }
+      const token = accessToken;
+      if (!token || accessTokenSubject(token) !== targetId) return;
+      void refreshMe(token).catch(() => undefined);
+    }, [isOwn, targetId, accessToken, refreshMe, refreshVisitor]),
+  );
+
+  const active = aggregateFor(roleFilter, user?.reviewSummary);
+  const activeTotal = active.count;
+  const activeAverage = activeTotal > 0 ? (active.average ?? 0) : 0;
   const bundle = useMemo(
     () =>
       apiReviews
@@ -122,8 +208,18 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
         : buildReviewsSummaryFromProfile(user),
     [apiReviews, apiTotal, user],
   );
-  const rated = bundle.total > 0;
-  const filledStars = rated ? Math.round(bundle.average) : 0;
+  // A complete list that is newer than the cached profile summary wins until
+  // the focus refresh replaces that summary. A truncated list never does.
+  const listSupersedes =
+    listComplete && apiReviews != null && apiReviews.length > activeTotal;
+  const summaryTotal = listSupersedes ? apiReviews.length : activeTotal;
+  const summaryAverage = listSupersedes ? bundle.average : activeAverage;
+  const distribution = listSupersedes
+    ? bundle.distribution
+    : (distributionFromStars(active.stars, activeTotal) ??
+      (listComplete ? bundle.distribution : emptyReviewDistribution()));
+  const rated = summaryTotal > 0;
+  const filledStars = rated ? Math.round(summaryAverage) : 0;
 
   const reviews = useMemo(() => {
     let list = [...bundle.reviews];
@@ -140,7 +236,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
 
   const emptyMessage = reviewsError
     ? reviewsError
-    : bundle.total === 0
+    : summaryTotal === 0
       ? 'No reviews yet. Reviews appear here after completed work.'
       : reviews.length === 0 && minStars != null
         ? 'No reviews match this filter.'
@@ -175,7 +271,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {bundle.total === 0 ? 'No reviews yet' : reviewCountLabel(bundle.total)}
+            {summaryTotal === 0 ? 'No reviews yet' : reviewCountLabel(summaryTotal)}
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -196,6 +292,24 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
         </View>
       </View>
 
+      <View style={styles.roleRow}>
+        {ROLE_OPTIONS.map((option) => {
+          const selected = roleFilter === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.roleChip, selected && styles.roleChipOn]}
+              onPress={() => setRoleFilter(option.value)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.roleChipText, selected && styles.roleChipTextOn]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <FlatList
         data={reviews}
         keyExtractor={(item) => item.id}
@@ -204,7 +318,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
         ListHeaderComponent={
           <View style={styles.summaryCard}>
             <View style={styles.distCol}>
-              {bundle.distribution.map((row) => (
+              {distribution.map((row) => (
                 <View key={row.stars} style={styles.distRow}>
                   <Text style={styles.distLabel}>{row.stars}</Text>
                   <Ionicons name="star" size={10} color="#F5A623" />
@@ -220,7 +334,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
             </View>
             <View style={styles.summaryRight}>
               <Text style={[styles.average, !rated && styles.averageUnrated]}>
-                {bundle.average.toFixed(1)}
+                {summaryAverage.toFixed(1)}
               </Text>
               <View style={styles.summaryStars}>
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -233,7 +347,7 @@ export default function ReviewsScreen({ navigation, route }: ScreenProps<'Review
                 ))}
               </View>
               <Text style={styles.summaryCount}>
-                {bundle.total === 0 ? 'No reviews yet' : `${bundle.total} Reviews`}
+                {summaryTotal === 0 ? 'No reviews yet' : `${summaryTotal} Reviews`}
               </Text>
             </View>
           </View>
@@ -321,6 +435,9 @@ function ReviewRow({
               <Text style={styles.author}>{review.authorName}</Text>
             </TouchableOpacity>
             <Text style={styles.time}>{review.timeAgo}</Text>
+            {receivedRoleLabel(review.receivedAs) ? (
+              <Text style={styles.roleTag}>{receivedRoleLabel(review.receivedAs)}</Text>
+            ) : null}
           </View>
           <View style={styles.ratingPill}>
             <Ionicons name="star" size={12} color="#F5A623" />
@@ -435,6 +552,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.screen,
+    paddingBottom: spacing.sm,
+  },
+  roleChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.background,
+  },
+  roleChipOn: {
+    backgroundColor: colors.primary,
+  },
+  roleChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  roleChipTextOn: {
+    color: colors.white,
+  },
+  roleTag: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   headerTitle: {
     ...typography.h3,

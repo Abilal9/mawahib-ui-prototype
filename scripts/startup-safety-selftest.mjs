@@ -30,6 +30,7 @@ function user(id, email, emailVerified = true) {
     followingCount: 0,
     postsCount: 0,
     reviewSummary: {
+      overall: { average: null, count: 0 },
       asProvider: { average: null, count: 0 },
       asClient: { average: null, count: 0 },
     },

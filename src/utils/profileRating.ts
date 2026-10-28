@@ -1,23 +1,23 @@
 import { User } from '../data/types';
 import type { ReviewDistribution, ReviewsBundle } from '../data/types/reviews';
 import {
-  headlineAggregate,
+  overallAggregate,
   type ReviewAggregate,
 } from './reviewSummary';
 
-/** True when the account-type headline role has at least one published review. */
+/** True when this person has at least one published review in either role. */
 export function hasRealReviews(
   user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): boolean {
-  return headlineAggregate(user).count > 0;
+  return overallAggregate(user).count > 0;
 }
 
-/** Headline average, or null when that role has no published reviews. */
+/** Overall average, or null when there are no published reviews. */
 export function displayableRating(
   user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): number | null {
-  const headline: ReviewAggregate = headlineAggregate(user);
-  return headline.count > 0 ? headline.average : null;
+  const overall: ReviewAggregate = overallAggregate(user);
+  return overall.count > 0 ? overall.average : null;
 }
 
 export function formatRatingValue(rating: number): string {
@@ -41,10 +41,10 @@ export function emptyReviewDistribution(): ReviewDistribution[] {
 export function buildReviewsSummaryFromProfile(
   user: Pick<User, 'reviewCount' | 'rating' | 'accountType' | 'reviewSummary'> | null | undefined,
 ): ReviewsBundle {
-  const headline = headlineAggregate(user);
-  const total = headline.count;
+  const overall = overallAggregate(user);
+  const total = overall.count;
   return {
-    average: total > 0 ? (headline.average ?? 0) : 0,
+    average: total > 0 ? (overall.average ?? 0) : 0,
     total,
     distribution: emptyReviewDistribution(),
     reviews: [],

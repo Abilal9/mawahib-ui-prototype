@@ -13,9 +13,8 @@ import { User } from '../../data/types';
 import { PROFILE_COVER_HEIGHT, displayProfileTitle } from '../../constants/profile';
 import { formatRatingValue, hasRealReviews } from '../../utils/profileRating';
 import {
-  headlineAggregate,
+  overallAggregate,
   reviewCountLabel,
-  secondaryAggregate,
 } from '../../utils/reviewSummary';
 export const PROFILE_COLLAPSE_DISTANCE = 100;
 /** Cover / pink strip under nav — matches Edit cover crop frame. */
@@ -38,11 +37,10 @@ export default function ProfileCollapsingHeader({
   onConnectionsPress,
   connectionsLabel,
 }: ProfileCollapsingHeaderProps) {
+  const overall = overallAggregate(user);
   const showRating = hasRealReviews(user);
-  const headline = headlineAggregate(user);
-  const rating = headline.average ?? 0;
-  const reviews = headline.count;
-  const secondary = secondaryAggregate(user);
+  const rating = overall.average ?? 0;
+  const reviews = overall.count;
   const connections = connectionsLabel ?? 'Connections';
 
   const avatarSize = scrollY.interpolate({
@@ -204,13 +202,6 @@ export default function ProfileCollapsingHeader({
             ) : (
               <Text style={styles.reviewsLink}>No reviews yet</Text>
             )}
-            {secondary ? (
-              <Text style={styles.reviewsLink}>
-                {secondary.role === 'provider' ? 'As a provider' : 'As a client'}{' '}
-                {formatRatingValue(secondary.average ?? 0)} (
-                {reviewCountLabel(secondary.count)})
-              </Text>
-            ) : null}
           </TouchableOpacity>
           <TouchableOpacity onPress={onConnectionsPress} activeOpacity={0.8}>
             <Text style={styles.connections}>{connections}</Text>

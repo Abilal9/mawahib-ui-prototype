@@ -22,10 +22,23 @@ export interface User {
   title?: string;
   rating?: number;
   reviewCount?: number;
-  /** Published reviews received as provider and as client. */
+  /** Published reviews received in either role, plus the role splits. */
   reviewSummary?: {
-    asProvider: { average: number | null; count: number };
-    asClient: { average: number | null; count: number };
+    overall: {
+      average: number | null;
+      count: number;
+      stars?: [number, number, number, number, number];
+    };
+    asProvider: {
+      average: number | null;
+      count: number;
+      stars?: [number, number, number, number, number];
+    };
+    asClient: {
+      average: number | null;
+      count: number;
+      stars?: [number, number, number, number, number];
+    };
   };
   /** talent | business. Present on Explore profiles. */
   accountType?: string;

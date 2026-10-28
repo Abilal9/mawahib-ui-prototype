@@ -9,7 +9,7 @@ import { AccountType } from '../context/AuthContext';
 import { apiRequest } from '../lib/apiClient';
 import {
   EMPTY_REVIEW_SUMMARY,
-  headlineAggregate,
+  overallAggregate,
   type ReviewSummaryPair,
 } from '../utils/reviewSummary';
 import {
@@ -105,11 +105,14 @@ export function mapApiUserToUser(api: ApiUser): User {
       : countryCode
         ? currencyForCountry(countryCode)
         : null;
-  const reviewSummary = api.reviewSummary ?? EMPTY_REVIEW_SUMMARY;
-  const headline = headlineAggregate({
-    accountType: api.accountType,
-    reviewSummary,
-  });
+  const reviewSummary: ReviewSummaryPair = api.reviewSummary
+    ? {
+        overall: api.reviewSummary.overall ?? EMPTY_REVIEW_SUMMARY.overall,
+        asProvider: api.reviewSummary.asProvider,
+        asClient: api.reviewSummary.asClient,
+      }
+    : EMPTY_REVIEW_SUMMARY;
+  const overall = overallAggregate({ reviewSummary });
 
   return {
     id: api.id,
@@ -135,8 +138,8 @@ export function mapApiUserToUser(api: ApiUser): User {
     title: api.title || undefined,
     accountType: api.accountType,
     reviewSummary,
-    rating: headline.average ?? undefined,
-    reviewCount: headline.count,
+    rating: overall.average ?? undefined,
+    reviewCount: overall.count,
   };
 }
 
