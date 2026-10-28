@@ -239,6 +239,8 @@ function AttachmentBlocks({
   );
 }
 
+const COMPOSER_ACTION_SIZE = 40;
+
 export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
   const conversationId = route.params.conversationId;
   const { user: me } = useMyProfile();
@@ -1166,8 +1168,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <Ionicons
-                    name="add-circle-outline"
-                    size={28}
+                    name="add"
+                    size={22}
                     color={colors.primary}
                   />
                 )}
@@ -1510,7 +1512,7 @@ const styles = StyleSheet.create({
   },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: spacing.screen,
     paddingVertical: spacing.md,
     backgroundColor: colors.white,
@@ -1576,7 +1578,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 10,
   },
-  attachButton: { paddingBottom: spacing.sm, width: 28 },
+  attachButton: {
+    width: COMPOSER_ACTION_SIZE,
+    height: COMPOSER_ACTION_SIZE,
+    borderRadius: COMPOSER_ACTION_SIZE / 2,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   input: {
     flex: 1,
     ...typography.body,
@@ -1588,9 +1599,9 @@ const styles = StyleSheet.create({
     maxHeight: 100,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: COMPOSER_ACTION_SIZE,
+    height: COMPOSER_ACTION_SIZE,
+    borderRadius: COMPOSER_ACTION_SIZE / 2,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
