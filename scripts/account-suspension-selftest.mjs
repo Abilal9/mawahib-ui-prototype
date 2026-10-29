@@ -11,6 +11,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
 const api = read('src/lib/apiClient.ts');
+const fences = read('src/lib/identityFences.ts');
 const auth = read('src/context/AuthContext.tsx');
 const navigator = read('src/navigation/RootNavigator.tsx');
 const screen = read('src/screens/auth/AccountSuspendedScreen.tsx');
@@ -19,7 +20,12 @@ const signIn = read('src/screens/auth/SignInScreen.tsx');
 const strategyNote = read('docs/AUTH.md');
 
 assert.match(api, /ACCOUNT_SUSPENDED/);
-assert.match(api, /status === 403/);
+assert.match(fences, /status === 403/);
+assert.match(fences, /isAccountSuspendedError/);
+assert.ok(
+  fences.lastIndexOf('assertLivePrincipal(deps.principal, deps);') <
+    fences.indexOf('deps.onAccountSuspended'),
+);
 assert.match(api, /subscribeAccountSuspended/);
 assert.equal(api.includes('signOut'), false);
 assert.equal(api.includes("scope: 'local'"), false);

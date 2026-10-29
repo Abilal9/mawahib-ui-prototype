@@ -1,63 +1,51 @@
 import { appEnv } from '../config/env';
-import { supabase } from './supabase';
+import {
+  ApiError,
+  executeAuthenticatedRequest,
+  executePublicRequest,
+  accessTokenSubject,
+  StaleIdentityError,
+  type AuthenticatedRequestInit,
+  type AuthenticatedRequestPrincipal,
+} from './identityFences';
 
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  skillId?: string;
-  nameEn?: string;
-  categoryId?: string;
+export {
+  ACCOUNT_SUSPENDED_CODE,
+  ApiError,
+  isAccountSuspendedError,
+  accessTokenSubject,
+  isStaleIdentityError,
+  StaleIdentityError,
+  type AuthenticatedRequestPrincipal,
+  type GuestRequestPrincipal,
+  type RequestPrincipal,
+} from './identityFences';
 
-  constructor(
-    status: number,
-    message: string,
-    details?: {
-      code?: string;
-      skillId?: string;
-      nameEn?: string;
-      categoryId?: string;
-    },
-  ) {
-    super(message);
-    this.status = status;
-    this.code = details?.code;
-    this.skillId = details?.skillId;
-    this.nameEn = details?.nameEn;
-    this.categoryId = details?.categoryId;
-  }
-}
+export type ApiRequestInit = AuthenticatedRequestInit;
 
-export type ApiRequestInit = RequestInit & {
-  /**
-   * Prefer the known access token from a just-created Supabase session.
-   * Avoids a race where getSession() has not persisted yet after signIn.
-   */
-  accessToken?: string;
+export type AuthRequestRuntime = {
+  capturePrincipal: () => AuthenticatedRequestPrincipal | null;
+  isPrincipalCurrent: (principal: AuthenticatedRequestPrincipal) => boolean;
+  getAuthenticatedToken: (
+    principal: AuthenticatedRequestPrincipal,
+    options?: { forceRefresh?: boolean; preferredToken?: string },
+  ) => Promise<string>;
+  isRecoveryActive: () => boolean;
 };
 
-export const ACCOUNT_SUSPENDED_CODE = 'ACCOUNT_SUSPENDED';
+let authRequestRuntime: AuthRequestRuntime | null = null;
 
-export function isAccountSuspendedError(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    error.status === 403 &&
-    error.code === ACCOUNT_SUSPENDED_CODE
-  );
+export function registerAuthRequestRuntime(
+  runtime: AuthRequestRuntime | null,
+): void {
+  authRequestRuntime = runtime;
 }
 
-/** JWT `sub` without verifying the signature. Used only to ignore stale responses. */
-export function accessTokenSubject(accessToken: string): string | null {
-  const segment = accessToken.split('.')[1];
-  if (!segment) return null;
-  try {
-    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    const decoded = globalThis.atob(padded);
-    const payload = JSON.parse(decoded) as { sub?: unknown };
-    return typeof payload.sub === 'string' ? payload.sub : null;
-  } catch {
+export function captureAuthenticatedPrincipal(): AuthenticatedRequestPrincipal | null {
+  if (!authRequestRuntime || authRequestRuntime.isRecoveryActive()) {
     return null;
   }
+  return authRequestRuntime.capturePrincipal();
 }
 
 type AccountSuspendedListener = (notice: { accessToken: string }) => void;
@@ -79,64 +67,59 @@ function notifyAccountSuspended(accessToken: string): void {
   }
 }
 
-async function resolveAccessToken(accessToken?: string): Promise<string> {
-  if (accessToken) return accessToken;
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) {
+function requireRuntime(): AuthRequestRuntime {
+  if (!authRequestRuntime) {
     throw new ApiError(401, 'Not authenticated');
   }
-  return token;
+  return authRequestRuntime;
 }
 
+/**
+ * Authenticated Nest request.
+ * Identity is captured from the registered auth runtime (or an explicit
+ * principal). This path never reads a Supabase session.
+ */
 export async function apiRequest<T>(
   path: string,
   init: ApiRequestInit = {},
 ): Promise<T> {
-  const { accessToken, ...rest } = init;
-  const headers = new Headers(rest.headers);
-  headers.set('Content-Type', 'application/json');
-  const token = await resolveAccessToken(accessToken);
-  headers.set('Authorization', `Bearer ${token}`);
+  const runtime = requireRuntime();
+  if (runtime.isRecoveryActive()) {
+    throw new ApiError(401, 'Not authenticated');
+  }
+  const principal = init.principal ?? runtime.capturePrincipal();
+  if (!principal) {
+    throw new ApiError(401, 'Not authenticated');
+  }
+  if (
+    init.accessToken &&
+    accessTokenSubject(init.accessToken) !== principal.userId
+  ) {
+    throw new StaleIdentityError();
+  }
 
-  // Paths must be root-relative (e.g. `/users/me`). Base already includes `/api/v1`.
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const res = await fetch(`${appEnv.apiBaseUrl}${normalizedPath}`, {
-    ...rest,
-    headers,
+  return executeAuthenticatedRequest<T>(path, init, {
+    principal,
+    getAuthenticatedToken: runtime.getAuthenticatedToken,
+    isPrincipalCurrent: runtime.isPrincipalCurrent,
+    isRecoveryActive: runtime.isRecoveryActive,
+    fetch: globalThis.fetch.bind(globalThis),
+    apiBaseUrl: appEnv.apiBaseUrl,
+    onAccountSuspended: notifyAccountSuspended,
   });
+}
 
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as {
-        message?: string | string[];
-        code?: string;
-        skillId?: string;
-        nameEn?: string;
-        categoryId?: string;
-      };
-      if (Array.isArray(body.message)) message = body.message.join(', ');
-      else if (body.message) message = body.message;
-      const error = new ApiError(res.status, message, {
-        code: body.code,
-        skillId: body.skillId,
-        nameEn: body.nameEn,
-        categoryId: body.categoryId,
-      });
-      if (isAccountSuspendedError(error)) {
-        notifyAccountSuspended(token);
-      }
-      throw error;
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-    }
-    throw new ApiError(res.status, message);
-  }
-
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return (await res.json()) as T;
+/**
+ * Public Nest request for future `/api/v1/public/*` Guest reads.
+ * Never inspects the session or attaches Authorization.
+ * Product screens must not call this in Phase A.
+ */
+export async function publicRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  return executePublicRequest<T>(path, init, {
+    fetch: globalThis.fetch.bind(globalThis),
+    apiBaseUrl: appEnv.apiBaseUrl,
+  });
 }

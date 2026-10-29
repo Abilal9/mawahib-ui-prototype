@@ -3,6 +3,11 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as RNImage } from 'react-native';
 import { planUploadResize, UPLOAD_IMAGE_QUALITY } from './imageUploadPlan';
+import {
+  captureAuthenticatedPrincipal,
+  StaleIdentityError,
+} from './apiClient';
+import { principalsEqual } from './requestPrincipal';
 import { mediaApi, type MediaPurpose } from '../services/mediaApi';
 
 export type PickedUpload = {
@@ -170,15 +175,22 @@ export async function uploadLocalFile(input: {
   const { uri, mimeType, fileName } = prepared;
   // Always measure the file being uploaded — never trust a stale/placeholder size.
   const byteSize = await requireLocalFileByteSize(uri);
+  const principal = captureAuthenticatedPrincipal();
+  if (!principal) {
+    throw new StaleIdentityError('Not authenticated for media upload');
+  }
   onProgress?.(0.05);
-  const session = await mediaApi.createUploadSession({
-    purpose,
-    mimeType,
-    byteSize,
-    fileName,
-    width: prepared.width,
-    height: prepared.height,
-  });
+  const session = await mediaApi.createUploadSession(
+    {
+      purpose,
+      mimeType,
+      byteSize,
+      fileName,
+      width: prepared.width,
+      height: prepared.height,
+    },
+    { principal },
+  );
   onProgress?.(0.2);
 
   const upload = await FileSystem.uploadAsync(session.uploadUrl, uri, {
@@ -195,7 +207,12 @@ export async function uploadLocalFile(input: {
   }
   onProgress?.(0.85);
 
-  const completed = await mediaApi.completeUpload(session.mediaAssetId);
+  if (!principalsEqual(principal, captureAuthenticatedPrincipal())) {
+    throw new StaleIdentityError();
+  }
+  const completed = await mediaApi.completeUpload(session.mediaAssetId, {
+    principal,
+  });
   if (!completed.url) {
     throw new Error('Upload completed but no media URL was returned');
   }

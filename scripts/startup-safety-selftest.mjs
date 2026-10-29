@@ -348,7 +348,11 @@ assert.match(notificationService, /notificationsApi\.list\(accessToken\)/);
 assert.match(notificationService, /notificationsApi\.markRead\(id, accessToken\)/);
 assert.match(notificationService, /notificationsApi\.markAllRead\(accessToken\)/);
 assert.match(notificationService, /notificationsApi\.unreadSummary\(accessToken\)/);
-assert.match(read('src/lib/apiClient.ts'), /if \(accessToken\) return accessToken/);
+const apiClient = read('src/lib/apiClient.ts');
+assert.equal(apiClient.includes('getSession()'), false);
+assert.match(apiClient, /registerAuthRequestRuntime/);
+assert.match(apiClient, /capturePrincipal/);
+assert.equal(apiClient.includes('resolveAccessToken'), false);
 assert.ok(
   notifications.indexOf('shouldIgnoreStaleIdentityResult') <
     notifications.indexOf('setNotifications(items)'),

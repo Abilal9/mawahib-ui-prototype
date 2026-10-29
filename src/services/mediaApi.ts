@@ -1,4 +1,4 @@
-import { apiRequest } from '../lib/apiClient';
+import { apiRequest, type AuthenticatedRequestPrincipal } from '../lib/apiClient';
 
 export type MediaPurpose = 'avatar' | 'portfolio' | 'service' | 'message' | 'post' | 'cover' | 'work_request'
   | 'review';
@@ -26,24 +26,36 @@ export interface MediaAsset {
   createdAt: string;
 }
 
+type MediaRequestOpts = {
+  principal?: AuthenticatedRequestPrincipal;
+};
+
 export const mediaApi = {
-  createUploadSession(input: {
-    purpose: MediaPurpose;
-    mimeType: string;
-    byteSize: number;
-    fileName?: string;
-    width?: number;
-    height?: number;
-  }): Promise<UploadSession> {
+  createUploadSession(
+    input: {
+      purpose: MediaPurpose;
+      mimeType: string;
+      byteSize: number;
+      fileName?: string;
+      width?: number;
+      height?: number;
+    },
+    opts: MediaRequestOpts = {},
+  ): Promise<UploadSession> {
     return apiRequest<UploadSession>('/media/upload-sessions', {
       method: 'POST',
       body: JSON.stringify(input),
+      principal: opts.principal,
     });
   },
 
-  completeUpload(mediaAssetId: string): Promise<MediaAsset> {
+  completeUpload(
+    mediaAssetId: string,
+    opts: MediaRequestOpts = {},
+  ): Promise<MediaAsset> {
     return apiRequest<MediaAsset>(`/media/${mediaAssetId}/complete`, {
       method: 'POST',
+      principal: opts.principal,
     });
   },
 };

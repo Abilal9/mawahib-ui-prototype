@@ -13,8 +13,11 @@ import {
   accessTokenSubject,
   ApiError,
   isAccountSuspendedError,
+  isStaleIdentityError,
+  registerAuthRequestRuntime,
   subscribeAccountSuspended,
 } from '../lib/apiClient';
+import { acquireAuthenticatedToken } from '../lib/authenticatedToken';
 import { AuthFailure } from '../lib/authFailure';
 import { clearMediaImageCache } from '../lib/mediaImageCache';
 import { shouldClearMediaImageCache } from '../lib/mediaCacheOwner';
@@ -23,7 +26,11 @@ import {
   clearPendingSignup,
   loadPendingSignup,
   savePendingSignup,
+  sessionAllowsSignupFallbacks,
+  stampPendingSignupFromSession,
 } from '../lib/pendingSignup';
+import { principalsEqual } from '../lib/requestPrincipal';
+import { registerSupabaseAutoRefreshLifecycle } from '../lib/supabaseAutoRefresh';
 import { isPasswordValid } from '../lib/passwordRules';
 import {
   clearRecoveryState,
@@ -181,6 +188,7 @@ function bootstrapPayloadFromSession(
   fallbacks?: {
     accountType?: AccountType | null;
     name?: string;
+    email?: string;
     city?: string;
     countryCode?: CountryCode;
     locationCode?: string;
@@ -188,35 +196,42 @@ function bootstrapPayloadFromSession(
   },
 ) {
   const meta = session.user?.user_metadata ?? {};
+  const allowedFallbacks = sessionAllowsSignupFallbacks({
+    userId: session.user?.id ?? '',
+    email: session.user?.email,
+    basicsEmail: fallbacks?.email,
+  })
+    ? fallbacks
+    : undefined;
   const accountType =
     overrides?.accountType ||
-    fallbacks?.accountType ||
+    allowedFallbacks?.accountType ||
     (meta.account_type as AccountType | undefined) ||
     'talent';
   const displayName =
     overrides?.displayName ||
-    fallbacks?.name ||
+    allowedFallbacks?.name ||
     (meta.display_name as string | undefined) ||
     session.user?.email?.split('@')[0] ||
     'Mawahib User';
   const locationCity =
     overrides?.locationCity ||
-    fallbacks?.city ||
+    allowedFallbacks?.city ||
     (meta.city as string | undefined);
   const locationCountry =
     overrides?.locationCountry ||
     (meta.location_country as string | undefined);
   const countryCode =
     overrides?.countryCode ||
-    fallbacks?.countryCode ||
+    allowedFallbacks?.countryCode ||
     (meta.country_code as CountryCode | undefined);
   const locationCode =
     overrides?.locationCode ||
-    fallbacks?.locationCode ||
+    allowedFallbacks?.locationCode ||
     (meta.location_code as string | undefined);
   const phoneE164 =
     overrides?.phoneE164 ||
-    fallbacks?.phoneE164 ||
+    allowedFallbacks?.phoneE164 ||
     (meta.phone_e164 as string | undefined) ||
     session.user?.phone ||
     undefined;
@@ -399,6 +414,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const captureRequestPrincipal = useCallback(() => {
+    if (loadRecoveryState()) return null;
+    const userId = hydrateSessionRef.current?.user?.id;
+    if (!userId) return null;
+    return { userId, epoch: authEpoch.current };
+  }, []);
+
+  const isRequestPrincipalCurrent = useCallback(
+    (principal: { userId: string; epoch: number }) => {
+      if (loadRecoveryState()) return false;
+      return principalsEqual(principal, captureRequestPrincipal());
+    },
+    [captureRequestPrincipal],
+  );
+
+  const getAuthenticatedToken = useCallback(
+    (
+      principal: { userId: string; epoch: number },
+      options?: { forceRefresh?: boolean; preferredToken?: string },
+    ) =>
+      acquireAuthenticatedToken({
+        principal,
+        preferredToken: options?.preferredToken,
+        forceRefresh: options?.forceRefresh,
+        isRecoveryActive: () => Boolean(loadRecoveryState()),
+        currentPrincipal: captureRequestPrincipal,
+        getSession: async () => {
+          if (loadRecoveryState()) return null;
+          const { data } = await supabase.auth.getSession();
+          return data.session;
+        },
+        refreshSession: async () => {
+          if (loadRecoveryState()) return null;
+          const { data, error } = await supabase.auth.refreshSession();
+          if (error || !data.session) return null;
+          if (data.session.user.id !== principal.userId) return null;
+          if (!principalsEqual(principal, captureRequestPrincipal())) {
+            return null;
+          }
+          return data.session;
+        },
+      }),
+    [captureRequestPrincipal],
+  );
+
+  registerAuthRequestRuntime({
+    capturePrincipal: captureRequestPrincipal,
+    isPrincipalCurrent: isRequestPrincipalCurrent,
+    getAuthenticatedToken,
+    isRecoveryActive: () => Boolean(loadRecoveryState()),
+  });
+
+  useEffect(() => {
+    const stopAutoRefresh = registerSupabaseAutoRefreshLifecycle();
+    return () => {
+      registerAuthRequestRuntime(null);
+      stopAutoRefresh();
+    };
+  }, []);
+
   useEffect(() => {
     return subscribeAccountSuspended(({ accessToken }) => {
       if (loadRecoveryState()) return;
@@ -448,6 +523,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
+      const previousUserId = hydrateSessionRef.current?.user?.id;
+      if (previousUserId && previousUserId !== active.user.id) {
+        authEpoch.current += 1;
+        accountSuspendedRef.current = false;
+        setAccountSuspended(false);
+        setApiUser(null);
+        setIsSignedIn(false);
+      }
+
       hydrateSessionRef.current = active;
       hydrateOverridesRef.current = mergeHydrateOverrides(
         hydrateOverridesRef.current,
@@ -486,6 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               bootstrapPayloadFromSession(sessionSnap, overridesSnap, {
                 accountType: accountTypeRef.current,
                 name: signUpBasicsRef.current?.name,
+                email: signUpBasicsRef.current?.email,
                 city: signUpBasicsRef.current?.city,
                 countryCode: signUpBasicsRef.current?.countryCode,
                 locationCode: signUpBasicsRef.current?.locationCode,
@@ -499,12 +584,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isStale(hydrateSessionRef.current?.access_token ?? null)) return null;
           // A 403 observed while this request was in flight is newer than this success.
           if (suspensionEpoch.current !== suspensionAtStart) return null;
+          if (
+            user.id !== sessionSnap.user.id ||
+            hydrateSessionRef.current?.user?.id !== sessionSnap.user.id
+          ) {
+            return null;
+          }
           applyApiUser(user);
           if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
             clearPendingSignup();
           }
           return user;
         } catch (err) {
+          if (isStaleIdentityError(err)) {
+            return null;
+          }
           const { data: live } = await supabase.auth.getSession();
           const liveToken = live.session?.access_token ?? null;
           if (isStale(liveToken)) {
@@ -558,8 +652,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hydrateSessionRef.current?.access_token !== tokenAtStart;
           // Another caller queued bootstrap metadata — run again with merged data.
           if (overridesPending) continue;
-          // Newer session arrived mid-flight without overrides: re-run once if hydrate failed.
-          if (sessionChanged && !last) continue;
+          // Newer session arrived mid-flight (including A→B): re-run for the live session.
+          if (sessionChanged) continue;
           return last;
         }
       };
@@ -782,6 +876,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSignUpBasics(basics);
 
       if (data.session) {
+        stampPendingSignupFromSession(data.session, { createIfMissing: true });
         const fields =
           input.countryCode && input.locationCode
             ? locationDisplayFields(input.countryCode, input.locationCode)
@@ -857,6 +952,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(message);
         throw new AuthFailure('email_otp', message);
       }
+      stampPendingSignupFromSession(data.session, { createIfMissing: true });
       const user = await hydrateBackendUser(data.session);
       if (!user) {
         if (accountSuspendedRef.current) {
@@ -1056,6 +1152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(message);
         throw new Error(message);
       }
+      stampPendingSignupFromSession(data.session);
       const user = await hydrateBackendUser(data.session);
       if (!user) {
         if (accountSuspendedRef.current) {
