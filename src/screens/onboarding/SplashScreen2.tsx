@@ -14,11 +14,15 @@ import {
   hasResumablePendingVerification,
   loadPendingSignup,
 } from '../../lib/pendingSignup';
+import { consumeProcessStart } from '../../lib/processStart';
 
 /**
  * Splash + auth gate:
  * Wait for session restore + Nest /users/me (or bootstrap) before navigating,
  * so the user never briefly lands on Welcome/Main with the wrong identity.
+ * Also waits for durable media-cache ownership so Welcome/Main cannot fetch
+ * images until the Expo cache is safe. consumeProcessStart() latches splash
+ * so warm remounts never replay Splash1/Splash2.
  */
 export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -30,6 +34,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     authError,
     signUpBasics,
     recoveryRestart,
+    mediaCacheReady,
   } = useAuth();
   const [minSplashDone, setMinSplashDone] = useState(false);
 
@@ -45,7 +50,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
   }, [fadeAnim]);
 
   useEffect(() => {
-    if (authLoading || !minSplashDone) return;
+    if (authLoading || !mediaCacheReady || !minSplashDone) return;
 
     const pending = loadPendingSignup();
     const destination = resolveColdStartDestination({
@@ -59,6 +64,8 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
         pending?.email && hasResumablePendingVerification(pending.email),
       ),
     });
+
+    consumeProcessStart();
 
     if (destination.kind === 'welcome') {
       navigation.replace('Welcome', { step: 1 });
@@ -95,6 +102,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     });
   }, [
     authLoading,
+    mediaCacheReady,
     minSplashDone,
     isSignedIn,
     apiUser,

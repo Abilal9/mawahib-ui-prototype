@@ -9,6 +9,7 @@ import { handleAuthDeepLink } from '../../lib/authDeepLink';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import { useAuth } from '../../context/AuthContext';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { consumeProcessStart } from '../../lib/processStart';
 import type { RootStackParamList } from '../../navigation/types';
 
 /**
@@ -29,6 +30,8 @@ export default function AuthDeepLinkListener() {
     session,
     signUpBasics,
     accountSuspended,
+    mediaCacheReady,
+    mediaCacheBlocked,
   } = useAuth();
   const handling = useRef(false);
   const initialUrlHandled = useRef(false);
@@ -39,6 +42,8 @@ export default function AuthDeepLinkListener() {
   const bootstrapSessionRef = useRef(bootstrapSession);
   const navigationRef = useRef(navigation);
   const accountSuspendedRef = useRef(accountSuspended);
+  const mediaCacheReadyRef = useRef(mediaCacheReady);
+  const mediaCacheBlockedRef = useRef(mediaCacheBlocked);
 
   apiUserRef.current = apiUser;
   sessionRef.current = session;
@@ -47,6 +52,8 @@ export default function AuthDeepLinkListener() {
   bootstrapSessionRef.current = bootstrapSession;
   navigationRef.current = navigation;
   accountSuspendedRef.current = accountSuspended;
+  mediaCacheReadyRef.current = mediaCacheReady;
+  mediaCacheBlockedRef.current = mediaCacheBlocked;
 
   useEffect(() => {
     const run = async (url: string | null) => {
@@ -100,6 +107,23 @@ export default function AuthDeepLinkListener() {
               session: sessionRef.current,
               signUpBasics: signUpBasicsRef.current,
             });
+            const deadline = Date.now() + 30000;
+            while (Date.now() < deadline && !mediaCacheBlockedRef.current) {
+              if (
+                mediaCacheReadyRef.current &&
+                apiUserRef.current?.id === user.id
+              ) {
+                break;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            if (
+              !mediaCacheReadyRef.current ||
+              apiUserRef.current?.id !== user.id
+            ) {
+              return;
+            }
+            consumeProcessStart();
             navigationRef.current.reset({
               index: 0,
               routes: [{ name: dest.name, params: dest.params as never }],

@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './src/navigation/RootNavigator';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { SidebarProvider } from './src/context/SidebarContext';
 import { CreateMenuProvider } from './src/context/CreateMenuContext';
@@ -18,9 +18,20 @@ import { PostsProvider } from './src/context/PostsContext';
 import { NotificationsProvider } from './src/context/NotificationsContext';
 import { MessagingUnreadProvider } from './src/context/MessagingUnreadContext';
 import AuthDeepLinkListener from './src/components/auth/AuthDeepLinkListener';
+import AuthTransitionOverlay from './src/components/auth/AuthTransitionOverlay';
+import { hasConsumedProcessStart } from './src/lib/processStart';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
+
+/**
+ * Media fetch gate (Phase B):
+ * - AuthContext.mediaCacheReady is false until durable owner is established.
+ * - After process start, RootNavigator unmounts product Image trees while
+ *   !ready. Splash2 will not leave splash until ready.
+ * - Overlay sits beside NavigationContainer and never unmounts it.
+ * - Providers may fetch JSON; they do not prefetch expo-image bitmaps.
+ */
 
 function AppProviders() {
   const [fontsLoaded, fontError] = useFonts({
@@ -30,6 +41,9 @@ function AppProviders() {
     Inter_700Bold,
   });
   const fontsReady = fontsLoaded || fontError != null;
+  const { mediaCacheReady, mediaCacheBlocked, retryMediaCache } = useAuth();
+  const showOverlay =
+    mediaCacheBlocked || (hasConsumedProcessStart() && !mediaCacheReady);
 
   useEffect(() => {
     if (fontsReady) {
@@ -54,11 +68,18 @@ function AppProviders() {
               <MessagingUnreadProvider>
                 <UserJobsProvider>
                   <ConnectionsProvider>
-                    <NavigationContainer>
-                      <StatusBar style="dark" />
-                      <AuthDeepLinkListener />
-                      <RootNavigator />
-                    </NavigationContainer>
+                    <View style={{ flex: 1 }}>
+                      <NavigationContainer>
+                        <StatusBar style="dark" />
+                        <AuthDeepLinkListener />
+                        <RootNavigator />
+                      </NavigationContainer>
+                      <AuthTransitionOverlay
+                        visible={showOverlay}
+                        failed={mediaCacheBlocked}
+                        onRetry={retryMediaCache}
+                      />
+                    </View>
                   </ConnectionsProvider>
                 </UserJobsProvider>
               </MessagingUnreadProvider>

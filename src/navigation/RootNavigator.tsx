@@ -64,6 +64,8 @@ import { RootStackParamList } from './types';
 import { useAuth } from '../context/AuthContext';
 import { resolvePostAuthDestination } from '../lib/postAuthGate';
 import { loadRecoveryState } from '../lib/recoveryState';
+import { hasConsumedProcessStart } from '../lib/processStart';
+import { View } from 'react-native';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -77,7 +79,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  * ProfileSetupStep1–5 as routes, MessagesEmpty.
  */
 function MainTabsGate() {
-  const { isSignedIn, authLoading, apiUser, session, signUpBasics, recovery } = useAuth();
+  const {
+    isSignedIn,
+    authLoading,
+    apiUser,
+    session,
+    signUpBasics,
+    recovery,
+    mediaCacheReady,
+  } = useAuth();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -127,23 +137,53 @@ function MainTabsGate() {
     recovery,
   ]);
 
-  if (authLoading || recovery || loadRecoveryState() || !isSignedIn || !apiUser || needsVerify) return null;
+  if (
+    authLoading ||
+    !mediaCacheReady ||
+    recovery ||
+    loadRecoveryState() ||
+    !isSignedIn ||
+    !apiUser ||
+    needsVerify
+  ) {
+    return null;
+  }
   return <MainTabs />;
 }
 
+function MediaHoldScreen() {
+  return <View style={{ flex: 1, backgroundColor: '#F7F9FB' }} />;
+}
+
 export default function RootNavigator() {
-  const { accountSuspended, recovery } = useAuth();
+  const { accountSuspended, recovery, mediaCacheReady, isSignedIn, apiUser } =
+    useAuth();
   const screenOptions = {
     headerShown: false,
     animation: 'slide_from_right' as const,
     contentStyle: { backgroundColor: '#F7F9FB' },
   };
 
+  // Warm cache/identity work must not unmount NavigationContainer. Hold the
+  // product stack so expo-image cannot fetch while owner is unestablished.
+  const processStarted = hasConsumedProcessStart();
+  if (processStarted && !mediaCacheReady) {
+    return (
+      <Stack.Navigator
+        key="media-hold"
+        screenOptions={screenOptions}
+        initialRouteName="SignIn"
+      >
+        <Stack.Screen name="SignIn" component={MediaHoldScreen} />
+      </Stack.Navigator>
+    );
+  }
+
   // Recovery stays on its own screens. Suspension replaces the tree so
   // MainTabs and deep-link resets cannot race this branch.
   if (accountSuspended && !recovery) {
     return (
-      <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Navigator key="account-suspended" screenOptions={screenOptions}>
         <Stack.Screen
           name="AccountSuspended"
           component={AccountSuspendedScreen}
@@ -152,13 +192,16 @@ export default function RootNavigator() {
     );
   }
 
-  // Cold start always opens Splash1. Splash2 chooses Welcome, Home, or
-  // Sign In only after session restore finishes, so font timing cannot
-  // skip the intro on a signed-out launch.
-  const initialRouteName = 'Splash1';
+  // Cold process opens Splash1 once. Warm remounts resume without splash.
+  const initialRouteName = processStarted
+    ? isSignedIn && apiUser
+      ? 'MainTabs'
+      : 'SignIn'
+    : 'Splash1';
 
   return (
     <Stack.Navigator
+      key="app"
       initialRouteName={initialRouteName}
       screenOptions={screenOptions}
     >

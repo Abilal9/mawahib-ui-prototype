@@ -277,6 +277,8 @@ assert.match(keep, /setIsSignedIn\(false\)/);
 
 const splash = read('src/screens/onboarding/SplashScreen2.tsx');
 assert.match(splash, /resolveColdStartDestination/);
+assert.match(splash, /mediaCacheReady/);
+assert.match(splash, /consumeProcessStart\(\)/);
 assert.match(splash, /resolvePostAuthDestination/);
 assert.match(splash, /loadRecoveryState\(\) \|\| recoveryRestart/);
 assert.match(splash, /navigation\.replace\('Welcome'/);
@@ -293,7 +295,9 @@ assert.ok(sessionGate !== -1 && pendingGate !== -1 && welcomeGate !== -1);
 assert.ok(sessionGate < pendingGate && pendingGate < welcomeGate);
 
 const navigator = read('src/navigation/RootNavigator.tsx');
-assert.match(navigator, /const initialRouteName = 'Splash1'/);
+assert.match(navigator, /hasConsumedProcessStart/);
+assert.match(navigator, /: 'Splash1'/);
+assert.match(navigator, /MediaHoldScreen/);
 
 const signIn = read('src/screens/auth/SignInScreen.tsx');
 assert.match(signIn, /showsProfileRetry/);
@@ -301,6 +305,8 @@ assert.match(signIn, /Retry profile load/);
 assert.match(signIn, /bootstrapSession/);
 
 const app = read('App.tsx');
+assert.match(app, /NavigationContainer/);
+assert.match(app, /AuthTransitionOverlay/);
 assert.match(app, /const \[fontsLoaded, fontError\] = useFonts/);
 assert.match(app, /fontsLoaded \|\| fontError != null/);
 assert.match(app, /SplashScreen\.hideAsync\(\)/);

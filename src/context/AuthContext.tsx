@@ -20,7 +20,12 @@ import {
 import { acquireAuthenticatedToken } from '../lib/authenticatedToken';
 import { AuthFailure } from '../lib/authFailure';
 import { clearMediaImageCache } from '../lib/mediaImageCache';
-import { shouldClearMediaImageCache } from '../lib/mediaCacheOwner';
+import {
+  mediaCacheOwnerFromUserId,
+  type MediaCacheOwner,
+} from '../lib/mediaCacheOwner';
+import { markMediaCacheClearPending } from '../lib/mediaCachePending';
+import { reconcileMediaCacheOwner } from '../lib/reconcileMediaCache';
 import { isAuthNetworkError, mapAuthError } from '../lib/authErrors';
 import {
   clearPendingSignup,
@@ -86,6 +91,10 @@ interface AuthContextValue {
   authLoading: boolean;
   authError: string | null;
   clearAuthError: () => void;
+  /** Durable image-cache owner is established. No authenticated media before this. */
+  mediaCacheReady: boolean;
+  mediaCacheBlocked: boolean;
+  retryMediaCache: () => void;
   /** Backend says this Supabase session's Mawahib account is suspended. */
   accountSuspended: boolean;
   /** Run normal hydration once. Backend decides whether the flag clears. */
@@ -260,42 +269,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [recoveryRestart, setRecoveryRestart] = useState(false);
-  const [imageCacheGate, setImageCacheGate] = useState<{
-    userId: string | null;
+  const [mediaCache, setMediaCache] = useState<{
+    principal: MediaCacheOwner | null;
     ready: boolean;
-  }>({ userId: null, ready: true });
+    blocked: boolean;
+  }>({ principal: null, ready: false, blocked: false });
+  const [mediaRetryTick, setMediaRetryTick] = useState(0);
+  const mediaReconcileGen = useRef(0);
+  const mediaPauseRef = useRef(false);
 
-  const authenticatedUserId = apiUser?.id ?? null;
-  if (imageCacheGate.userId !== authenticatedUserId) {
-    setImageCacheGate({
-      userId: authenticatedUserId,
-      ready: !shouldClearMediaImageCache(
-        imageCacheGate.userId,
-        authenticatedUserId,
-      ),
+  // Owner follows the resolved Nest principal after hydrate, not TOKEN_REFRESHED
+  // and not a stale in-flight hydrate. While authLoading, skip reconcile so we
+  // never treat a still-restoring session as guest and wipe A then rewrite A.
+  const mediaPrincipal: MediaCacheOwner | null = authLoading
+    ? null
+    : mediaCacheOwnerFromUserId(apiUser?.id ?? null);
+
+  if (mediaCache.principal !== mediaPrincipal) {
+    setMediaCache({
+      principal: mediaPrincipal,
+      ready: false,
+      blocked: false,
     });
   }
 
   useEffect(() => {
-    if (
-      imageCacheGate.ready ||
-      imageCacheGate.userId !== authenticatedUserId
-    ) {
-      return;
-    }
+    if (mediaPauseRef.current) return;
+    if (mediaPrincipal == null) return;
+    if (mediaCache.principal !== mediaPrincipal) return;
+    if (mediaCache.ready) return;
+    if (mediaCache.blocked) return;
     let cancelled = false;
-    void clearMediaImageCache().finally(() => {
-      if (cancelled) return;
-      setImageCacheGate((current) =>
-        current.userId === authenticatedUserId
-          ? { ...current, ready: true }
-          : current,
-      );
-    });
+    const gen = ++mediaReconcileGen.current;
+    void (async () => {
+      const result = await reconcileMediaCacheOwner({
+        current: mediaPrincipal,
+        clearCache: clearMediaImageCache,
+      });
+      if (cancelled || gen !== mediaReconcileGen.current) return;
+      if (result.ok) {
+        setMediaCache({
+          principal: mediaPrincipal,
+          ready: true,
+          blocked: false,
+        });
+        return;
+      }
+      if (result.reason === 'superseded') return;
+      setMediaCache({
+        principal: mediaPrincipal,
+        ready: false,
+        blocked: true,
+      });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [authenticatedUserId, imageCacheGate.ready, imageCacheGate.userId]);
+  }, [
+    mediaPrincipal,
+    mediaCache.principal,
+    mediaCache.ready,
+    mediaCache.blocked,
+    mediaRetryTick,
+  ]);
+
+  const retryMediaCache = useCallback(() => {
+    setMediaCache((current) => ({
+      ...current,
+      ready: false,
+      blocked: false,
+    }));
+    setMediaRetryTick((tick) => tick + 1);
+  }, []);
+
+  const mediaCacheReady =
+    !authLoading &&
+    mediaPrincipal != null &&
+    mediaCache.principal === mediaPrincipal &&
+    mediaCache.ready &&
+    !mediaCache.blocked;
+  const mediaCacheBlocked = mediaCache.blocked;
   type HydrateOverrides = {
     accountType?: AccountType;
     displayName?: string;
@@ -1190,12 +1243,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setAuthError(null);
+    // Pause reconcile and drop ready so product images unmount. Do not set
+    // blocked: that overlay is only for fail-closed cleanup errors.
+    mediaPauseRef.current = true;
+    setMediaCache((current) => ({
+      ...current,
+      ready: false,
+      blocked: false,
+    }));
+    const marked = markMediaCacheClearPending();
+    if (!marked.ok) {
+      try {
+        await clearMediaImageCache();
+      } catch {
+        mediaPauseRef.current = false;
+        setMediaCache((current) => ({
+          ...current,
+          ready: false,
+          blocked: false,
+        }));
+        setMediaRetryTick((tick) => tick + 1);
+        throw new Error(
+          'Could not log out. You are still signed in on this device.',
+        );
+      }
+    }
     // Local scope signs this device out only. The client default is global.
     const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) {
+      mediaPauseRef.current = false;
+      setMediaCache((current) => ({
+        ...current,
+        ready: false,
+        blocked: false,
+      }));
+      setMediaRetryTick((tick) => tick + 1);
       throw new Error('Could not log out. You are still signed in on this device.');
     }
     // Keep pendingSignup so abandoned verification can resume after logout.
+    mediaPauseRef.current = false;
+    setMediaCache((current) => ({
+      ...current,
+      ready: false,
+      blocked: false,
+    }));
+    setMediaRetryTick((tick) => tick + 1);
     clearAuthenticatedState();
   }, [clearAuthenticatedState]);
 
@@ -1380,6 +1472,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authLoading,
       authError,
       clearAuthError,
+      mediaCacheReady,
+      mediaCacheBlocked,
+      retryMediaCache,
       accountSuspended,
       recheckAccountStatus,
       registerWithEmail,
@@ -1413,6 +1508,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpBasics,
       authLoading,
       authError,
+      mediaCacheReady,
+      mediaCacheBlocked,
+      retryMediaCache,
       accountSuspended,
       clearAuthError,
       recheckAccountStatus,
@@ -1437,13 +1535,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const imageCacheReady =
-    imageCacheGate.ready && imageCacheGate.userId === authenticatedUserId;
-
   return (
-    <AuthContext.Provider value={value}>
-      {imageCacheReady ? children : null}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   );
 }
 
