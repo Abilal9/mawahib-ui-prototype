@@ -16,6 +16,8 @@ import {
   subscribeAccountSuspended,
 } from '../lib/apiClient';
 import { AuthFailure } from '../lib/authFailure';
+import { clearMediaImageCache } from '../lib/mediaImageCache';
+import { shouldClearMediaImageCache } from '../lib/mediaCacheOwner';
 import { isAuthNetworkError, mapAuthError } from '../lib/authErrors';
 import {
   clearPendingSignup,
@@ -243,6 +245,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [recoveryRestart, setRecoveryRestart] = useState(false);
+  const [imageCacheGate, setImageCacheGate] = useState<{
+    userId: string | null;
+    ready: boolean;
+  }>({ userId: null, ready: true });
+
+  const authenticatedUserId = apiUser?.id ?? null;
+  if (imageCacheGate.userId !== authenticatedUserId) {
+    setImageCacheGate({
+      userId: authenticatedUserId,
+      ready: !shouldClearMediaImageCache(
+        imageCacheGate.userId,
+        authenticatedUserId,
+      ),
+    });
+  }
+
+  useEffect(() => {
+    if (
+      imageCacheGate.ready ||
+      imageCacheGate.userId !== authenticatedUserId
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void clearMediaImageCache().finally(() => {
+      if (cancelled) return;
+      setImageCacheGate((current) =>
+        current.userId === authenticatedUserId
+          ? { ...current, ready: true }
+          : current,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticatedUserId, imageCacheGate.ready, imageCacheGate.userId]);
   type HydrateOverrides = {
     accountType?: AccountType;
     displayName?: string;
@@ -1302,7 +1340,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const imageCacheReady =
+    imageCacheGate.ready && imageCacheGate.userId === authenticatedUserId;
+
+  return (
+    <AuthContext.Provider value={value}>
+      {imageCacheReady ? children : null}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

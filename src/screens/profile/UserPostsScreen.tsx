@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -117,7 +118,7 @@ export default function UserPostsScreen({
             >
               {item.images[0] ? (
                 <Image
-                  source={{ uri: item.images[0] }}
+                  source={toImageSource(item.images[0])}
                   style={styles.tileImage}
                   contentFit="cover"
                 />

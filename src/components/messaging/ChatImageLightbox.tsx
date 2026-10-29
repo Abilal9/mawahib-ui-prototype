@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import { toImageSource } from '../../utils/image';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 120;
@@ -62,7 +63,7 @@ function ZoomablePage({ uri }: { uri: string }) {
     >
       <TouchableOpacity activeOpacity={1} onPress={onDoubleTap}>
         <Animated.View style={{ transform: [{ scale }] }}>
-          <Image source={{ uri }} style={styles.image} contentFit="contain" />
+          <Image source={toImageSource(uri)} style={styles.image} contentFit="contain" />
         </Animated.View>
       </TouchableOpacity>
     </ScrollView>

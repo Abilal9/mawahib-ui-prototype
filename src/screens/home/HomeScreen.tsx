@@ -269,7 +269,7 @@ function ServiceMatchCard({
 
       <View style={styles.jobTop}>
         <Image
-          source={{ uri: service.images[0] }}
+          source={service.images[0] ? toImageSource(service.images[0]) : undefined}
           style={styles.jobLogo}
           contentFit="cover"
         />

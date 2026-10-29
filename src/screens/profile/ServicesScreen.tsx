@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -55,7 +56,7 @@ export default function ServicesScreen({ route, navigation }: Props) {
             onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
             activeOpacity={0.8}
           >
-            <Image source={{ uri: item.images[0] }} style={styles.image} contentFit="cover" />
+            <Image source={toImageSource(item.images[0])} style={styles.image} contentFit="cover" />
             <View style={styles.info}>
               {item.category ? (
                 <Text style={styles.category}>{item.category}</Text>

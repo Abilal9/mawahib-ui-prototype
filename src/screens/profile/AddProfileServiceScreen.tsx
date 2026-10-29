@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -752,7 +753,7 @@ export default function AddProfileServiceScreen({
                     {media.map((item, i) => (
                       <Image
                         key={`${item.mediaAssetId}-${i}`}
-                        source={{ uri: item.uri }}
+                        source={toImageSource(item.uri)}
                         style={styles.reviewThumb}
                         contentFit="cover"
                       />

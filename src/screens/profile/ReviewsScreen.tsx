@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { toImageSource } from '../../utils/image';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -451,7 +452,7 @@ function ReviewRow({
         <Text style={styles.body}>{review.body}</Text>
         {photos.length === 1 ? (
           <TouchableOpacity activeOpacity={0.85} onPress={() => setPreview(photos[0])}>
-            <Image source={{ uri: photos[0] }} style={styles.thumbLarge} contentFit="cover" />
+            <Image source={toImageSource(photos[0])} style={styles.thumbLarge} contentFit="cover" />
           </TouchableOpacity>
         ) : photos.length > 1 ? (
           <View style={styles.photoGrid}>
@@ -461,13 +462,13 @@ function ReviewRow({
                 activeOpacity={0.85}
                 onPress={() => setPreview(uri)}
               >
-                <Image source={{ uri }} style={styles.thumb} contentFit="cover" />
+                <Image source={toImageSource(uri)} style={styles.thumb} contentFit="cover" />
               </TouchableOpacity>
             ))}
           </View>
         ) : review.image ? (
           <TouchableOpacity activeOpacity={0.85} onPress={() => setPreview(review.image!)}>
-            <Image source={{ uri: review.image }} style={styles.thumbLarge} contentFit="cover" />
+            <Image source={toImageSource(review.image)} style={styles.thumbLarge} contentFit="cover" />
           </TouchableOpacity>
         ) : null}
         <Modal
@@ -478,7 +479,7 @@ function ReviewRow({
         >
           <Pressable style={styles.previewBackdrop} onPress={() => setPreview(null)}>
             {preview ? (
-              <Image source={{ uri: preview }} style={styles.previewImage} contentFit="contain" />
+              <Image source={toImageSource(preview)} style={styles.previewImage} contentFit="contain" />
             ) : null}
           </Pressable>
         </Modal>

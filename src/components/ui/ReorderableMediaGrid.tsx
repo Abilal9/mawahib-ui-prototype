@@ -16,6 +16,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../theme';
 
@@ -293,7 +294,7 @@ export default function ReorderableMediaGrid({
             ]}
             pointerEvents={isDragging && !isActive ? 'none' : 'auto'}
           >
-            <Image source={{ uri: entry.uri }} style={styles.image} contentFit="cover" />
+            <Image source={toImageSource(entry.uri)} style={styles.image} contentFit="cover" />
 
             {videoIndex != null && index === videoIndex ? (
               <View style={styles.playOverlay}>

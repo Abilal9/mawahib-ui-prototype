@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { toImageSource } from '../../utils/image';
 import { colors, spacing } from '../../theme';
 import {
   PROFILE_COLLAPSE_DISTANCE,
@@ -48,7 +49,7 @@ export default function ProfileHeaderChrome({
   const renderCoverImage = (shiftTop = 0) =>
     hasCover ? (
       <Image
-        source={{ uri: coverUrl!.trim() }}
+        source={toImageSource(coverUrl!.trim())}
         style={{ width: '100%', height: coverTotal, marginTop: shiftTop }}
         contentFit="cover"
         transition={200}

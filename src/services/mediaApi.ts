@@ -32,6 +32,8 @@ export const mediaApi = {
     mimeType: string;
     byteSize: number;
     fileName?: string;
+    width?: number;
+    height?: number;
   }): Promise<UploadSession> {
     return apiRequest<UploadSession>('/media/upload-sessions', {
       method: 'POST',

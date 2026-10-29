@@ -10,6 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,7 +89,7 @@ export default function PortfolioProjectDetailScreen({
                   })
                 }
               >
-                <Image source={{ uri }} style={styles.heroImage} contentFit="cover" />
+                <Image source={toImageSource(uri)} style={styles.heroImage} contentFit="cover" />
                 {project.hasVideo &&
                 index === (project.videoIndex ?? project.images.length - 1) ? (
                   <View style={styles.playOverlay}>
@@ -147,7 +148,7 @@ export default function PortfolioProjectDetailScreen({
                   })
                 }
               >
-                <Image source={{ uri }} style={styles.thumbImage} contentFit="cover" />
+                <Image source={toImageSource(uri)} style={styles.thumbImage} contentFit="cover" />
                 {project.hasVideo &&
                 index === (project.videoIndex ?? project.images.length - 1) ? (
                   <View style={styles.thumbPlay}>

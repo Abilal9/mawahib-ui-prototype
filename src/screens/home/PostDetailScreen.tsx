@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useIsFocused } from '@react-navigation/native';
@@ -355,7 +356,7 @@ export default function PostDetailScreen({
             {post.images.map((img, i) => (
               <Image
                 key={i}
-                source={{ uri: img }}
+                source={toImageSource(img)}
                 style={styles.postImage}
                 contentFit="cover"
               />

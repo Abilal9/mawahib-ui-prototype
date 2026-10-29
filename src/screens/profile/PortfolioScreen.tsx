@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -55,7 +56,7 @@ export default function PortfolioScreen({ route, navigation }: Props) {
             onPress={() => navigation.navigate('FullPhotoPreview', { images: [item.uri], initialIndex: 0 })}
             activeOpacity={0.9}
           >
-            <Image source={{ uri: item.uri }} style={styles.image} contentFit="cover" />
+            <Image source={toImageSource(item.uri)} style={styles.image} contentFit="cover" />
           </TouchableOpacity>
         )}
       />

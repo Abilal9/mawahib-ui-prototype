@@ -41,11 +41,13 @@ import {
   MESSAGE_IMAGE_MIME_TYPES,
 } from '../../config/messaging';
 import { usePolling } from '../../hooks/usePolling';
+import { mergeChatMessages } from '../../lib/mergeChatMessages';
 import { createClientId } from '../../lib/clientId';
 import { ApiError } from '../../lib/apiClient';
 import {
   pickLocalDocument,
   pickLocalImages,
+  prepareImageForUpload,
   uploadLocalFile,
   type LocalPickedFile,
 } from '../../lib/uploadMedia';
@@ -118,21 +120,6 @@ function isDeliveryDeclinedSystemMessage(message: ApiMessage): boolean {
   return message.body === 'Delivery was declined.';
 }
 
-function mergeMessages(existing: ApiMessage[], incoming: ApiMessage[]): ApiMessage[] {
-  const byId = new Map<string, ApiMessage>();
-  for (const m of existing) byId.set(m.id, m);
-  for (const m of incoming) {
-    const prev = byId.get(m.id);
-    byId.set(m.id, prev ? { ...prev, ...m } : m);
-  }
-  return Array.from(byId.values()).sort((a, b) => {
-    const delta =
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    if (delta !== 0) return delta;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
-}
-
 function isImageMime(mimeType: string | null | undefined): boolean {
   return Boolean(mimeType?.startsWith('image/'));
 }
@@ -179,7 +166,7 @@ function AttachmentBlocks({
               accessibilityLabel="Open photo"
             >
               <Image
-                source={{ uri: a.url ?? '' }}
+                source={toImageSource(a.url ?? '')}
                 style={
                   images.length > 1 ? styles.messageImageTile : styles.messageImage
                 }
@@ -338,7 +325,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         const chronological = [...page.items].reverse();
         setMessages((prev) => {
           const prevNewest = prev[prev.length - 1]?.id;
-          const merged = mergeMessages(prev, chronological);
+          const merged = mergeChatMessages(prev, chronological);
           const nextNewest = merged[merged.length - 1]?.id;
           if (
             !opts.initial &&
@@ -403,7 +390,9 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
       });
       if (isStale(started.userId, started.epoch)) return;
       const chronological = [...page.items].reverse();
-      setMessages((prev) => mergeMessages(chronological, prev));
+      setMessages((prev) =>
+        mergeChatMessages(chronological, prev, Date.now(), false),
+      );
       setOlderCursor(page.nextCursor);
     } catch (e) {
       console.warn('[chat] load older failed', e);
@@ -427,17 +416,14 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         setFocused(false);
         setUnreadDividerBeforeId(null);
       };
-    }, [refreshLatest]),
+    }, [refreshLatest, userId]),
   );
-
-  useEffect(() => {
-    void refreshLatest({ initial: true });
-  }, [userId, conversationId, refreshLatest]);
 
   usePolling(
     () => void refreshLatest({ initial: false }),
     CHAT_POLL_MS,
     focused && !missing,
+    { immediate: false },
   );
 
   const onListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -610,6 +596,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
             mimeType: file.mimeType,
             byteSize: file.byteSize,
             fileName: file.fileName,
+            width: file.width,
+            height: file.height,
             purpose: 'message',
           });
           if (!live()) return;
@@ -636,7 +624,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
         clientMessageId,
       });
       if (!live()) return;
-      setMessages((prev) => mergeMessages(prev, [created]));
+      setMessages((prev) => mergeChatMessages(prev, [created]));
       setText('');
       setPendingAttachments([]);
       clientMessageIdRef.current = null;
@@ -684,6 +672,8 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
           mimeType: file.mimeType,
           byteSize: file.byteSize,
           fileName: file.fileName,
+          width: file.width,
+          height: file.height,
         });
       }
     }
@@ -717,7 +707,13 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
     setAttaching(true);
     try {
       const files = await pickLocalImages(room);
-      if (files.length > 0) addPendingFiles(files, 'image');
+      const prepared: LocalPickedFile[] = [];
+      for (const file of files) {
+        prepared.push(
+          await prepareImageForUpload({ ...file, purpose: 'message' }),
+        );
+      }
+      if (prepared.length > 0) addPendingFiles(prepared, 'image');
     } catch (e) {
       Alert.alert(
         'Could not attach',
@@ -1101,7 +1097,7 @@ export default function ChatScreen({ route, navigation }: ScreenProps<'Chat'>) {
                   <View key={a.id} style={styles.pendingItem}>
                     {isImageMime(a.mimeType) ? (
                       <Image
-                        source={{ uri: a.uri }}
+                        source={toImageSource(a.uri)}
                         style={styles.pendingThumb}
                         contentFit="cover"
                       />

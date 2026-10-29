@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import ScreenContainer from '../../components/ui/ScreenContainer';
 import ChatImageLightbox from '../../components/messaging/ChatImageLightbox';
 import { colors, spacing, typography } from '../../theme';
 import { messagingApi, type ConversationMediaItem } from '../../services/messagingApi';
+import { getMediaCacheKey } from '../../lib/mediaCacheKey';
+import { toImageSource } from '../../utils/image';
 import { useIdentityGeneration } from '../../hooks/useIdentityGeneration';
 import { ScreenProps } from '../../navigation/types';
 
@@ -73,12 +75,8 @@ export default function ConversationMediaScreen({
   useFocusEffect(
     useCallback(() => {
       void loadFirst();
-    }, [loadFirst]),
+    }, [loadFirst, userId]),
   );
-
-  useEffect(() => {
-    void loadFirst();
-  }, [userId, loadFirst]);
 
   const loadMore = async () => {
     if (!nextCursor || loadingMoreRef.current || loading) return;
@@ -187,10 +185,10 @@ export default function ConversationMediaScreen({
               >
                 {item.url ? (
                   <Image
-                    source={{ uri: item.url }}
+                    source={toImageSource(item.url)}
                     style={StyleSheet.absoluteFill}
                     contentFit="cover"
-                    recyclingKey={item.id}
+                    recyclingKey={getMediaCacheKey(item.url) ?? item.id}
                   />
                 ) : null}
               </TouchableOpacity>

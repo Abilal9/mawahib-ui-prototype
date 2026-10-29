@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,7 +99,7 @@ export default function DocumentViewerModal({ source, onClose }: Props) {
           {source && !failed && !androidPdf ? (
             isImage(source) ? (
               <Image
-                source={{ uri: source.uri }}
+                source={toImageSource(source.uri)}
                 style={styles.fill}
                 contentFit="contain"
                 onLoadEnd={() => setLoading(false)}

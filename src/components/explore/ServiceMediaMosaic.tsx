@@ -1,6 +1,8 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { getMediaCacheKey } from '../../lib/mediaCacheKey';
+import { toImageSource } from '../../utils/image';
 import { colors, typography } from '../../theme';
 
 /** Explore cover height. Profile cards pass their own existing height. */
@@ -73,11 +75,11 @@ function Tile({ uri, style }: { uri: string; style: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.tile, style]}>
       <Image
-        source={{ uri }}
+        source={toImageSource(uri)}
         style={styles.image}
         contentFit="cover"
         accessible={false}
-        recyclingKey={uri}
+        recyclingKey={getMediaCacheKey(uri) ?? uri}
       />
     </View>
   );

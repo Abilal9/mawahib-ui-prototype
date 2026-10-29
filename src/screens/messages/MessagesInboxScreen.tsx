@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -110,14 +110,15 @@ export default function MessagesInboxScreen({
         setFocused(false);
         setSwipedId(null);
       };
-    }, [load]),
+    }, [load, userId]),
   );
 
-  useEffect(() => {
-    void load('poll');
-  }, [userId, load]);
-
-  usePolling(() => void load('poll'), INBOX_POLL_MS, focused && isSignedIn && Boolean(userId));
+  usePolling(
+    () => void load('poll'),
+    INBOX_POLL_MS,
+    focused && isSignedIn && Boolean(userId),
+    { immediate: false },
+  );
 
   const confirmArchive = async () => {
     if (!archiveTargetId) return;

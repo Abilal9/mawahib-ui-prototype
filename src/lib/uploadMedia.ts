@@ -1,5 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Image as RNImage } from 'react-native';
+import { planUploadResize, UPLOAD_IMAGE_QUALITY } from './imageUploadPlan';
 import { mediaApi, type MediaPurpose } from '../services/mediaApi';
 
 export type PickedUpload = {
@@ -15,6 +18,8 @@ export type LocalPickedFile = {
   mimeType: string;
   byteSize: number;
   fileName: string;
+  width?: number;
+  height?: number;
 };
 
 function guessMime(uri: string, pickerType?: string | null): string {
@@ -63,7 +68,14 @@ export async function pickLocalImages(
     const mimeType = guessMime(asset.uri, asset.mimeType);
     const byteSize = asset.fileSize ?? (await fileSize(asset.uri));
     const fileName = asset.fileName ?? `upload${extensionForMime(mimeType)}`;
-    files.push({ uri: asset.uri, mimeType, byteSize, fileName });
+    files.push({
+      uri: asset.uri,
+      mimeType,
+      byteSize,
+      fileName,
+      width: positivePixel(asset.width),
+      height: positivePixel(asset.height),
+    });
   }
   return files;
 }
@@ -86,7 +98,14 @@ export async function pickLocalImage(): Promise<LocalPickedFile | null> {
   const mimeType = guessMime(asset.uri, asset.mimeType);
   const byteSize = asset.fileSize ?? (await fileSize(asset.uri));
   const fileName = asset.fileName ?? `upload${extensionForMime(mimeType)}`;
-  return { uri: asset.uri, mimeType, byteSize, fileName };
+  return {
+    uri: asset.uri,
+    mimeType,
+    byteSize,
+    fileName,
+    width: positivePixel(asset.width),
+    height: positivePixel(asset.height),
+  };
 }
 
 /** Pick a PDF/document without uploading. */
@@ -142,9 +161,13 @@ export async function uploadLocalFile(input: {
   byteSize: number;
   fileName: string;
   purpose: MediaPurpose;
+  width?: number;
+  height?: number;
   onProgress?: (ratio: number) => void;
 }): Promise<PickedUpload> {
-  const { uri, mimeType, fileName, purpose, onProgress } = input;
+  const prepared = await prepareImageForUpload(input);
+  const { purpose, onProgress } = input;
+  const { uri, mimeType, fileName } = prepared;
   // Always measure the file being uploaded — never trust a stale/placeholder size.
   const byteSize = await requireLocalFileByteSize(uri);
   onProgress?.(0.05);
@@ -153,6 +176,8 @@ export async function uploadLocalFile(input: {
     mimeType,
     byteSize,
     fileName,
+    width: prepared.width,
+    height: prepared.height,
   });
   onProgress?.(0.2);
 
@@ -200,6 +225,83 @@ export async function requireLocalFileByteSize(uri: string): Promise<number> {
 
 async function fileSize(uri: string): Promise<number> {
   return requireLocalFileByteSize(uri);
+}
+
+function positivePixel(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && value > 0 ? Math.round(value) : undefined;
+}
+
+function renamedFile(fileName: string, format: 'jpeg' | 'png' | 'webp'): string {
+  const ext = format === 'jpeg' ? '.jpg' : format === 'png' ? '.png' : '.webp';
+  const base = fileName.replace(/\.[a-zA-Z0-9]+$/, '') || 'upload';
+  return `${base}${ext}`;
+}
+
+function readImageSize(
+  uri: string,
+): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    RNImage.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      () => resolve(null),
+    );
+  });
+}
+
+/**
+ * Scale a new photo down before upload. PDFs and other non-photos pass through.
+ */
+export async function prepareImageForUpload(
+  input: LocalPickedFile & { purpose: MediaPurpose },
+): Promise<LocalPickedFile> {
+  let width = input.width;
+  let height = input.height;
+  const mime = input.mimeType.toLowerCase();
+  if (
+    (!width || !height) &&
+    mime.startsWith('image/') &&
+    mime !== 'image/gif'
+  ) {
+    const size = await readImageSize(input.uri);
+    width = size?.width;
+    height = size?.height;
+  }
+  const plan = planUploadResize({
+    purpose: input.purpose,
+    mimeType: input.mimeType,
+    width,
+    height,
+  });
+  if (!plan.resize) {
+    return { ...input, width, height };
+  }
+  const format =
+    plan.format === 'png'
+      ? ImageManipulator.SaveFormat.PNG
+      : plan.format === 'webp'
+        ? ImageManipulator.SaveFormat.WEBP
+        : ImageManipulator.SaveFormat.JPEG;
+  const longest = (width ?? 0) >= (height ?? 0);
+  const result = await ImageManipulator.manipulateAsync(
+    input.uri,
+    [longest ? { resize: { width: plan.maxEdge } } : { resize: { height: plan.maxEdge } }],
+    { compress: UPLOAD_IMAGE_QUALITY, format },
+  );
+  const mimeType =
+    plan.format === 'png'
+      ? 'image/png'
+      : plan.format === 'webp'
+        ? 'image/webp'
+        : 'image/jpeg';
+  return {
+    uri: result.uri,
+    mimeType,
+    byteSize: await requireLocalFileByteSize(result.uri),
+    fileName: renamedFile(input.fileName, plan.format),
+    width: result.width,
+    height: result.height,
+  };
 }
 
 function extensionForMime(mimeType: string): string {

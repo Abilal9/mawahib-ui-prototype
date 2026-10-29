@@ -41,7 +41,8 @@ interface PostsContextValue {
 const PostsContext = createContext<PostsContextValue | undefined>(undefined);
 
 export function PostsProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, apiUser } = useAuth();
+  const userId = apiUser?.id ?? null;
   const saved = useSaved();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +55,7 @@ export function PostsProvider({ children }: { children: ReactNode }) {
   postsRef.current = posts;
 
   const refresh = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !userId) {
       setPosts([]);
       setNextCursor(null);
       setHasMore(false);
@@ -76,14 +77,14 @@ export function PostsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, userId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const loadMore = useCallback(async () => {
-    if (!isSignedIn || !hasMore || !nextCursor || loadingMoreRef.current) return;
+    if (!isSignedIn || !userId || !hasMore || !nextCursor || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
@@ -104,7 +105,7 @@ export function PostsProvider({ children }: { children: ReactNode }) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [hasMore, isSignedIn, nextCursor]);
+  }, [hasMore, isSignedIn, nextCursor, userId]);
 
   const patchLocalPost = useCallback((postId: string, patch: Partial<Post>) => {
     setPosts((prev) =>

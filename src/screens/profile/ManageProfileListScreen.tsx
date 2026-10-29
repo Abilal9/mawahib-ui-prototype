@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { toImageSource } from '../../utils/image';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -396,7 +397,7 @@ export default function ManageProfileListScreen({
           <View style={styles.cardMain}>
             {'images' in item && item.images[0] ? (
               <Image
-                source={{ uri: item.images[0] }}
+                source={toImageSource(item.images[0])}
                 style={styles.thumb}
                 contentFit="cover"
               />

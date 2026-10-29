@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -122,7 +123,7 @@ export default function PostCreateScreen({ navigation }: ScreenProps<'PostCreate
           <View style={styles.mediaGrid}>
             {media.map((item) => (
               <View key={item.mediaAssetId} style={styles.mediaSlot}>
-                <Image source={{ uri: item.uri }} style={styles.mediaImage} contentFit="cover" />
+                <Image source={toImageSource(item.uri)} style={styles.mediaImage} contentFit="cover" />
                 <TouchableOpacity
                   style={styles.removeMedia}
                   onPress={() =>

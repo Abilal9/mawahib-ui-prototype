@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, spacing, typography } from '../../theme';
+import { getMediaCacheKey } from '../../lib/mediaCacheKey';
+import { toImageSource } from '../../utils/image';
 import { getPostMediaPreviewLayout } from '../../utils/postMediaPreview';
 
 type Props = {
@@ -22,10 +24,10 @@ export default function PostMediaPreview({ images, onPress }: Props) {
     <View style={styles.wrap}>
       <TouchableOpacity activeOpacity={0.95} onPress={onPress} accessibilityRole="imagebutton">
         <Image
-          source={{ uri: primary }}
+          source={toImageSource(primary)}
           style={styles.primary}
           contentFit="cover"
-          recyclingKey={primary}
+          recyclingKey={getMediaCacheKey(primary) ?? primary}
         />
       </TouchableOpacity>
 
@@ -48,10 +50,10 @@ export default function PostMediaPreview({ images, onPress }: Props) {
                 }
               >
                 <Image
-                  source={{ uri }}
+                  source={toImageSource(uri)}
                   style={styles.thumbImage}
                   contentFit="cover"
-                  recyclingKey={uri}
+                  recyclingKey={getMediaCacheKey(uri) ?? uri}
                 />
                 {showOverlay ? (
                   <View style={styles.overlay} pointerEvents="none">

@@ -59,7 +59,7 @@ function ServiceHero({
               onPress={() => setPreview(uri)}
             >
               <Image
-                source={{ uri }}
+                source={toImageSource(uri)}
                 style={{ width, height: 240 }}
                 contentFit="cover"
               />
@@ -68,7 +68,7 @@ function ServiceHero({
         </ScrollView>
       ) : (
         <TouchableOpacity activeOpacity={0.95} onPress={() => setPreview(slides[0])}>
-          <Image source={{ uri: slides[0] }} style={styles.heroImage} contentFit="cover" />
+          <Image source={toImageSource(slides[0])} style={styles.heroImage} contentFit="cover" />
         </TouchableOpacity>
       )}
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -89,7 +89,7 @@ function ServiceHero({
       >
         <Pressable style={styles.previewBackdrop} onPress={() => setPreview(null)}>
           {preview ? (
-            <Image source={{ uri: preview }} style={styles.previewImage} contentFit="contain" />
+            <Image source={toImageSource(preview)} style={styles.previewImage} contentFit="contain" />
           ) : null}
         </Pressable>
       </Modal>

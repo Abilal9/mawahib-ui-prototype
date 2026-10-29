@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { toImageSource } from '../../utils/image';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -257,7 +258,7 @@ export default function EditProfileScreen({
           <View style={styles.coverPreview}>
             {previewCover ? (
               <Image
-                source={{ uri: previewCover }}
+                source={previewCover ? toImageSource(previewCover) : undefined}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
               />

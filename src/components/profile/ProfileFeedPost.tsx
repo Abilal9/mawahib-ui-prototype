@@ -51,7 +51,7 @@ export default function ProfileFeedPost({
         ) : null}
       </Text>
       {post.images[0] ? (
-        <Image source={{ uri: post.images[0] }} style={styles.feedImage} contentFit="cover" />
+        <Image source={toImageSource(post.images[0])} style={styles.feedImage} contentFit="cover" />
       ) : null}
       <View style={styles.feedActions}>
         <View style={styles.feedAction}>
