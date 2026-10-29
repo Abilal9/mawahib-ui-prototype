@@ -13,6 +13,7 @@ import {
   accessTokenSubject,
   ApiError,
   isAccountSuspendedError,
+  isMawahibProfileMissingError,
   isStaleIdentityError,
   registerAuthRequestRuntime,
   subscribeAccountSuspended,
@@ -554,7 +555,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Restore Nest user for an active Supabase session.
-   * Prefer GET /users/me; bootstrap once on 404. Never treat mock data as identity.
+   * Prefer GET /users/me; bootstrap once on 401 MAWAHIB_PROFILE_MISSING.
+   * Never bootstrap on generic 401/404/403/5xx/network. Never treat mock data as identity.
    * Nest syncs emailVerified / phoneVerified from Supabase Auth (not client).
    *
    * Concurrent calls coalesce: later overrides merge into the in-flight work and
@@ -616,7 +618,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (isAccountSuspendedError(err)) {
               throw err;
             }
-            if (!(err instanceof ApiError) || err.status !== 404) {
+            if (!isMawahibProfileMissingError(err)) {
               throw err;
             }
             user = await authApi.bootstrap(

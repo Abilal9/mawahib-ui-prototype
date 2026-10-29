@@ -9,7 +9,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ACCOUNT_SUSPENDED_CODE,
+  MAWAHIB_PROFILE_MISSING_CODE,
   ApiError,
+  isMawahibProfileMissingError,
   acquireAuthenticatedToken,
   consumeResponseBody,
   executeAuthenticatedRequest,
@@ -307,6 +309,28 @@ function depsFrom(world, fetchImpl, extras = {}) {
 
 {
   const world = makeWorld('user-a', 1);
+  let fetches = 0;
+  await assert.rejects(
+    () =>
+      executeAuthenticatedRequest(
+        '/users/me',
+        { method: 'GET' },
+        depsFrom(world, async () => {
+          fetches += 1;
+          return jsonResponse(401, {
+            message: 'Mawahib profile is missing.',
+            code: MAWAHIB_PROFILE_MISSING_CODE,
+          });
+        }),
+      ),
+    (err) => isMawahibProfileMissingError(err),
+  );
+  assert.equal(fetches, 1);
+  assert.equal(world.refreshCalls, 0);
+}
+
+{
+  const world = makeWorld('user-a', 1);
   const statuses = [401, 200];
   let fetches = 0;
   const result = await executeAuthenticatedRequest(
@@ -528,6 +552,26 @@ assert.match(auth, /stampPendingSignupFromSession\(data\.session, \{ createIfMis
 assert.match(auth, /previousUserId && previousUserId !== active.user.id/);
 assert.match(auth, /authEpoch.current \+= 1/);
 assert.match(auth, /user.id !== sessionSnap.user.id/);
+assert.match(auth, /isMawahibProfileMissingError/);
+assert.doesNotMatch(
+  auth.slice(
+    auth.indexOf('const hydrateBackendUser'),
+    auth.indexOf('const refreshMe'),
+  ),
+  /err.status !== 404/,
+);
+const hydrate = auth.slice(
+  auth.indexOf('const hydrateBackendUser'),
+  auth.indexOf('const refreshMe'),
+);
+assert.ok(
+  hydrate.indexOf('isMawahibProfileMissingError') <
+    hydrate.indexOf('authApi.bootstrap'),
+);
+assert.ok(
+  hydrate.indexOf('isAccountSuspendedError') <
+    hydrate.indexOf('authApi.bootstrap'),
+);
 assert.match(auth, /if \(sessionChanged\) continue/);
 const verifySlice = auth.slice(
   auth.indexOf('const verifySignupOtp'),

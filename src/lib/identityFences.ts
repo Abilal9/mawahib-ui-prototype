@@ -30,12 +30,21 @@ export class ApiError extends Error {
 }
 
 export const ACCOUNT_SUSPENDED_CODE = 'ACCOUNT_SUSPENDED';
+export const MAWAHIB_PROFILE_MISSING_CODE = 'MAWAHIB_PROFILE_MISSING';
 
 export function isAccountSuspendedError(error: unknown): boolean {
   return (
     error instanceof ApiError &&
     error.status === 403 &&
     error.code === ACCOUNT_SUSPENDED_CODE
+  );
+}
+
+export function isMawahibProfileMissingError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 401 &&
+    error.code === MAWAHIB_PROFILE_MISSING_CODE
   );
 }
 
@@ -313,6 +322,10 @@ export async function executeAuthenticatedRequest<T>(
     assertLivePrincipal(deps.principal, deps);
 
     if (consumed.status === 401 && allowGetRetry && !retriedGet) {
+      const unauthorized = apiErrorFromConsumed(consumed);
+      if (isMawahibProfileMissingError(unauthorized)) {
+        throw unauthorized;
+      }
       retriedGet = true;
       continue;
     }
