@@ -388,7 +388,7 @@ const splash = read('src/screens/onboarding/SplashScreen2.tsx');
 assert.match(splash, /mediaCacheReady/);
 assert.ok(
   splash.indexOf('consumeProcessStart()') <
-    splash.indexOf("navigation.replace('Welcome'"),
+    splash.indexOf("name: 'Welcome'"),
 );
 
 const overlay = read('src/components/auth/AuthTransitionOverlay.tsx');
@@ -435,7 +435,7 @@ assert.ok(
 );
 assert.ok(
   deepLink.indexOf('consumeProcessStart()') <
-    deepLink.indexOf('navigationRef.current.reset'),
+    deepLink.indexOf('applyPostAuthDestination(navigationRef.current, dest)'),
 );
 
 console.log('media-cache-owner-selftest ok');

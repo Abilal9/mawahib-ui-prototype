@@ -16,7 +16,7 @@ const settings = read('src/screens/profile/SettingsScreen.tsx');
 const sidebar = read('src/components/layout/AppSidebar.tsx');
 const auth = read('src/context/AuthContext.tsx');
 const prompt = read('src/components/auth/LocalSignOutConfirm.tsx');
-const navigator = read('src/navigation/RootNavigator.tsx');
+const navigator = read('src/navigation/AuthenticatedNavigator.tsx');
 const types = read('src/navigation/types.ts');
 const confirm = read('src/components/ui/ConfirmActionModal.tsx');
 

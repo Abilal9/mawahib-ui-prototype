@@ -54,6 +54,13 @@ export const catalogService = {
     return undefined;
   },
 
+  clearLocalCaches(): void {
+    servicesCache = [];
+    talentsCache = [];
+    businessesCache = [];
+    catalogError = null;
+  },
+
   async refresh(): Promise<{
     talents: Talent[];
     businesses: Talent[];

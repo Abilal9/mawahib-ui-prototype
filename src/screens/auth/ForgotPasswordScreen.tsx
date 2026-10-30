@@ -23,6 +23,7 @@ import {
   normalizeRecoveryEmail,
   RECOVERY_REQUEST_COPY,
 } from '../../lib/recoveryState';
+import { enterSignedOutAt } from '../../lib/productTree';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COOLDOWN_SEC = 60;
@@ -97,6 +98,10 @@ export default function ForgotPasswordScreen({
     try {
       const { data } = await supabase.auth.getSession();
       if (data.session || loadRecoveryState()) {
+        enterSignedOutAt({
+          name: 'ForgotPassword',
+          params: { email: normalized, autoSend: true },
+        });
         await signOut();
         clearRecoveryLock();
         navigation.reset({

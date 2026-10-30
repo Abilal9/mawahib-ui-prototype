@@ -58,13 +58,13 @@ assert.equal(logout.includes("scope: 'global'"), false);
 
 assert.match(navigator, /accountSuspended && !recovery/);
 assert.match(navigator, /AccountSuspended/);
-assert.equal(navigator.includes('navigation.reset'), true);
 const suspendedBranch = navigator.slice(
   navigator.indexOf('if (accountSuspended && !recovery)'),
   navigator.indexOf('const initialRouteName'),
 );
 assert.equal(suspendedBranch.includes('navigation.reset'), false);
 assert.equal(suspendedBranch.includes('MainTabs'), false);
+assert.equal(suspendedBranch.includes('GuestTabs'), false);
 
 assert.match(screen, /Account suspended/);
 assert.match(screen, /reach out to support/);
@@ -78,6 +78,7 @@ assert.match(screen, /Check again/);
 assert.match(screen, /Log out/);
 assert.match(screen, /recheckAccountStatus/);
 assert.match(screen, /signOut/);
+assert.match(screen, /leaveAuthenticatedProduct\(\{ name: 'SignIn' \}\)/);
 assert.equal(/appeal/i.test(screen), false);
 
 assert.match(deepLink, /accountSuspendedRef\.current/);

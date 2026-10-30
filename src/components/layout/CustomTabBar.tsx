@@ -41,16 +41,55 @@ const TAB_ICONS: Record<
   SearchTab: { active: 'search', inactive: 'search-outline' },
   MessagesTab: { active: 'chatbubble', inactive: 'chatbubble-outline' },
   JobsTab: { active: 'briefcase', inactive: 'briefcase-outline' },
+  AccountTab: { active: 'person', inactive: 'person-outline' },
 };
 
-export default function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+type CustomTabBarProps = BottomTabBarProps & {
+  /** Guest tabs pass false so unread providers are not required. */
+  showUnreadIndicators?: boolean;
+};
+
+export default function CustomTabBar({
+  showUnreadIndicators = true,
+  ...props
+}: CustomTabBarProps) {
+  if (!showUnreadIndicators) {
+    return (
+      <TabBarBody
+        {...props}
+        showMessagesDot={false}
+        showJobsDot={false}
+      />
+    );
+  }
+  return <AuthenticatedUnreadTabBar {...props} />;
+}
+
+function AuthenticatedUnreadTabBar(props: BottomTabBarProps) {
+  const { unreadCount: messagesUnread } = useMessagingUnread();
+  const { unread: jobsUnread } = useUserJobs();
+  return (
+    <TabBarBody
+      {...props}
+      showMessagesDot={messagesUnread > 0}
+      showJobsDot={jobsUnread.sent + jobsUnread.received > 0}
+    />
+  );
+}
+
+function TabBarBody({
+  state,
+  descriptors,
+  navigation,
+  showMessagesDot,
+  showJobsDot,
+}: BottomTabBarProps & {
+  showMessagesDot: boolean;
+  showJobsDot: boolean;
+}) {
   const insets = useSafeAreaInsets();
   const { isOpen: isCreateMenuOpen, toggle: toggleCreateMenu, close: closeCreateMenu } =
     useCreateMenu();
-  const { unreadCount: messagesUnread } = useMessagingUnread();
-  const { unread: jobsUnread } = useUserJobs();
-  const showMessagesDot = messagesUnread > 0;
-  const showJobsDot = jobsUnread.sent + jobsUnread.received > 0;
   const bottomPad = Math.max(insets.bottom, TAB_BAR_MIN_BOTTOM_INSET);
 
   return (

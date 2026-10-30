@@ -26,6 +26,7 @@ import {
 import { mapAuthError } from '../../lib/authErrors';
 import { clearPendingSignup } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 
 const RESEND_COOLDOWN_SEC = 60;
 const EDIT_PINK = '#F6339A';
@@ -88,10 +89,7 @@ export default function ConfirmCodeScreen({
           session,
           signUpBasics,
         });
-        navigation.reset({
-          index: 0,
-          routes: [{ name: dest.name, params: dest.params as never }],
-        });
+        applyPostAuthDestination(navigation, dest);
         return;
       }
 
@@ -104,10 +102,7 @@ export default function ConfirmCodeScreen({
         pendingEmail: email,
         pendingPhoneE164: signUpBasics?.phoneE164,
       });
-      navigation.reset({
-        index: 0,
-        routes: [{ name: dest.name, params: dest.params as never }],
-      });
+      applyPostAuthDestination(navigation, dest);
     } catch (e) {
       if (isAccountSuspendedFailure(e)) return;
       const title = authFailureTitle(e);

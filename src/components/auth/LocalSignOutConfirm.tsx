@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import ConfirmActionModal from '../ui/ConfirmActionModal';
 import { useAuth } from '../../context/AuthContext';
+import { leaveAuthenticatedProduct } from '../../lib/productTree';
 
 const FAILURE_MESSAGE =
   'Could not log out. You are still signed in on this device.';
@@ -38,6 +39,7 @@ export function useLocalSignOutPrompt(onSignedOut?: () => void) {
     setFailed(false);
     try {
       await signOut();
+      leaveAuthenticatedProduct({ name: 'SignIn' });
       setVisible(false);
       onSignedOutRef.current?.();
     } catch {

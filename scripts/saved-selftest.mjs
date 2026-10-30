@@ -12,14 +12,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
 const sidebar = read('src/components/layout/AppSidebar.tsx');
-const navigator = read('src/navigation/RootNavigator.tsx');
+const navigator = read('src/navigation/AuthenticatedNavigator.tsx');
 const types = read('src/navigation/types.ts');
 const savedApi = read('src/services/savedApi.ts');
 const savedContext = read('src/context/SavedContext.tsx');
 const screen = read('src/screens/saved/SavedScreen.tsx');
 const bookmark = read('src/components/ui/BookmarkButton.tsx');
 const pkg = read('package.json');
-const app = read('App.tsx');
+const app = read('src/navigation/AuthenticatedProviders.tsx');
 
 assert.match(sidebar, /label: 'My Connections'/);
 assert.match(sidebar, /label: 'Saved', route: 'Saved'/);
@@ -74,7 +74,7 @@ assert.match(bookmark, /Remove service from saved/);
 assert.match(bookmark, /accessibilityRole="button"/);
 assert.match(bookmark, /accessibilityState=\{\{ selected: saved \}\}/);
 
-assert.match(app, /<SavedProvider>/);
+assert.match(app, /<SavedProvider[\s>]/);
 assert.match(pkg, /password-recovery-selftest\.mjs/);
 assert.match(pkg, /account-suspension-selftest\.mjs/);
 assert.match(pkg, /saved-selftest\.mjs/);

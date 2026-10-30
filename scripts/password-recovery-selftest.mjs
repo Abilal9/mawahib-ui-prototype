@@ -18,6 +18,8 @@ const reset = read('src/screens/auth/ResetPasswordScreen.tsx');
 const change = read('src/screens/auth/ChangePasswordScreen.tsx');
 const splash = read('src/screens/onboarding/SplashScreen2.tsx');
 const navigator = read('src/navigation/RootNavigator.tsx');
+const signedOutNavigator = read('src/navigation/SignedOutNavigator.tsx');
+const authenticatedNavigator = read('src/navigation/AuthenticatedNavigator.tsx');
 const settings = read('src/screens/profile/SettingsScreen.tsx');
 const recovery = read('src/lib/recoveryState.ts');
 
@@ -122,9 +124,10 @@ assert.match(reset, /completePasswordReset/);
 assert.match(reset, /PasswordRequirements/);
 assert.match(splash, /loadRecoveryState\(\) \|\| recoveryRestart/);
 assert.match(navigator, /recovery \|\| loadRecoveryState\(\)/);
-assert.match(navigator, /ForgotPassword/);
-assert.match(navigator, /ResetPassword/);
-assert.match(navigator, /ChangePassword/);
+assert.equal(navigator.includes('signed-out-recovery'), false);
+assert.match(signedOutNavigator, /ForgotPassword/);
+assert.match(signedOutNavigator, /ResetPassword/);
+assert.match(authenticatedNavigator, /ChangePassword/);
 
 assert.match(settings, /Change Password/);
 assert.match(settings, /navigate\('ChangePassword'\)/);

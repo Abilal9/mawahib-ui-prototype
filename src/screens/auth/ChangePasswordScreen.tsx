@@ -19,6 +19,7 @@ import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { isPasswordValid } from '../../lib/passwordRules';
 import { PasswordFlowError } from '../../lib/recoveryState';
+import { leaveAuthenticatedProduct } from '../../lib/productTree';
 
 export default function ChangePasswordScreen({
   navigation,
@@ -82,7 +83,7 @@ export default function ChangePasswordScreen({
             : 'Could not change password';
       Alert.alert(title, message);
       if (err instanceof PasswordFlowError && err.code === 'identity') {
-        navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+        leaveAuthenticatedProduct({ name: 'SignIn' });
       }
     } finally {
       saveRef.current = false;

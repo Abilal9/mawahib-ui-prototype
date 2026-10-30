@@ -17,11 +17,11 @@ import AuthBrandHeader from '../../components/auth/AuthBrandHeader';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
-import { useMyProfile } from '../../context/ProfileContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { showsProfileRetry } from '../../lib/coldStartRoute';
 import { hasResumablePendingVerification } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 import { isAccountSuspendedFailure, isAuthFailure } from '../../lib/authFailure';
 
 function isRateLimitError(error: unknown): boolean {
@@ -61,7 +61,6 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
     recovery,
     discardInterruptedRecovery,
   } = useAuth();
-  const { hydrateFromApiUser } = useMyProfile();
   const [email, setEmail] = useState(route.params?.email ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -101,16 +100,12 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
     setRetrying(true);
     try {
       const user = await bootstrapSession();
-      hydrateFromApiUser(user);
       const dest = resolvePostAuthDestination({
         flow: 'signin',
         apiUser: user,
         session,
       });
-      navigation.reset({
-        index: 0,
-        routes: [{ name: dest.name, params: dest.params as never }],
-      });
+      applyPostAuthDestination(navigation, dest);
     } catch (e) {
       if (isAccountSuspendedFailure(e)) return;
       Alert.alert(
@@ -130,16 +125,12 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
     setLoading(true);
     try {
       const apiUser = await signInWithEmail(email, password);
-      hydrateFromApiUser(apiUser);
       const dest = resolvePostAuthDestination({
         flow: 'signin',
         apiUser,
         session: null,
       });
-      navigation.reset({
-        index: 0,
-        routes: [{ name: dest.name, params: dest.params as never }],
-      });
+      applyPostAuthDestination(navigation, dest);
     } catch (e) {
       if (isAccountSuspendedFailure(e)) return;
       const needsVerify =

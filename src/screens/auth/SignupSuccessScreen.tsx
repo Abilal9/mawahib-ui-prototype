@@ -9,13 +9,12 @@ import { colors, spacing, typography } from '../../theme';
 import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { isAccountSuspendedFailure } from '../../lib/authFailure';
-import { useMyProfile } from '../../context/ProfileContext';
+import { enterAuthenticatedProduct } from '../../lib/productTree';
 import { locationDisplayFields } from '../../data/location/geo';
 
 export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupSuccess'>) {
   const insets = useSafeAreaInsets();
   const { signUpBasics, accountType, bootstrapSession, completeSignUp } = useAuth();
-  const { hydrateFromApiUser } = useMyProfile();
   const [loading, setLoading] = useState(false);
 
   const finish = async (goToProfile: boolean) => {
@@ -48,21 +47,17 @@ export default function SignupSuccessScreen({ navigation }: ScreenProps<'SignupS
         });
         return;
       }
-      hydrateFromApiUser(apiUser);
       completeSignUp();
 
       if (goToProfile) {
-        navigation.reset({
-          index: 1,
-          routes: [{ name: 'MainTabs' }, { name: 'Profile' }],
-        });
+        enterAuthenticatedProduct([
+          { name: 'MainTabs' },
+          { name: 'Profile' },
+        ]);
         return;
       }
 
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
+      enterAuthenticatedProduct([{ name: 'MainTabs' }]);
     } catch (e) {
       if (isAccountSuspendedFailure(e)) return;
       Alert.alert('Could not finish signup', (e as Error).message);

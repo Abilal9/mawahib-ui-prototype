@@ -23,6 +23,11 @@ export const jobService = {
     return cache.find((j) => j.id === id);
   },
 
+  clearLocalCaches(): void {
+    cache = [];
+    cacheError = null;
+  },
+
   async refresh(params?: {
     q?: string;
     exploreTag?: string;

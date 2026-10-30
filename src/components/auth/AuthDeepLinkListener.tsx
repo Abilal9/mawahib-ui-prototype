@@ -9,7 +9,9 @@ import { handleAuthDeepLink } from '../../lib/authDeepLink';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import { useAuth } from '../../context/AuthContext';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
-import { consumeProcessStart } from '../../lib/processStart';
+import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
+import { consumeProcessStart, hasConsumedProcessStart } from '../../lib/processStart';
+import { enterSignedOutAt } from '../../lib/productTree';
 import type { RootStackParamList } from '../../navigation/types';
 
 /**
@@ -72,6 +74,10 @@ export default function AuthDeepLinkListener() {
                 text: 'OK',
                 onPress: () => {
                   if (apiUserRef.current) return;
+                  if (!hasConsumedProcessStart()) {
+                    enterSignedOutAt({ name: 'ForgotPassword' });
+                    return;
+                  }
                   navigationRef.current.navigate('ForgotPassword');
                 },
               },
@@ -90,7 +96,13 @@ export default function AuthDeepLinkListener() {
           Alert.alert('Verification failed', result.message, [
             {
               text: 'OK',
-              onPress: () => navigationRef.current.navigate('SignIn'),
+              onPress: () => {
+                if (!hasConsumedProcessStart()) {
+                  enterSignedOutAt({ name: 'SignIn' });
+                  return;
+                }
+                navigationRef.current.navigate('SignIn');
+              },
             },
           ]);
           return;
@@ -124,10 +136,7 @@ export default function AuthDeepLinkListener() {
               return;
             }
             consumeProcessStart();
-            navigationRef.current.reset({
-              index: 0,
-              routes: [{ name: dest.name, params: dest.params as never }],
-            });
+            applyPostAuthDestination(navigationRef.current, dest);
           } catch (e) {
             if (isAccountSuspendedError(e) || isAccountSuspendedFailure(e)) {
               return;

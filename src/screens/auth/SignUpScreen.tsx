@@ -32,6 +32,7 @@ import {
 } from '../../lib/phone';
 import { hasResumablePendingVerification } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 import {
   locationDisplayFields,
   type CountryCode as GeoCountryCode,
@@ -267,10 +268,7 @@ export default function SignUpScreen({
           pendingEmail: normalizedEmail,
           pendingPhoneE164: phoneE164,
         });
-        navigation.reset({
-          index: 0,
-          routes: [{ name: dest.name, params: dest.params as never }],
-        });
+        applyPostAuthDestination(navigation, dest);
         return;
       }
       if (result.status === 'already_verified') {

@@ -34,9 +34,42 @@ export type MainTabParamList = {
   JobsTab: JobsTabLanding | undefined;
 };
 
+/** Guest bottom tabs: Home / Explore / Create / Account. No Messages. No Jobs. */
+export type GuestTabParamList = {
+  HomeTab: undefined;
+  SearchTab: undefined;
+  CreateTab: undefined;
+  AccountTab: undefined;
+};
+
+export type SplashStackParamList = {
+  Splash1: undefined;
+  Splash2: undefined;
+};
+
+/**
+ * Signed-out product tree. Private route names are intentionally absent.
+ * Public profile/detail screens are deferred to Phase F — current screens
+ * depend on authenticated providers.
+ */
+export type SignedOutStackParamList = {
+  GuestTabs: NavigatorScreenParams<GuestTabParamList> | undefined;
+  Welcome: { step?: 1 | 2 | 3 };
+  TurnOnNotifications: undefined;
+  AccountType: undefined;
+  SignIn: { email?: string; notice?: 'password-updated' } | undefined;
+  ForgotPassword: { email?: string; autoSend?: boolean } | undefined;
+  ResetPassword: undefined;
+  SignUp: { preserveDraft?: boolean } | undefined;
+  VerifyAccount: { email: string; phoneE164: string };
+  ConfirmCode: { phone?: string; email?: string };
+  SignupSuccess: undefined;
+};
+
 export type RootStackParamList = {
   Splash1: undefined;
   Splash2: undefined;
+  GuestTabs: NavigatorScreenParams<GuestTabParamList> | undefined;
   Welcome: { step?: 1 | 2 | 3 };
   TurnOnNotifications: undefined;
   AccountType: undefined;
@@ -110,8 +143,36 @@ export type RootStackParamList = {
   FullPhotoPreview: { images: string[]; initialIndex?: number };
 };
 
+/** Authenticated product tree — current private stack plus MainTabs. */
+export type AuthenticatedStackParamList = Omit<
+  RootStackParamList,
+  | 'Splash1'
+  | 'Splash2'
+  | 'GuestTabs'
+  | 'Welcome'
+  | 'TurnOnNotifications'
+  | 'AccountType'
+  | 'SignIn'
+  | 'ForgotPassword'
+  | 'ResetPassword'
+  | 'SignUp'
+  | 'VerifyAccount'
+  | 'ConfirmCode'
+  | 'SignupSuccess'
+  | 'AccountSuspended'
+>;
+
 export type ScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
+
+export type SignedOutScreenProps<T extends keyof SignedOutStackParamList> =
+  NativeStackScreenProps<SignedOutStackParamList, T>;
+
+export type GuestTabScreenProps<T extends keyof GuestTabParamList> =
+  CompositeScreenProps<
+    BottomTabScreenProps<GuestTabParamList, T>,
+    NativeStackScreenProps<SignedOutStackParamList>
+  >;
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> = ScreenProps<T>;
 

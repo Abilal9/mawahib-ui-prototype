@@ -9,12 +9,15 @@ import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { resolveColdStartDestination } from '../../lib/coldStartRoute';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
+import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import {
   hasResumablePendingVerification,
   loadPendingSignup,
 } from '../../lib/pendingSignup';
 import { consumeProcessStart } from '../../lib/processStart';
+import { enterSignedOutAt } from '../../lib/productTree';
+import { isGuestBrowsingEnabled } from '../../config/guestBrowsingFlag';
 
 /**
  * Splash + auth gate:
@@ -68,7 +71,11 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     consumeProcessStart();
 
     if (destination.kind === 'welcome') {
-      navigation.replace('Welcome', { step: 1 });
+      if (isGuestBrowsingEnabled()) {
+        enterSignedOutAt({ name: 'GuestTabs' });
+        return;
+      }
+      enterSignedOutAt({ name: 'Welcome', params: { step: 1 } });
       return;
     }
 
@@ -79,27 +86,19 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
         session,
         signUpBasics,
       });
-      navigation.reset({
-        index: 0,
-        routes: [{ name: restored.name, params: restored.params as never }],
-      });
+      applyPostAuthDestination(navigation, restored);
       return;
     }
 
     if (destination.kind === 'confirm-code') {
-      navigation.reset({
-        index: 0,
-        routes: [
-          { name: 'ConfirmCode', params: { email: destination.email } },
-        ],
+      enterSignedOutAt({
+        name: 'ConfirmCode',
+        params: { email: destination.email },
       });
       return;
     }
 
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'SignIn' }],
-    });
+    enterSignedOutAt({ name: 'SignIn' });
   }, [
     authLoading,
     mediaCacheReady,
