@@ -1,15 +1,14 @@
 import React, { useRef, useState } from 'react';
 import ConfirmActionModal from '../ui/ConfirmActionModal';
 import { useAuth } from '../../context/AuthContext';
-import { leaveAuthenticatedProduct } from '../../lib/productTree';
 
 const FAILURE_MESSAGE =
   'Could not log out. You are still signed in on this device.';
 
 /**
  * Confirmed, current-device logout shared by Settings and the sidebar.
- * AuthContext.signOut clears the session only after local sign-out succeeds.
- * onSignedOut runs only after that success so a failure cannot open Sign In.
+ * AuthContext.signOut owns cache-safe cleanup and the product destination.
+ * onSignedOut is UI-only and must not navigate the product tree.
  */
 export function useLocalSignOutPrompt(onSignedOut?: () => void) {
   const { signOut } = useAuth();
@@ -38,8 +37,7 @@ export function useLocalSignOutPrompt(onSignedOut?: () => void) {
     setBusy(true);
     setFailed(false);
     try {
-      await signOut();
-      leaveAuthenticatedProduct({ name: 'SignIn' });
+      await signOut('logout');
       setVisible(false);
       onSignedOutRef.current?.();
     } catch {

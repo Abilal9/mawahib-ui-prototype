@@ -6,6 +6,11 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { isAccountSuspendedFailure } from '../../lib/authFailure';
 import { isAccountSuspendedError } from '../../lib/apiClient';
 import { handleAuthDeepLink } from '../../lib/authDeepLink';
+import {
+  endCallbackSessionCommit,
+  getInflightCallbackEmail,
+} from '../../lib/authCallbackTransaction';
+import { supabase } from '../../lib/supabase';
 import { loadRecoveryState } from '../../lib/recoveryState';
 import { useAuth } from '../../context/AuthContext';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
@@ -34,6 +39,7 @@ export default function AuthDeepLinkListener() {
     accountSuspended,
     mediaCacheReady,
     mediaCacheBlocked,
+    signOut,
   } = useAuth();
   const handling = useRef(false);
   const initialUrlHandled = useRef(false);
@@ -46,6 +52,7 @@ export default function AuthDeepLinkListener() {
   const accountSuspendedRef = useRef(accountSuspended);
   const mediaCacheReadyRef = useRef(mediaCacheReady);
   const mediaCacheBlockedRef = useRef(mediaCacheBlocked);
+  const signOutRef = useRef(signOut);
 
   apiUserRef.current = apiUser;
   sessionRef.current = session;
@@ -56,6 +63,7 @@ export default function AuthDeepLinkListener() {
   accountSuspendedRef.current = accountSuspended;
   mediaCacheReadyRef.current = mediaCacheReady;
   mediaCacheBlockedRef.current = mediaCacheBlocked;
+  signOutRef.current = signOut;
 
   useEffect(() => {
     const run = async (url: string | null) => {
@@ -86,6 +94,33 @@ export default function AuthDeepLinkListener() {
           return;
         }
         if (result.type === 'link-rejected') {
+          Alert.alert(
+            'Link not used',
+            'This link cannot sign you in. Continue in the app, or enter the code from your email.',
+          );
+          return;
+        }
+        if (result.type === 'stale-callback-session') {
+          try {
+            const expected = getInflightCallbackEmail();
+            const { data } = await supabase.auth.getSession();
+            const live = data.session;
+            const liveEmail =
+              live?.user?.email?.trim().toLowerCase() ?? '';
+            if (!live) {
+              // No session to destroy.
+            } else if (expected && liveEmail && liveEmail !== expected) {
+              // A newer account is live. Do not destroy it.
+            } else {
+              await signOutRef.current('identityMismatch', {
+                expectedUserId: live.user.id,
+              });
+            }
+          } catch {
+            // Logout/expiry already owns the destination.
+          } finally {
+            endCallbackSessionCommit();
+          }
           Alert.alert(
             'Link not used',
             'This link cannot sign you in. Continue in the app, or enter the code from your email.',

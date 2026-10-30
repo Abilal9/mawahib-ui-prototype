@@ -85,9 +85,7 @@ function appVersionLabel(): string {
 
 export default function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
   const { apiUser, refreshMe } = useAuth();
-  const signOutPrompt = useLocalSignOutPrompt(() => {
-    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
-  });
+  const signOutPrompt = useLocalSignOutPrompt();
 
   useFocusEffect(
     useCallback(() => {

@@ -1,0 +1,225 @@
+/**
+ * Phase H: typed sign-out transactions and cache-safe conflict rules.
+ * Run: node --no-warnings --experimental-strip-types scripts/signout-transaction-selftest.mjs
+ */
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  beginSignOutTransaction,
+  completeSignOutTransaction,
+  destinationForSignOutKind,
+  failSignOutTransaction,
+  getActiveSignOutTransaction,
+  interpretSignedOut,
+  resetSignOutTransactionForTests,
+} from '../src/lib/signOutTransaction.ts';
+import {
+  enqueueAuthMutation,
+  resetAuthMutationQueueForTests,
+} from '../src/lib/authMutationQueue.ts';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const read = (path) => readFileSync(join(root, path), 'utf8');
+
+function reset() {
+  resetSignOutTransactionForTests();
+}
+
+reset();
+assert.equal(destinationForSignOutKind('logout', true), 'GuestTabs');
+assert.equal(destinationForSignOutKind('logout', false), 'SignIn');
+assert.equal(destinationForSignOutKind('suspensionLogout', true), 'GuestTabs');
+assert.equal(destinationForSignOutKind('hydrate401', true), 'SignIn');
+assert.equal(destinationForSignOutKind('recoveryAbort', true), 'SignIn');
+assert.equal(destinationForSignOutKind('recoveryComplete', true), 'SignIn');
+assert.equal(destinationForSignOutKind('identityMismatch', true), 'SignIn');
+assert.equal(destinationForSignOutKind('sessionClearForRecovery', true), 'ForgotPassword');
+
+reset();
+const first = beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+assert.equal(first.status, 'started');
+const dup = beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+assert.equal(dup.status, 'duplicate');
+assert.equal(dup.txn.id, first.txn.id);
+const conflict = beginSignOutTransaction({
+  kind: 'hydrate401',
+  guestEnabled: true,
+});
+assert.equal(conflict.status, 'conflict');
+assert.equal(conflict.txn.kind, 'logout');
+
+reset();
+beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+failSignOutTransaction();
+assert.equal(getActiveSignOutTransaction()?.status, 'failed');
+const afterFail = beginSignOutTransaction({
+  kind: 'suspensionLogout',
+  guestEnabled: true,
+});
+assert.equal(afterFail.status, 'started');
+
+reset();
+beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+completeSignOutTransaction();
+assert.equal(getActiveSignOutTransaction()?.status, 'completed');
+const afterComplete = beginSignOutTransaction({
+  kind: 'hydrate401',
+  guestEnabled: true,
+});
+assert.equal(afterComplete.status, 'started');
+
+const kinds = [
+  'logout',
+  'suspensionLogout',
+  'hydrate401',
+  'recoveryAbort',
+  'sessionClearForRecovery',
+  'recoveryComplete',
+  'identityMismatch',
+];
+for (const kind of kinds) {
+  reset();
+  beginSignOutTransaction({ kind, guestEnabled: true });
+  const interpreted = interpretSignedOut({
+    hadAuthenticatedProduct: true,
+    recoveryLocked: false,
+    processStarted: true,
+    guestEnabled: true,
+  });
+  assert.equal(interpreted.apply, true);
+  assert.equal(interpreted.destination, destinationForSignOutKind(kind, true));
+}
+
+reset();
+assert.deepEqual(
+  interpretSignedOut({
+    hadAuthenticatedProduct: true,
+    recoveryLocked: false,
+    processStarted: true,
+    guestEnabled: true,
+  }),
+  { reason: 'expired', destination: 'SignIn', apply: true },
+);
+
+reset();
+assert.equal(
+  interpretSignedOut({
+    hadAuthenticatedProduct: false,
+    recoveryLocked: false,
+    processStarted: false,
+    guestEnabled: true,
+  }).reason,
+  'none',
+);
+assert.equal(
+  interpretSignedOut({
+    hadAuthenticatedProduct: false,
+    recoveryLocked: false,
+    processStarted: false,
+    guestEnabled: true,
+  }).apply,
+  false,
+);
+
+reset();
+beginSignOutTransaction({ kind: 'sessionClearForRecovery', guestEnabled: true });
+assert.equal(
+  interpretSignedOut({
+    hadAuthenticatedProduct: true,
+    recoveryLocked: true,
+    processStarted: true,
+    guestEnabled: true,
+  }).destination,
+  'ForgotPassword',
+);
+
+reset();
+assert.equal(
+  interpretSignedOut({
+    hadAuthenticatedProduct: true,
+    recoveryLocked: true,
+    processStarted: true,
+    guestEnabled: true,
+  }).apply,
+  false,
+);
+
+const auth = read('src/context/AuthContext.tsx');
+assert.match(auth, /beginSignOutTransaction/);
+assert.match(auth, /markMediaCacheClearPending/);
+assert.match(auth, /clearMediaImageCache/);
+assert.match(auth, /failSignOutTransaction/);
+assert.match(auth, /signOut\('hydrate401'\)/);
+assert.match(auth, /signOut\('recoveryAbort'\)/);
+assert.match(auth, /signOut\('identityMismatch'\)/);
+assert.match(auth, /kind: 'recoveryComplete'/);
+assert.match(auth, /Could not log out\. You are still signed in on this device\./);
+assert.match(auth, /signOutError/);
+assert.match(auth, /kind === 'identityMismatch'/);
+assert.match(auth, /liveUserId !== expectedUserId/);
+assert.match(auth, /enqueueAuthMutation/);
+assert.ok(
+  auth.indexOf("kind === 'identityMismatch'") <
+    auth.indexOf('beginSignOutTransaction({'),
+);
+
+const signOutBody = auth.slice(auth.indexOf('const signOut = useCallback'));
+assert.ok(
+  signOutBody.indexOf('markMediaCacheClearPending()') <
+    signOutBody.indexOf("supabase.auth.signOut({ scope: 'local' })"),
+);
+assert.ok(
+  signOutBody.indexOf("if (error)") >
+    signOutBody.indexOf("supabase.auth.signOut({ scope: 'local' })"),
+);
+const markedFailAt = signOutBody.indexOf('!marked.ok');
+assert.ok(markedFailAt !== -1);
+assert.ok(
+  signOutBody.indexOf('failSignOutTransaction', markedFailAt) <
+    signOutBody.indexOf('throw new Error', markedFailAt),
+);
+
+const confirm = read('src/components/auth/LocalSignOutConfirm.tsx');
+assert.match(confirm, /signOut\('logout'\)/);
+assert.equal(confirm.includes('leaveAuthenticatedProduct'), false);
+
+const settings = read('src/screens/profile/SettingsScreen.tsx');
+assert.equal(settings.includes("name: 'SignIn'"), false);
+assert.match(settings, /useLocalSignOutPrompt\(\)/);
+
+const sidebar = read('src/components/layout/AppSidebar.tsx');
+assert.equal(sidebar.includes("name: 'SignIn'"), false);
+assert.match(sidebar, /useLocalSignOutPrompt\(\)/);
+
+const suspended = read('src/screens/auth/AccountSuspendedScreen.tsx');
+assert.match(suspended, /signOut\('suspensionLogout'\)/);
+assert.equal(suspended.includes('leaveAuthenticatedProduct'), false);
+
+const forgot = read('src/screens/auth/ForgotPasswordScreen.tsx');
+assert.match(forgot, /signOut\('sessionClearForRecovery'\)/);
+assert.equal(forgot.includes("await signOut()"), false);
+
+assert.equal(
+  /supabase\.auth\.signOut\(\s*\)/.test(auth),
+  false,
+);
+assert.equal(auth.includes("scope: 'others'"), true);
+
+resetAuthMutationQueueForTests();
+const order = [];
+await Promise.all([
+  enqueueAuthMutation(async () => {
+    order.push('a-start');
+    await Promise.resolve();
+    order.push('a-end');
+  }),
+  enqueueAuthMutation(async () => {
+    order.push('b-start');
+    order.push('b-end');
+  }),
+]);
+assert.deepEqual(order, ['a-start', 'a-end', 'b-start', 'b-end']);
+
+console.log('signout-transaction-selftest ok');

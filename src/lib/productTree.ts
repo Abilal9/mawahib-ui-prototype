@@ -4,6 +4,11 @@ import {
   consumeReturnIntentRoutes,
   invalidateReturnIntents,
 } from './returnIntent';
+import { resolveSignedOutDestination } from './signedOutDestination';
+import {
+  markAuthenticatedProcess,
+  setSignedOutReason,
+} from './signedOutReason';
 import type { SignedOutStackParamList } from '../navigation/types';
 
 export type ProductTreeRoute = {
@@ -46,6 +51,8 @@ export function enterAuthenticatedProduct(
   routes: ProductTreeRoute[] = [{ name: 'MainTabs' }],
 ): void {
   consumeProcessStart();
+  markAuthenticatedProcess();
+  setSignedOutReason('none');
   resetPrivateModuleCaches();
   authenticatedProductActive = true;
   const restored = consumeReturnIntentRoutes();
@@ -62,7 +69,7 @@ export function leaveAuthenticatedProduct(
   invalidateReturnIntents();
   authenticatedProductActive = false;
   authenticatedEntry = null;
-  signedOutEntry = nextSignedOut ?? { name: 'SignIn' };
+  signedOutEntry = nextSignedOut ?? resolveSignedOutDestination();
   resetPrivateModuleCaches();
   emit();
 }

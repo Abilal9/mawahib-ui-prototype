@@ -60,7 +60,7 @@ export type SignedOutStackParamList = {
   Welcome: { step?: 1 | 2 | 3 };
   TurnOnNotifications: undefined;
   AccountType: undefined;
-  SignIn: { email?: string; notice?: 'password-updated' } | undefined;
+  SignIn: { email?: string; notice?: 'password-updated' | 'session-expired' } | undefined;
   ForgotPassword: { email?: string; autoSend?: boolean } | undefined;
   ResetPassword: undefined;
   SignUp: { preserveDraft?: boolean } | undefined;
@@ -88,7 +88,7 @@ export type RootStackParamList = {
   Welcome: { step?: 1 | 2 | 3 };
   TurnOnNotifications: undefined;
   AccountType: undefined;
-  SignIn: { email?: string; notice?: 'password-updated' } | undefined;
+  SignIn: { email?: string; notice?: 'password-updated' | 'session-expired' } | undefined;
   ForgotPassword: { email?: string; autoSend?: boolean } | undefined;
   ResetPassword: undefined;
   ChangePassword: undefined;

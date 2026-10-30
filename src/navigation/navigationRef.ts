@@ -15,3 +15,15 @@ export function navigateSignedOut(
   navigationRef.navigate('SignIn', params as RootStackParamList['SignIn']);
   return true;
 }
+
+export function resetToSignedOut(
+  name: 'GuestTabs' | 'SignIn' | 'ForgotPassword',
+  params?: object,
+): boolean {
+  if (!navigationRef.isReady()) return false;
+  navigationRef.reset({
+    index: 0,
+    routes: [{ name, params }],
+  });
+  return true;
+}

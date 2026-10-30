@@ -78,7 +78,8 @@ assert.match(screen, /Check again/);
 assert.match(screen, /Log out/);
 assert.match(screen, /recheckAccountStatus/);
 assert.match(screen, /signOut/);
-assert.match(screen, /leaveAuthenticatedProduct\(\{ name: 'SignIn' \}\)/);
+assert.match(screen, /signOut\('suspensionLogout'\)/);
+assert.equal(screen.includes('leaveAuthenticatedProduct'), false);
 assert.equal(/appeal/i.test(screen), false);
 
 assert.match(deepLink, /accountSuspendedRef\.current/);

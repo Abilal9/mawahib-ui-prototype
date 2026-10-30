@@ -2,12 +2,23 @@ import * as Linking from 'expo-linking';
 import { supabase } from './supabase';
 import { mapDeepLinkAuthError } from './authErrors';
 import { loadPendingSignup } from './pendingSignup';
+import {
+  beginCallbackSessionCommit,
+  endCallbackSessionCommit,
+  evaluateAuthCallback,
+  getAuthCallbackEpoch,
+  peekCallbackFingerprint,
+} from './authCallbackTransaction';
+import { getActiveSignOutTransaction } from './signOutTransaction';
+import { isGuestChosenInFlight } from './signedOutReason';
+import { enqueueAuthMutation } from './authMutationQueue';
 
 export type AuthDeepLinkResult =
   | { type: 'session'; accessToken: string }
   | { type: 'error'; message: string }
   | { type: 'recovery-rejected' }
   | { type: 'link-rejected' }
+  | { type: 'stale-callback-session' }
   | { type: 'ignored' };
 
 /** Same query-and-hash parse expo-auth-session used before SDK 58 hid it. */
@@ -89,6 +100,13 @@ function accessTokenClaims(accessToken: string): {
 
 const SIGNUP_LINK_TYPES = new Set(['signup', 'email', 'invite', 'magiclink']);
 
+function authLifecycleBlocksCallback(): boolean {
+  return (
+    getActiveSignOutTransaction()?.status === 'started' ||
+    isGuestChosenInFlight()
+  );
+}
+
 /**
  * Handle Supabase auth redirects opened via deep link / universal link.
  * Supports success tokens and error query params (e.g. otp_expired).
@@ -112,18 +130,32 @@ export async function handleAuthDeepLink(url: string): Promise<AuthDeepLinkResul
     return { type: 'ignored' };
   }
 
-  // Exact recovery type is rejected before any session is created.
-  // Implicit setSession would emit SIGNED_IN and drop type=recovery.
-  if (callbackType(url) === 'recovery') {
-    return { type: 'recovery-rejected' };
+  if (peekCallbackFingerprint(url)) {
+    return { type: 'link-rejected' };
   }
 
   const { params, errorCode } = getQueryParams(url);
+  const linkType = callbackType(url);
+  const paramEmail =
+    typeof params.email === 'string' ? params.email.trim().toLowerCase() : null;
+
+  // Exact recovery type is rejected before any session is created.
+  // Implicit setSession would emit SIGNED_IN and drop type=recovery.
+  if (callbackType(url) === 'recovery') {
+    evaluateAuthCallback({
+      url,
+      flow: 'recovery',
+      email: paramEmail,
+    });
+    return { type: 'recovery-rejected' };
+  }
+
   const errorMessage = mapDeepLinkAuthError({
     ...params,
     error_code: errorCode || params.error_code,
   });
   if (errorMessage) {
+    evaluateAuthCallback({ url, flow: null, email: paramEmail });
     return { type: 'error', message: errorMessage };
   }
 
@@ -132,15 +164,61 @@ export async function handleAuthDeepLink(url: string): Promise<AuthDeepLinkResul
   if (!access_token || !refresh_token) {
     // PKCE codes are exchanged only for an explicit non-recovery signup type.
     // A recovery code must not become a session by omitting or relabeling type.
-    const linkType = callbackType(url);
     if (params.code && linkType && SIGNUP_LINK_TYPES.has(linkType)) {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
-      if (error) {
-        return { type: 'error', message: mapDeepLinkAuthError({ error: error.message }) || error.message };
+      if (authLifecycleBlocksCallback()) {
+        evaluateAuthCallback({ url, flow: 'signup', email: paramEmail });
+        return { type: 'link-rejected' };
       }
+      const epochAtAccept = getAuthCallbackEpoch();
+      const decision = evaluateAuthCallback({
+        url,
+        flow: 'signup',
+        email: paramEmail,
+      });
+      if (decision.type === 'reject') {
+        return { type: 'link-rejected' };
+      }
+      beginCallbackSessionCommit(epochAtAccept, decision.email);
+      if (
+        getAuthCallbackEpoch() !== epochAtAccept ||
+        authLifecycleBlocksCallback()
+      ) {
+        endCallbackSessionCommit();
+        return { type: 'link-rejected' };
+      }
+      let data: { session?: { access_token?: string } | null } | null = null;
+      try {
+        const exchanged = await enqueueAuthMutation(() =>
+          supabase.auth.exchangeCodeForSession(params.code),
+        );
+        if (exchanged.error) {
+          endCallbackSessionCommit();
+          return {
+            type: 'error',
+            message:
+              mapDeepLinkAuthError({ error: exchanged.error.message }) ||
+              exchanged.error.message,
+          };
+        }
+        data = exchanged.data;
+      } catch (err) {
+        endCallbackSessionCommit();
+        const message =
+          err instanceof Error ? err.message : 'Could not use this link.';
+        return { type: 'error', message };
+      }
+      if (
+        getAuthCallbackEpoch() !== epochAtAccept ||
+        authLifecycleBlocksCallback()
+      ) {
+        return { type: 'stale-callback-session' };
+      }
+      endCallbackSessionCommit();
       if (data.session?.access_token) {
         return { type: 'session', accessToken: data.session.access_token };
       }
+    } else {
+      evaluateAuthCallback({ url, flow: callbackType(url) === 'recovery' ? 'recovery' : null, email: paramEmail });
     }
     return { type: 'ignored' };
   }
@@ -149,30 +227,77 @@ export async function handleAuthDeepLink(url: string): Promise<AuthDeepLinkResul
   // link says type=signup. Other token links must match this device's pending signup.
   const claims = accessTokenClaims(access_token);
   if (!claims || claims.methods.includes('recovery')) {
+    evaluateAuthCallback({
+      url,
+      flow: 'recovery',
+      email: claims?.email ?? paramEmail,
+    });
     return { type: 'recovery-rejected' };
   }
   const pendingEmail = loadPendingSignup()?.email?.trim().toLowerCase() ?? '';
-  const linkType = callbackType(url);
+  if (authLifecycleBlocksCallback()) {
+    evaluateAuthCallback({
+      url,
+      flow: linkType && SIGNUP_LINK_TYPES.has(linkType) ? 'signup' : null,
+      email: claims.email,
+    });
+    return { type: 'link-rejected' };
+  }
+  const epochAtAccept = getAuthCallbackEpoch();
+  const decision = evaluateAuthCallback({
+    url,
+    flow: linkType && SIGNUP_LINK_TYPES.has(linkType) ? 'signup' : null,
+    email: claims.email,
+  });
   if (
+    decision.type === 'reject' ||
     !linkType ||
     !SIGNUP_LINK_TYPES.has(linkType) ||
-    !pendingEmail ||
     !claims.email ||
-    claims.email !== pendingEmail
+    (pendingEmail && claims.email !== pendingEmail)
   ) {
     return { type: 'link-rejected' };
   }
 
-  const { data, error } = await supabase.auth.setSession({
-    access_token,
-    refresh_token,
-  });
-  if (error) {
-    return {
-      type: 'error',
-      message: mapDeepLinkAuthError({ error: error.message }) || error.message,
-    };
+  beginCallbackSessionCommit(epochAtAccept, decision.email);
+  if (
+    getAuthCallbackEpoch() !== epochAtAccept ||
+    authLifecycleBlocksCallback()
+  ) {
+    endCallbackSessionCommit();
+    return { type: 'link-rejected' };
   }
+  let data: { session?: { access_token?: string } | null } | null = null;
+  try {
+    const established = await enqueueAuthMutation(() =>
+      supabase.auth.setSession({
+        access_token,
+        refresh_token,
+      }),
+    );
+    if (established.error) {
+      endCallbackSessionCommit();
+      return {
+        type: 'error',
+        message:
+          mapDeepLinkAuthError({ error: established.error.message }) ||
+          established.error.message,
+      };
+    }
+    data = established.data;
+  } catch (err) {
+    endCallbackSessionCommit();
+    const message =
+      err instanceof Error ? err.message : 'Could not use this link.';
+    return { type: 'error', message };
+  }
+  if (
+    getAuthCallbackEpoch() !== epochAtAccept ||
+    authLifecycleBlocksCallback()
+  ) {
+    return { type: 'stale-callback-session' };
+  }
+  endCallbackSessionCommit();
   if (!data.session?.access_token) {
     return { type: 'ignored' };
   }

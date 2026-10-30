@@ -78,7 +78,10 @@ assert.doesNotMatch(settings, /ChangeLanguage|Privacy & Security|Help Center|Sen
 assert.doesNotMatch(settings, /Language/);
 assert.doesNotMatch(settings, /Premium|Switch|notificationsEnabled|updateMe|method:\s*'PATCH'/);
 assert.doesNotMatch(settings, /Delete Account|Deactivate|Dark Mode|Payment Methods|Forgot Password/i);
-assert.match(settings, /navigation\.reset\(\{\s*index:\s*0,\s*routes:\s*\[\{\s*name:\s*'SignIn'\s*\}\]\s*\}\)/);
+assert.doesNotMatch(
+  settings,
+  /navigation\.reset\(\{\s*index:\s*0,\s*routes:\s*\[\{\s*name:\s*'SignIn'\s*\}\]\s*\}\)/,
+);
 assert.doesNotMatch(settings, /console\.(log|debug|info)/);
 
 assert.match(sidebar, /useLocalSignOutPrompt/);
@@ -92,7 +95,10 @@ assert.match(sidebar, /Get Premium Features/);
 assert.match(sidebar, /Upgrade Plan/);
 assert.match(sidebar, /handleNavigate\('Premium'\)/);
 assert.doesNotMatch(sidebar, /signOut\(\)/);
-assert.match(sidebar, /navigation\.reset\(\{\s*index:\s*0,\s*routes:\s*\[\{\s*name:\s*'SignIn'\s*\}\]\s*\}\)/);
+assert.doesNotMatch(
+  sidebar,
+  /navigation\.reset\(\{\s*index:\s*0,\s*routes:\s*\[\{\s*name:\s*'SignIn'\s*\}\]\s*\}\)/,
+);
 
 const signOutBody = auth.slice(
   auth.indexOf('const signOut = useCallback'),
@@ -120,8 +126,8 @@ assert.doesNotMatch(auth, /console\.(log|debug|info)/);
 assert.match(prompt, /ConfirmActionModal/);
 assert.match(prompt, /Are you sure you want to log out of this device\?/);
 assert.match(prompt, /running\.current/);
-assert.match(prompt, /await signOut\(\)/);
-const successAt = prompt.indexOf('await signOut()');
+assert.match(prompt, /await signOut\('logout'\)/);
+const successAt = prompt.indexOf("await signOut('logout')");
 const signedOutAt = prompt.indexOf('onSignedOutRef.current?.()');
 const catchAt = prompt.indexOf('} catch {');
 assert.equal(successAt > 0 && signedOutAt > successAt && catchAt > signedOutAt, true);

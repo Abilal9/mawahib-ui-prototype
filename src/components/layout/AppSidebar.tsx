@@ -56,9 +56,7 @@ const FOOTER_LINKS: {
 export default function AppSidebar() {
   const { isOpen, close } = useSidebar();
   const { user } = useMyProfile();
-  const signOutPrompt = useLocalSignOutPrompt(() => {
-    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
-  });
+  const signOutPrompt = useLocalSignOutPrompt();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;

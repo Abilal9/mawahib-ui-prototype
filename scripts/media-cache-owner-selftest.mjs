@@ -417,13 +417,22 @@ assert.match(
   /clearMediaImageCache/,
 );
 const signOutBody = auth.slice(auth.indexOf('const signOut = useCallback'));
+assert.match(signOutBody, /markMediaCacheClearPending/);
 assert.ok(
-  signOutBody.indexOf('mediaPauseRef.current = false') <
-    signOutBody.indexOf('setMediaRetryTick'),
+  signOutBody.indexOf('markMediaCacheClearPending()') <
+    signOutBody.indexOf("supabase.auth.signOut({ scope: 'local' })"),
 );
+const markedFailAt = signOutBody.indexOf('!marked.ok');
+assert.ok(markedFailAt !== -1);
 assert.ok(
-  signOutBody.indexOf('setMediaRetryTick') <
-    signOutBody.indexOf('clearAuthenticatedState()'),
+  signOutBody.indexOf('failSignOutTransaction', markedFailAt) <
+    signOutBody.indexOf('throw new Error', markedFailAt),
+);
+const applyOutcome = auth.slice(auth.indexOf('const applySignedOutOutcome'));
+assert.match(applyOutcome, /clearAuthenticatedState\(\)/);
+assert.ok(
+  applyOutcome.indexOf('setMediaRetryTick') <
+    applyOutcome.indexOf('clearAuthenticatedState()'),
 );
 
 const deepLink = read('src/components/auth/AuthDeepLinkListener.tsx');

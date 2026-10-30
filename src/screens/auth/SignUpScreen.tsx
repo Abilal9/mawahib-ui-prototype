@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { mapAuthError } from '../../lib/authErrors';
 import { isAccountSuspendedFailure } from '../../lib/authFailure';
 import { isPasswordValid } from '../../lib/passwordRules';
+import { armAuthCallback } from '../../lib/authCallbackTransaction';
 import {
   DIAL_COUNTRIES,
   getPhoneValidationMessage,
@@ -87,6 +88,12 @@ export default function SignUpScreen({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized.includes('@')) return;
+    armAuthCallback({ flow: 'signup', email: normalized });
+  }, [email]);
   const [submitted, setSubmitted] = useState(false);
 
   const accountLabel = accountType === 'business' ? 'Business' : 'Talent';

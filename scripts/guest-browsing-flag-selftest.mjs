@@ -1,5 +1,6 @@
 /**
- * Phase E: Guest Browsing implementation flag defaults OFF.
+ * Phase H: Guest Browsing implementation flag still defaults OFF until activation.
+ * Remove in Phase I.
  * Run: node --no-warnings --experimental-strip-types scripts/guest-browsing-flag-selftest.mjs
  */
 import assert from 'node:assert/strict';
@@ -37,17 +38,16 @@ assert.ok(flagAt < guestAt);
 assert.match(splash, /enterSignedOutAt\(\{ name: 'Welcome'/);
 
 const rootNavigator = read('src/navigation/RootNavigator.tsx');
-assert.match(rootNavigator, /isGuestBrowsingEnabled\(\)/);
-assert.match(rootNavigator, /return 'GuestTabs'/);
+assert.match(rootNavigator, /resolveSignedOutDestination/);
 assert.match(rootNavigator, /return 'SignIn'/);
 const defaultFn = rootNavigator.slice(
   rootNavigator.indexOf('function defaultSignedOutRoute'),
   rootNavigator.indexOf('function SignedOutBranch'),
 );
 assert.match(defaultFn, /input\.recoveryLocked \|\| input\.hasSession/);
-assert.ok(
-  defaultFn.indexOf("return 'GuestTabs'") >
-    defaultFn.indexOf('isGuestBrowsingEnabled()'),
-);
+assert.match(defaultFn, /resolveSignedOutDestination/);
+const dest = read('src/lib/signedOutDestination.ts');
+assert.match(dest, /isGuestBrowsingEnabled\(\)/);
+assert.match(dest, /GuestTabs/);
 
 console.log('guest-browsing-flag-selftest ok');

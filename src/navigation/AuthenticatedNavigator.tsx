@@ -70,7 +70,15 @@ function MainTabsGate() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (recovery || loadRecoveryState() || !isSignedIn || !apiUser || !emailOk) {
+    if (recovery || loadRecoveryState()) {
+      leaveAuthenticatedProduct({ name: 'SignIn' });
+      return;
+    }
+    if (!isSignedIn) {
+      leaveAuthenticatedProduct({ name: 'SignIn' });
+      return;
+    }
+    if (!apiUser || !emailOk) {
       leaveAuthenticatedProduct({ name: 'SignIn' });
     }
   }, [authLoading, isSignedIn, apiUser, emailOk, recovery]);

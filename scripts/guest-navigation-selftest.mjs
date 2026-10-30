@@ -113,7 +113,7 @@ assert.match(authenticated, /key=\{`authenticated-\$\{userId\}`\}/);
 assert.match(signedOut, /key="signed-out"/);
 assert.equal(rootNavigator.includes('signed-out-recovery'), false);
 assert.match(rootNavigator, /isAuthenticatedProductActive\(\)/);
-assert.match(rootNavigator, /leaveAuthenticatedProduct\(\{ name: 'SignIn' \}\)/);
+assert.match(rootNavigator, /leaveAuthenticatedProduct\(\)/);
 assert.match(rootNavigator, /hasSession=\{Boolean\(session \|\| apiUser\)\}/);
 assert.match(rootNavigator, /key="app"/);
 assert.match(rootNavigator, /key="media-hold"/);

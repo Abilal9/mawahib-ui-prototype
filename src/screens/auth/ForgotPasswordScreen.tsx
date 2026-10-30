@@ -25,6 +25,7 @@ import {
 } from '../../lib/recoveryState';
 import { enterSignedOutAt } from '../../lib/productTree';
 import { invalidateReturnIntents } from '../../lib/returnIntent';
+import { armAuthCallback } from '../../lib/authCallbackTransaction';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COOLDOWN_SEC = 60;
@@ -62,6 +63,12 @@ export default function ForgotPasswordScreen({
   }, []);
 
   useEffect(() => {
+    const normalized = normalizeRecoveryEmail(email);
+    if (!EMAIL_PATTERN.test(normalized)) return;
+    armAuthCallback({ flow: 'recovery', email: normalized });
+  }, [email]);
+
+  useEffect(() => {
     if (!route.params?.autoSend) return;
     navigation.setParams({ autoSend: undefined });
     void requestCodeRef.current();
@@ -84,8 +91,8 @@ export default function ForgotPasswordScreen({
         clearRecoveryLock();
         return;
       }
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (!error) clearRecoveryLock();
+      await signOut('sessionClearForRecovery');
+      clearRecoveryLock();
     } catch {
       // Keep the lock if we cannot prove the recovery session is gone.
     }
@@ -103,12 +110,12 @@ export default function ForgotPasswordScreen({
     try {
       const { data } = await supabase.auth.getSession();
       if (data.session || loadRecoveryState()) {
+        await signOut('sessionClearForRecovery');
+        clearRecoveryLock();
         enterSignedOutAt({
           name: 'ForgotPassword',
           params: { email: normalized, autoSend: true },
         });
-        await signOut();
-        clearRecoveryLock();
         navigation.reset({
           index: 0,
           routes: [

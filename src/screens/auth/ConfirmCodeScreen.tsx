@@ -27,6 +27,7 @@ import { mapAuthError } from '../../lib/authErrors';
 import { clearPendingSignup } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
+import { armAuthCallback } from '../../lib/authCallbackTransaction';
 
 const RESEND_COOLDOWN_SEC = 60;
 const EDIT_PINK = '#F6339A';
@@ -58,6 +59,11 @@ export default function ConfirmCodeScreen({
   const email = route.params?.email || '';
   const phone = route.params?.phone || '';
   const isPhone = Boolean(phone) && !email;
+
+  useEffect(() => {
+    if (!email.trim()) return;
+    armAuthCallback({ flow: 'signup', email });
+  }, [email]);
 
   useEffect(() => {
     if (timer <= 0) return;

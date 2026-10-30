@@ -22,7 +22,7 @@ import {
   subscribeProductTree,
   takeSignedOutEntry,
 } from '../lib/productTree';
-import { isGuestBrowsingEnabled } from '../config/guestBrowsingFlag';
+import { resolveSignedOutDestination } from '../lib/signedOutDestination';
 import { View } from 'react-native';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -39,8 +39,9 @@ function defaultSignedOutRoute(input: {
   hasSession: boolean;
 }): keyof SignedOutStackParamList {
   if (input.recoveryLocked || input.hasSession) return 'SignIn';
-  if (isGuestBrowsingEnabled()) return 'GuestTabs';
-  return 'SignIn';
+  return resolveSignedOutDestination({
+    recoveryLocked: input.recoveryLocked,
+  }).name;
 }
 
 function SignedOutBranch({
@@ -52,13 +53,17 @@ function SignedOutBranch({
 }) {
   const [entry] = useState(() => {
     const handoff = takeSignedOutEntry();
+    // Involuntary or racy sign-out can unmount the auth tree before the
+    // SignIn handoff is written. Do not fall through to Guest Home while a
+    // live session or authenticated process still exists.
+    if (isAuthenticatedProductActive() || hasSession) {
+      if (handoff && handoff.name !== 'GuestTabs') {
+        return { name: handoff.name, params: handoff.params };
+      }
+      return { name: 'SignIn' as const };
+    }
     if (handoff) {
       return { name: handoff.name, params: handoff.params };
-    }
-    // Involuntary or racy sign-out can unmount the auth tree before the
-    // SignIn handoff is written. Do not fall through to Guest Home.
-    if (isAuthenticatedProductActive() || hasSession) {
-      return { name: 'SignIn' as const };
     }
     return { name: defaultSignedOutRoute({ recoveryLocked, hasSession }) };
   });
@@ -83,10 +88,11 @@ export default function RootNavigator() {
   useSyncExternalStore(subscribeProductTree, getProductTreeEpoch);
 
   useEffect(() => {
+    if (accountSuspended || recovery) return;
     if (!isSignedIn && isAuthenticatedProductActive()) {
-      leaveAuthenticatedProduct({ name: 'SignIn' });
+      leaveAuthenticatedProduct();
     }
-  }, [isSignedIn]);
+  }, [accountSuspended, isSignedIn, recovery]);
 
   const screenOptions = {
     headerShown: false,

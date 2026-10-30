@@ -47,6 +47,44 @@ import {
   type RecoveryState,
 } from '../lib/recoveryState';
 import { invalidateReturnIntents } from '../lib/returnIntent';
+import {
+  invalidateAuthCallbacks,
+  isCallbackSessionCommitInFlight,
+  shouldIgnoreAuthEventForCallbackCommit,
+} from '../lib/authCallbackTransaction';
+import { enqueueAuthMutation } from '../lib/authMutationQueue';
+import { isGuestBrowsingEnabled } from '../config/guestBrowsingFlag';
+import { hasConsumedProcessStart } from '../lib/processStart';
+import {
+  enterAuthenticatedProduct,
+  enterSignedOutAt,
+  isAuthenticatedProductActive,
+  leaveAuthenticatedProduct,
+} from '../lib/productTree';
+import { resetToSignedOut } from '../navigation/navigationRef';
+import {
+  routeFromSignedOutInterpretation,
+} from '../lib/signedOutDestination';
+import {
+  beginSignOutTransaction,
+  clearSignOutTransaction,
+  completeSignOutTransaction,
+  failSignOutTransaction,
+  getActiveSignOutTransaction,
+  interpretSignedOut,
+  type SignOutKind,
+} from '../lib/signOutTransaction';
+import {
+  beginGuestChosen,
+  clearAuthenticatedProcess,
+  endGuestChosen,
+  getSignedOutReason,
+  isGuestChosenInFlight,
+  markAuthenticatedProcess,
+  setSignedOutReason,
+  type SignedOutReason,
+  wasAuthenticatedProcess,
+} from '../lib/signedOutReason';
 import { shouldIgnoreStaleAuthResult } from './authSessionGuard';
 import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
@@ -138,7 +176,12 @@ interface AuthContextValue {
   resumeEmailVerification: (email: string) => Promise<void>;
   completeSignUp: () => void;
   signIn: () => void;
-  signOut: () => Promise<void>;
+  signOut: (
+    kind?: SignOutKind,
+    options?: { expectedUserId?: string },
+  ) => Promise<void>;
+  signedOutReason: SignedOutReason;
+  continueAsGuest: () => Promise<boolean>;
   /** Set while a password-recovery lock is persisted. Not ordinary app auth. */
   recovery: RecoveryState | null;
   armRecoveryVerification: (email: string) => boolean;
@@ -271,6 +314,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [recoveryRestart, setRecoveryRestart] = useState(false);
+  const [signedOutReason, setSignedOutReasonState] =
+    useState<SignedOutReason>('none');
+  const appliedSignOutTxnId = useRef<number | null>(null);
   const [mediaCache, setMediaCache] = useState<{
     principal: MediaCacheOwner | null;
     ready: boolean;
@@ -415,8 +461,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
+  const commitSignedOutReason = useCallback((next: SignedOutReason) => {
+    setSignedOutReason(next);
+    setSignedOutReasonState(next);
+  }, []);
+
   const clearAuthenticatedState = useCallback(() => {
     invalidateReturnIntents();
+    invalidateAuthCallbacks();
     authEpoch.current += 1;
     hydrateSessionRef.current = null;
     hydrateOverridesRef.current = undefined;
@@ -429,6 +481,142 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSignUpBasics(null);
   }, []);
 
+  const applySignedOutOutcome = useCallback(
+    (interpretation: ReturnType<typeof interpretSignedOut>) => {
+      const txn = getActiveSignOutTransaction();
+      if (txn && appliedSignOutTxnId.current === txn.id && txn.status === 'completed') {
+        return;
+      }
+      if (txn?.status === 'started') {
+        completeSignOutTransaction(txn.id);
+        appliedSignOutTxnId.current = txn.id;
+      }
+      commitSignedOutReason(interpretation.reason);
+      clearAuthenticatedProcess();
+      if (
+        txn?.kind === 'recoveryAbort' ||
+        txn?.kind === 'recoveryComplete' ||
+        txn?.kind === 'sessionClearForRecovery' ||
+        txn?.kind === 'identityMismatch'
+      ) {
+        clearRecoveryState();
+        setRecovery(null);
+      }
+      mediaPauseRef.current = false;
+      setMediaCache((current) => ({
+        ...current,
+        ready: false,
+        blocked: false,
+      }));
+      setMediaRetryTick((tick) => tick + 1);
+      clearAuthenticatedState();
+      if (interpretation.apply) {
+        leaveAuthenticatedProduct(routeFromSignedOutInterpretation(interpretation));
+      }
+      clearSignOutTransaction();
+    },
+    [clearAuthenticatedState, commitSignedOutReason],
+  );
+
+  const signOut = useCallback(
+    async (
+      kind: SignOutKind = 'logout',
+      options?: { expectedUserId?: string },
+    ) => {
+      const expectedUserId =
+        options?.expectedUserId ?? apiUserRef.current?.id;
+      const restoreMedia = () => {
+        mediaPauseRef.current = false;
+        setMediaCache((current) => ({
+          ...current,
+          ready: false,
+          blocked: false,
+        }));
+        setMediaRetryTick((tick) => tick + 1);
+      };
+      const runCacheThenLocalSignOut = async (txnId: number) => {
+        invalidateAuthCallbacks();
+        setAuthError(null);
+        mediaPauseRef.current = true;
+        setMediaCache((current) => ({
+          ...current,
+          ready: false,
+          blocked: false,
+        }));
+        const marked = markMediaCacheClearPending();
+        if (!marked.ok) {
+          try {
+            await clearMediaImageCache();
+          } catch {
+            failSignOutTransaction(txnId);
+            restoreMedia();
+            throw new Error(
+              'Could not log out. You are still signed in on this device.',
+            );
+          }
+        }
+        let signOutError = false;
+        try {
+          const { error } = await supabase.auth.signOut({ scope: 'local' });
+          if (error) signOutError = true;
+        } catch {
+          signOutError = true;
+        }
+        if (signOutError) {
+          failSignOutTransaction(txnId);
+          restoreMedia();
+          throw new Error(
+            'Could not log out. You are still signed in on this device.',
+          );
+        }
+        const active = getActiveSignOutTransaction();
+        if (!active || active.status === 'completed') return;
+        applySignedOutOutcome(
+          interpretSignedOut({
+            hadAuthenticatedProduct: wasAuthenticatedProcess(),
+            recoveryLocked: Boolean(loadRecoveryState()),
+            processStarted: hasConsumedProcessStart(),
+            guestEnabled: isGuestBrowsingEnabled(),
+          }),
+        );
+      };
+
+      if (kind === 'identityMismatch') {
+        await enqueueAuthMutation(async () => {
+          const { data: live } = await supabase.auth.getSession();
+          const liveUserId = live.session?.user?.id;
+          if (!expectedUserId || !liveUserId || liveUserId !== expectedUserId) {
+            return;
+          }
+          const begun = beginSignOutTransaction({
+            kind,
+            guestEnabled: isGuestBrowsingEnabled(),
+            expectedUserId,
+          });
+          if (begun.status !== 'started') return;
+          await runCacheThenLocalSignOut(begun.txn.id);
+        });
+        return;
+      }
+
+      const begun = beginSignOutTransaction({
+        kind,
+        guestEnabled: isGuestBrowsingEnabled(),
+        expectedUserId,
+      });
+      if (begun.status === 'conflict') {
+        throw new Error(
+          'Could not log out. You are still signed in on this device.',
+        );
+      }
+      if (begun.status === 'duplicate') {
+        return;
+      }
+      await runCacheThenLocalSignOut(begun.txn.id);
+    },
+    [applySignedOutOutcome],
+  );
+
   const discardInterruptedRecovery = useCallback(async () => {
     const existing = loadRecoveryState();
     if (!existing) {
@@ -436,21 +624,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     }
     setRecovery(existing);
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) return false;
-    clearRecoveryState();
-    setRecovery(null);
-    clearAuthenticatedState();
-    return true;
-  }, [clearAuthenticatedState]);
+    try {
+      await signOut('recoveryAbort');
+      return true;
+    } catch {
+      return false;
+    }
+  }, [signOut]);
 
   const applyApiUser = useCallback((user: ApiUser) => {
+    if (getActiveSignOutTransaction()?.status === 'started') return;
+    if (isGuestChosenInFlight()) return;
+    if (shouldIgnoreAuthEventForCallbackCommit(user.email)) {
+      return;
+    }
     accountSuspendedRef.current = false;
     setAccountSuspended(false);
+    markAuthenticatedProcess();
+    commitSignedOutReason('none');
+    invalidateAuthCallbacks();
     setApiUser(user);
     setAccountType(user.accountType);
     setIsSignedIn(true);
-  }, []);
+    if (user.emailVerified && !isAuthenticatedProductActive()) {
+      enterAuthenticatedProduct();
+    }
+  }, [commitSignedOutReason]);
 
   const markAccountSuspended = useCallback(() => {
     invalidateReturnIntents();
@@ -581,6 +780,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAuthenticatedState();
         return null;
       }
+      if (isGuestChosenInFlight()) return null;
+      if (shouldIgnoreAuthEventForCallbackCommit(active.user?.email)) {
+        return null;
+      }
 
       const previousUserId = hydrateSessionRef.current?.user?.id;
       if (previousUserId && previousUserId !== active.user.id) {
@@ -650,6 +853,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ) {
             return null;
           }
+          if (shouldIgnoreAuthEventForCallbackCommit(user.email ?? sessionSnap.user?.email)) {
+            return null;
+          }
           applyApiUser(user);
           if (isEmailConfirmed(sessionSnap) && user.emailVerified) {
             clearPendingSignup();
@@ -677,8 +883,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
           if (err instanceof ApiError && err.status === 401) {
-            await supabase.auth.signOut({ scope: 'local' });
-            clearAuthenticatedState();
+            const { data: liveAfter401 } = await supabase.auth.getSession();
+            if (liveAfter401.session?.access_token) {
+              lastHydrateErrorRef.current = err.message;
+              setAuthError(err.message);
+              setApiUser(null);
+              setIsSignedIn(false);
+              return null;
+            }
+            try {
+              await signOut('hydrate401');
+            } catch {
+              commitSignedOutReason('expired');
+              clearAuthenticatedState();
+              leaveAuthenticatedProduct({
+                name: 'SignIn',
+                params: { notice: 'session-expired' },
+              });
+            }
             lastHydrateErrorRef.current = err.message;
             return null;
           }
@@ -729,7 +951,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hydrateInFlight.current = promise;
       return promise;
     },
-    [applyApiUser, clearAuthenticatedState, markAccountSuspended],
+    [applyApiUser, clearAuthenticatedState, markAccountSuspended, signOut, commitSignedOutReason],
   );
 
   useEffect(() => {
@@ -768,7 +990,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       if (event === 'SIGNED_OUT') {
-        clearAuthenticatedState();
+        const interpretation = interpretSignedOut({
+          hadAuthenticatedProduct: wasAuthenticatedProcess(),
+          recoveryLocked: Boolean(loadRecoveryState()),
+          processStarted: hasConsumedProcessStart(),
+          guestEnabled: isGuestBrowsingEnabled(),
+        });
+        if (!interpretation.apply) {
+          clearAuthenticatedState();
+          return;
+        }
+        applySignedOutOutcome(interpretation);
         return;
       }
 
@@ -788,6 +1020,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_IN' && next) {
+        if (getActiveSignOutTransaction()?.status === 'started') {
+          return;
+        }
+        if (isGuestChosenInFlight()) {
+          return;
+        }
+        if (shouldIgnoreAuthEventForCallbackCommit(next.user?.email)) {
+          return;
+        }
         // Change-password reauth emits SIGNED_IN for the current account.
         // Hydrating here can clear apiUser on a Nest failure and reset to Sign In.
         if (suppressSameUserHydrateRef.current) {
@@ -808,7 +1049,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, [clearAuthenticatedState, discardInterruptedRecovery, hydrateBackendUser]);
+  }, [
+    applySignedOutOutcome,
+    clearAuthenticatedState,
+    discardInterruptedRecovery,
+    hydrateBackendUser,
+  ]);
 
   const resendSignupOtp = useCallback(async (email: string) => {
     setAuthError(null);
@@ -1173,6 +1419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
+      invalidateAuthCallbacks();
       setAuthError(null);
       lastHydrateErrorRef.current = null;
       if (loadRecoveryState()) {
@@ -1181,10 +1428,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'unavailable',
         );
       }
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { data, error } = await enqueueAuthMutation(() =>
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+      );
       if (error) {
         const lower = error.message.toLowerCase();
         if (
@@ -1248,55 +1497,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await hydrateBackendUser(data.session);
   }, [hydrateBackendUser]);
 
-  const signOut = useCallback(async () => {
-    setAuthError(null);
-    // Pause reconcile and drop ready so product images unmount. Do not set
-    // blocked: that overlay is only for fail-closed cleanup errors.
-    mediaPauseRef.current = true;
-    setMediaCache((current) => ({
-      ...current,
-      ready: false,
-      blocked: false,
-    }));
-    const marked = markMediaCacheClearPending();
-    if (!marked.ok) {
-      try {
-        await clearMediaImageCache();
-      } catch {
-        mediaPauseRef.current = false;
-        setMediaCache((current) => ({
-          ...current,
-          ready: false,
-          blocked: false,
-        }));
-        setMediaRetryTick((tick) => tick + 1);
-        throw new Error(
-          'Could not log out. You are still signed in on this device.',
-        );
-      }
+  const continueAsGuest = useCallback(async () => {
+    if (getSignedOutReason() !== 'expired') return false;
+    if (!isGuestBrowsingEnabled()) return false;
+    invalidateAuthCallbacks();
+    if (isCallbackSessionCommitInFlight()) return false;
+    if (getActiveSignOutTransaction()?.status === 'started') return false;
+    beginGuestChosen();
+    try {
+      const first = await supabase.auth.getSession();
+      if (first.data.session) return false;
+      if (isCallbackSessionCommitInFlight()) return false;
+      const second = await supabase.auth.getSession();
+      if (second.data.session) return false;
+      commitSignedOutReason('guestChosen');
+      clearAuthenticatedProcess();
+      invalidateReturnIntents();
+      invalidateAuthCallbacks();
+      enterSignedOutAt({ name: 'GuestTabs' });
+      resetToSignedOut('GuestTabs');
+      return true;
+    } finally {
+      endGuestChosen();
     }
-    // Local scope signs this device out only. The client default is global.
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) {
-      mediaPauseRef.current = false;
-      setMediaCache((current) => ({
-        ...current,
-        ready: false,
-        blocked: false,
-      }));
-      setMediaRetryTick((tick) => tick + 1);
-      throw new Error('Could not log out. You are still signed in on this device.');
-    }
-    // Keep pendingSignup so abandoned verification can resume after logout.
-    mediaPauseRef.current = false;
-    setMediaCache((current) => ({
-      ...current,
-      ready: false,
-      blocked: false,
-    }));
-    setMediaRetryTick((tick) => tick + 1);
-    clearAuthenticatedState();
-  }, [clearAuthenticatedState]);
+  }, [commitSignedOutReason]);
 
   const completePasswordReset = useCallback(
     async (password: string) => {
@@ -1325,11 +1549,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionUser.id !== recoveryLock.userId ||
         email !== recoveryLock.email
       ) {
-        const { error } = await supabase.auth.signOut({ scope: 'local' });
-        if (!error) {
-          clearRecoveryState();
-          setRecovery(null);
-          clearAuthenticatedState();
+        try {
+          await signOut('identityMismatch');
+        } catch {
+          return { status: 'rejected' as const };
         }
         return { status: 'rejected' as const };
       }
@@ -1342,11 +1565,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })();
       if (updateError) throw updateError;
+      const begun = beginSignOutTransaction({
+        kind: 'recoveryComplete',
+        guestEnabled: isGuestBrowsingEnabled(),
+        expectedUserId: recoveryLock.userId,
+      });
+      if (begun.status === 'conflict') {
+        return { status: 'sign-out-failed' as const };
+      }
+      if (begun.status === 'duplicate') {
+        return { status: 'signed-out' as const };
+      }
+      invalidateAuthCallbacks();
+      const marked = markMediaCacheClearPending();
+      if (!marked.ok) {
+        try {
+          await clearMediaImageCache();
+        } catch {
+          failSignOutTransaction(begun.txn.id);
+          return { status: 'sign-out-failed' as const };
+        }
+      }
       try {
         const globalOut = await supabase.auth.signOut({ scope: 'global' });
         if (globalOut.error) {
           const localOut = await supabase.auth.signOut({ scope: 'local' });
           if (localOut.error) {
+            failSignOutTransaction(begun.txn.id);
             return { status: 'sign-out-failed' as const };
           }
         }
@@ -1354,18 +1599,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const localOut = await supabase.auth.signOut({ scope: 'local' });
           if (localOut.error) {
+            failSignOutTransaction(begun.txn.id);
             return { status: 'sign-out-failed' as const };
           }
         } catch {
+          failSignOutTransaction(begun.txn.id);
           return { status: 'sign-out-failed' as const };
         }
       }
       clearRecoveryState();
       setRecovery(null);
-      clearAuthenticatedState();
+      if (getActiveSignOutTransaction()?.status === 'started') {
+        applySignedOutOutcome(
+          interpretSignedOut({
+            hadAuthenticatedProduct: wasAuthenticatedProcess(),
+            recoveryLocked: Boolean(loadRecoveryState()),
+            processStarted: hasConsumedProcessStart(),
+            guestEnabled: isGuestBrowsingEnabled(),
+          }),
+        );
+      }
       return { status: 'signed-out' as const };
     },
-    [clearAuthenticatedState],
+    [applySignedOutOutcome, signOut],
   );
 
   const changePassword = useCallback(
@@ -1445,10 +1701,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentId !== original.id ||
         currentEmail !== email
       ) {
-        const { error: outError } = await supabase.auth.signOut({
-          scope: 'local',
-        });
-        if (!outError) clearAuthenticatedState();
+        try {
+          await signOut('identityMismatch');
+        } catch {
+          // Stay on the mismatch path; Sign In is still the destination.
+        }
         throw new PasswordFlowError(
           'Could not confirm this account. Sign in again.',
           'identity',
@@ -1462,7 +1719,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { otherSessionsRevoked: false };
       }
     },
-    [clearAuthenticatedState],
+    [signOut],
   );
 
   const value = useMemo<AuthContextValue>(
@@ -1496,6 +1753,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeSignUp,
       signIn,
       signOut,
+      signedOutReason,
+      continueAsGuest,
       recovery,
       recoveryRestart,
       armRecoveryVerification,
@@ -1533,6 +1792,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeSignUp,
       signIn,
       signOut,
+      signedOutReason,
+      continueAsGuest,
       armRecoveryVerification,
       commitRecoverySession,
       clearRecoveryLock,

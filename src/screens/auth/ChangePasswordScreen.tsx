@@ -19,7 +19,6 @@ import { ScreenProps } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { isPasswordValid } from '../../lib/passwordRules';
 import { PasswordFlowError } from '../../lib/recoveryState';
-import { leaveAuthenticatedProduct } from '../../lib/productTree';
 
 export default function ChangePasswordScreen({
   navigation,
@@ -82,9 +81,7 @@ export default function ChangePasswordScreen({
             ? 'Password status unknown'
             : 'Could not change password';
       Alert.alert(title, message);
-      if (err instanceof PasswordFlowError && err.code === 'identity') {
-        leaveAuthenticatedProduct({ name: 'SignIn' });
-      }
+      // Identity mismatch already requested the identityMismatch transaction.
     } finally {
       saveRef.current = false;
       setSaving(false);

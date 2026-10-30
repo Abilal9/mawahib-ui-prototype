@@ -5,7 +5,6 @@ import AuthBrandHeader from '../../components/auth/AuthBrandHeader';
 import Button from '../../components/ui/Button';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { useAuth } from '../../context/AuthContext';
-import { leaveAuthenticatedProduct } from '../../lib/productTree';
 import { colors, spacing, typography } from '../../theme';
 
 const SUPPORT_MAILTO = 'mailto:support@mawahib.io';
@@ -45,8 +44,7 @@ export default function AccountSuspendedScreen() {
     setLoggingOut(true);
     setLogoutError(null);
     try {
-      await signOut();
-      leaveAuthenticatedProduct({ name: 'SignIn' });
+      await signOut('suspensionLogout');
     } catch (error) {
       setLogoutError(
         error instanceof Error

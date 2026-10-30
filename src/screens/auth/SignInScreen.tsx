@@ -23,6 +23,9 @@ import { hasResumablePendingVerification } from '../../lib/pendingSignup';
 import { resolvePostAuthDestination } from '../../lib/postAuthGate';
 import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 import { isAccountSuspendedFailure, isAuthFailure } from '../../lib/authFailure';
+import { getSignedOutReason } from '../../lib/signedOutReason';
+import { invalidateReturnIntents } from '../../lib/returnIntent';
+import { isGuestBrowsingEnabled } from '../../config/guestBrowsingFlag';
 
 function isRateLimitError(error: unknown): boolean {
   const message =
@@ -60,6 +63,8 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
     apiUser,
     recovery,
     discardInterruptedRecovery,
+    signedOutReason,
+    continueAsGuest,
   } = useAuth();
   const [email, setEmail] = useState(route.params?.email ?? '');
   const [password, setPassword] = useState('');
@@ -74,11 +79,25 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
     recovery: Boolean(recovery),
   });
 
+  const sessionExpired =
+    signedOutReason === 'expired' || route.params?.notice === 'session-expired';
+
   useEffect(() => {
     if (route.params?.notice !== 'password-updated') return;
     Alert.alert('Password updated', 'Sign in with your new password.');
     navigation.setParams({ notice: undefined });
   }, [navigation, route.params?.notice]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (event.data.action.type !== 'GO_BACK' && event.data.action.type !== 'POP') {
+        return;
+      }
+      if (getSignedOutReason() === 'expired') return;
+      invalidateReturnIntents();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleDiscardRecovery = async () => {
     setDiscarding(true);
@@ -211,7 +230,11 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
         </View>
         <View style={styles.content}>
           <Text style={styles.title}>Log In</Text>
-          <Text style={styles.subtitle}>Welcome back! Please enter your details.</Text>
+          <Text style={styles.subtitle}>
+            {sessionExpired
+              ? 'Your session ended. Sign in again to continue.'
+              : 'Welcome back! Please enter your details.'}
+          </Text>
 
           {recovery ? (
             <View style={styles.backendBanner}>
@@ -274,6 +297,16 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
           </TouchableOpacity>
 
           <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit || Boolean(recovery)} />
+          {sessionExpired && !recovery && isGuestBrowsingEnabled() ? (
+            <Button
+              title="Continue as Guest"
+              variant="outline"
+              onPress={() => {
+                void continueAsGuest();
+              }}
+              style={styles.guestContinue}
+            />
+          ) : null}
           {loading ? (
             <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.primary} />
           ) : null}
@@ -340,5 +373,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: -spacing.sm,
     marginBottom: spacing.lg,
+  },
+  guestContinue: {
+    marginTop: spacing.md,
   },
 });
