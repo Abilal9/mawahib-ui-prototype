@@ -388,7 +388,7 @@ const splash = read('src/screens/onboarding/SplashScreen2.tsx');
 assert.match(splash, /mediaCacheReady/);
 assert.ok(
   splash.indexOf('consumeProcessStart()') <
-    splash.indexOf("name: 'Welcome'"),
+    splash.indexOf("name: 'GuestTabs'"),
 );
 
 const overlay = read('src/components/auth/AuthTransitionOverlay.tsx');

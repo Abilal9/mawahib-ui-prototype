@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleProp, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { colors } from '../../theme';
-import { useMyProfile } from '../../context/ProfileContext';
+import { useOptionalMyProfile } from '../../context/ProfileContext';
 import { resolveCurrencyCode } from '../../utils/currency';
 import type { CurrencyCode } from '../../data/location/geo';
 
@@ -32,15 +32,16 @@ export default function CurrencyIcon({
   currency: currencyProp,
   location,
 }: Props) {
-  const { user } = useMyProfile();
+  const user = useOptionalMyProfile()?.user;
   // Explicit `currency` wins. Explicit `location` (incl. null) skips the viewer's defaultCurrency.
+  // Guest product has no ProfileProvider; listed object currency/location still render.
   const currency = resolveCurrencyCode(
     currencyProp != null
       ? currencyProp
       : location !== undefined
         ? null
-        : user.defaultCurrency,
-    location !== undefined ? location : user.location,
+        : user?.defaultCurrency,
+    location !== undefined ? location : user?.location,
   );
   const isDirham = currency === 'AED';
   // Dirham mark is slightly wider; keep Riyal a touch narrower for optical balance.

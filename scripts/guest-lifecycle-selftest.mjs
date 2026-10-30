@@ -19,7 +19,6 @@ const signIn = read('src/screens/auth/SignInScreen.tsx');
 const splash = read('src/screens/onboarding/SplashScreen2.tsx');
 const app = read('App.tsx');
 const returnIntent = read('src/lib/returnIntent.ts');
-const flag = read('src/config/guestBrowsingFlag.ts');
 
 assert.match(auth, /signedOutReason/);
 assert.match(auth, /continueAsGuest/);
@@ -35,7 +34,6 @@ assert.match(auth, /leaveAuthenticatedProduct/);
 assert.match(auth, /enterSignedOutAt\(\{ name: 'GuestTabs' \}\)/);
 assert.match(auth, /enterAuthenticatedProduct\(\)/);
 assert.match(auth, /signOutError/);
-assert.match(auth, /!isGuestBrowsingEnabled\(\)/);
 assert.match(auth, /resetToSignedOut\('GuestTabs'\)/);
 assert.match(auth, /isMawahibProfileMissingError/);
 assert.ok(
@@ -64,19 +62,23 @@ assert.match(productTree, /invalidateReturnIntents\(\)/);
 assert.match(productTree, /markAuthenticatedProcess\(\)/);
 
 assert.match(signIn, /Continue as Guest/);
-assert.match(signIn, /isGuestBrowsingEnabled\(\)/);
 assert.match(signIn, /beforeRemove/);
 assert.match(signIn, /invalidateReturnIntents/);
 
-assert.match(splash, /isGuestBrowsingEnabled/);
 assert.match(splash, /GuestTabs/);
 assert.match(splash, /consumeProcessStart\(\)/);
+assert.equal(splash.includes('isGuestBrowsingEnabled'), false);
+assert.equal(splash.includes("name: 'Welcome'"), false);
 
 assert.match(returnIntent, /invalidateReturnIntents/);
 assert.match(auth, /invalidateReturnIntents\(\)/);
-
-assert.match(flag, /EXPO_PUBLIC_GUEST_BROWSING/);
-assert.match(flag, /Remove in Phase I/);
+assert.equal(auth.includes('isGuestBrowsingEnabled'), false);
+assert.equal(auth.includes('EXPO_PUBLIC_GUEST_BROWSING'), false);
+assert.match(auth, /refreshSession\(\)/);
+assert.ok(
+  auth.indexOf('supabase.auth.refreshSession()') <
+    auth.indexOf('await hydrateBackendUser(session)'),
+);
 
 const callSites = [
   ["src/context/AuthContext.tsx", "signOut('hydrate401')"],

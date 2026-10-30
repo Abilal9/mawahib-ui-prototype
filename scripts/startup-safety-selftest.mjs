@@ -281,10 +281,10 @@ assert.match(splash, /mediaCacheReady/);
 assert.match(splash, /consumeProcessStart\(\)/);
 assert.match(splash, /resolvePostAuthDestination/);
 assert.match(splash, /loadRecoveryState\(\) \|\| recoveryRestart/);
-assert.match(splash, /enterSignedOutAt\(\{ name: 'Welcome'/);
+assert.match(splash, /enterSignedOutAt\(\{ name: 'GuestTabs' \}\)/);
 assert.ok(
   splash.indexOf('resolveColdStartDestination') <
-    splash.indexOf("name: 'Welcome'"),
+    splash.indexOf("name: 'GuestTabs'"),
 );
 
 const route = read('src/lib/coldStartRoute.ts');

@@ -47,7 +47,6 @@ let active: SignOutTransaction | null = null;
 
 export function destinationForSignOutKind(
   kind: SignOutKind,
-  guestEnabled: boolean,
 ): SignOutDestinationName {
   if (kind === 'sessionClearForRecovery') return 'ForgotPassword';
   if (
@@ -58,12 +57,11 @@ export function destinationForSignOutKind(
   ) {
     return 'SignIn';
   }
-  return guestEnabled ? 'GuestTabs' : 'SignIn';
+  return 'GuestTabs';
 }
 
 export function beginSignOutTransaction(input: {
   kind: SignOutKind;
-  guestEnabled: boolean;
   expectedUserId?: string;
   now?: number;
 }): BeginSignOutResult {
@@ -78,7 +76,7 @@ export function beginSignOutTransaction(input: {
     kind: input.kind,
     startedAt: input.now ?? Date.now(),
     expectedUserId: input.expectedUserId,
-    destination: destinationForSignOutKind(input.kind, input.guestEnabled),
+    destination: destinationForSignOutKind(input.kind),
     notice: input.kind === 'recoveryComplete' ? 'password-updated' : undefined,
     status: 'started',
   };
@@ -113,7 +111,6 @@ export function interpretSignedOut(input: {
   hadAuthenticatedProduct: boolean;
   recoveryLocked: boolean;
   processStarted: boolean;
-  guestEnabled: boolean;
 }): SignedOutInterpretation {
   const txn = active;
   if (txn && txn.status === 'started') {
@@ -141,7 +138,7 @@ export function interpretSignedOut(input: {
 
   return {
     reason: 'none',
-    destination: input.guestEnabled ? 'GuestTabs' : 'SignIn',
+    destination: 'GuestTabs',
     apply: false,
   };
 }

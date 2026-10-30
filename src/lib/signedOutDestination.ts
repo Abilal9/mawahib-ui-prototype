@@ -1,9 +1,8 @@
 /**
- * Resolves the signed-out product destination from process reason + flag.
- * Recovery and expiry never become Guest.
+ * Resolves the signed-out product destination from process reason.
+ * Recovery and expiry never become Guest. Guest is the normal signed-out product.
  */
 
-import { isGuestBrowsingEnabled } from '../config/guestBrowsingFlag';
 import {
   getActiveSignOutTransaction,
   type SignedOutInterpretation,
@@ -22,7 +21,6 @@ type SignedOutRoute = {
 
 export function resolveSignedOutDestination(input?: {
   recoveryLocked?: boolean;
-  guestEnabled?: boolean;
 }): SignedOutRoute {
   const txn = getActiveSignOutTransaction();
   if (txn && (txn.status === 'started' || txn.status === 'completed')) {
@@ -53,11 +51,9 @@ export function resolveSignedOutDestination(input?: {
     return { name: 'SignIn' };
   }
 
-  const guestEnabled = input?.guestEnabled ?? isGuestBrowsingEnabled();
   if (
     signedOutDestinationName({
       reason,
-      guestEnabled,
       recoveryLocked: input?.recoveryLocked,
     }) === 'GuestTabs'
   ) {

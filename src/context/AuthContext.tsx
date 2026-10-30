@@ -53,7 +53,6 @@ import {
   shouldIgnoreAuthEventForCallbackCommit,
 } from '../lib/authCallbackTransaction';
 import { enqueueAuthMutation } from '../lib/authMutationQueue';
-import { isGuestBrowsingEnabled } from '../config/guestBrowsingFlag';
 import { hasConsumedProcessStart } from '../lib/processStart';
 import {
   enterAuthenticatedProduct,
@@ -576,7 +575,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hadAuthenticatedProduct: wasAuthenticatedProcess(),
             recoveryLocked: Boolean(loadRecoveryState()),
             processStarted: hasConsumedProcessStart(),
-            guestEnabled: isGuestBrowsingEnabled(),
           }),
         );
       };
@@ -590,7 +588,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           const begun = beginSignOutTransaction({
             kind,
-            guestEnabled: isGuestBrowsingEnabled(),
             expectedUserId,
           });
           if (begun.status !== 'started') return;
@@ -601,7 +598,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const begun = beginSignOutTransaction({
         kind,
-        guestEnabled: isGuestBrowsingEnabled(),
         expectedUserId,
       });
       if (begun.status === 'conflict') {
@@ -979,7 +975,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           const { data } = await supabase.auth.getSession();
           if (!mounted) return;
-          await hydrateBackendUser(data.session);
+          let session = data.session;
+          if (session) {
+            const refreshed = await supabase.auth.refreshSession();
+            if (!mounted) return;
+            if (!refreshed.error && refreshed.data.session) {
+              session = refreshed.data.session;
+            } else if (refreshed.error && !isAuthNetworkError(refreshed.error)) {
+              session = null;
+            }
+          }
+          await hydrateBackendUser(session);
         }
       } finally {
         if (mounted) setAuthLoading(false);
@@ -994,7 +1000,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hadAuthenticatedProduct: wasAuthenticatedProcess(),
           recoveryLocked: Boolean(loadRecoveryState()),
           processStarted: hasConsumedProcessStart(),
-          guestEnabled: isGuestBrowsingEnabled(),
         });
         if (!interpretation.apply) {
           clearAuthenticatedState();
@@ -1499,7 +1504,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const continueAsGuest = useCallback(async () => {
     if (getSignedOutReason() !== 'expired') return false;
-    if (!isGuestBrowsingEnabled()) return false;
     invalidateAuthCallbacks();
     if (isCallbackSessionCommitInFlight()) return false;
     if (getActiveSignOutTransaction()?.status === 'started') return false;
@@ -1544,13 +1548,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = await supabase.auth.getSession();
       const sessionUser = data.session?.user;
       const email = normalizeRecoveryEmail(sessionUser?.email ?? '');
+      if (!sessionUser) {
+        try {
+          await signOut('recoveryAbort');
+        } catch {
+          return { status: 'rejected' as const };
+        }
+        return { status: 'rejected' as const };
+      }
       if (
-        !sessionUser ||
         sessionUser.id !== recoveryLock.userId ||
         email !== recoveryLock.email
       ) {
         try {
-          await signOut('identityMismatch');
+          await signOut('identityMismatch', {
+            expectedUserId: sessionUser.id,
+          });
         } catch {
           return { status: 'rejected' as const };
         }
@@ -1567,7 +1580,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (updateError) throw updateError;
       const begun = beginSignOutTransaction({
         kind: 'recoveryComplete',
-        guestEnabled: isGuestBrowsingEnabled(),
         expectedUserId: recoveryLock.userId,
       });
       if (begun.status === 'conflict') {
@@ -1615,7 +1627,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hadAuthenticatedProduct: wasAuthenticatedProcess(),
             recoveryLocked: Boolean(loadRecoveryState()),
             processStarted: hasConsumedProcessStart(),
-            guestEnabled: isGuestBrowsingEnabled(),
           }),
         );
       }

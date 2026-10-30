@@ -25,20 +25,19 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 resetSignedOutReasonForTests();
 assert.equal(getSignedOutReason(), 'none');
 assert.equal(wasAuthenticatedProcess(), false);
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'GuestTabs');
-assert.equal(signedOutDestinationName({ guestEnabled: false }), 'SignIn');
+assert.equal(signedOutDestinationName({}), 'GuestTabs');
 
 setSignedOutReason('logout');
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'GuestTabs');
+assert.equal(signedOutDestinationName({}), 'GuestTabs');
 
 setSignedOutReason('guestChosen');
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'GuestTabs');
+assert.equal(signedOutDestinationName({}), 'GuestTabs');
 
 setSignedOutReason('expired');
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'SignIn');
+assert.equal(signedOutDestinationName({}), 'SignIn');
 
 assert.equal(
-  signedOutDestinationName({ recoveryLocked: true, guestEnabled: true }),
+  signedOutDestinationName({ recoveryLocked: true }),
   'SignIn',
 );
 

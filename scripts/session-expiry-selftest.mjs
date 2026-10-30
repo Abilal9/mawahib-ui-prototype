@@ -26,8 +26,7 @@ function interpret(overrides = {}) {
     hadAuthenticatedProduct: false,
     recoveryLocked: false,
     processStarted: false,
-    guestEnabled: true,
-    ...overrides,
+        ...overrides,
   });
 }
 
@@ -37,23 +36,23 @@ resetSignedOutReasonForTests();
 assert.equal(interpret().destination, 'GuestTabs');
 assert.equal(interpret().apply, false);
 
-beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+beginSignOutTransaction({ kind: 'logout' });
 assert.equal(interpret({ hadAuthenticatedProduct: true, processStarted: true }).destination, 'GuestTabs');
 resetSignOutTransactionForTests();
 
-beginSignOutTransaction({ kind: 'suspensionLogout', guestEnabled: true });
+beginSignOutTransaction({ kind: 'suspensionLogout' });
 assert.equal(interpret({ hadAuthenticatedProduct: true, processStarted: true }).destination, 'GuestTabs');
 resetSignOutTransactionForTests();
 
-beginSignOutTransaction({ kind: 'recoveryComplete', guestEnabled: true });
+beginSignOutTransaction({ kind: 'recoveryComplete' });
 assert.equal(interpret({ recoveryLocked: true, processStarted: true }).destination, 'SignIn');
 resetSignOutTransactionForTests();
 
-beginSignOutTransaction({ kind: 'recoveryAbort', guestEnabled: true });
+beginSignOutTransaction({ kind: 'recoveryAbort' });
 assert.equal(interpret({ recoveryLocked: true, processStarted: true }).destination, 'SignIn');
 resetSignOutTransactionForTests();
 
-beginSignOutTransaction({ kind: 'identityMismatch', guestEnabled: true });
+beginSignOutTransaction({ kind: 'identityMismatch' });
 assert.equal(interpret({ hadAuthenticatedProduct: true, processStarted: true }).destination, 'SignIn');
 resetSignOutTransactionForTests();
 
@@ -61,8 +60,7 @@ assert.deepEqual(
   interpret({
     hadAuthenticatedProduct: true,
     processStarted: true,
-    guestEnabled: true,
-  }),
+      }),
   { reason: 'expired', destination: 'SignIn', apply: true },
 );
 
@@ -71,20 +69,20 @@ assert.equal(
     hadAuthenticatedProduct: true,
     recoveryLocked: true,
     processStarted: true,
-    guestEnabled: true,
-  }).apply,
+      }).apply,
   false,
 );
 
 resetSignedOutReasonForTests();
 markAuthenticatedProcess();
 setSignedOutReason('expired');
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'SignIn');
+assert.equal(signedOutDestinationName({}), 'SignIn');
 resetSignedOutReasonForTests();
-assert.equal(signedOutDestinationName({ guestEnabled: true }), 'GuestTabs');
+assert.equal(signedOutDestinationName({}), 'GuestTabs');
 
 const auth = read('src/context/AuthContext.tsx');
 assert.match(auth, /event === 'SIGNED_OUT'/);
+assert.match(auth, /refreshSession\(\)/);
 assert.match(auth, /interpretSignedOut/);
 assert.match(auth, /continueAsGuest/);
 assert.match(auth, /getSignedOutReason\(\) !== 'expired'/);

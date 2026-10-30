@@ -126,14 +126,11 @@ assert.match(app, /AuthGateProvider/);
 assert.match(app, /AuthGateSheet/);
 
 assert.match(splash, /consumeProcessStart\(\)/);
-assert.match(splash, /enterSignedOutAt\(\{ name: 'Welcome'/);
-assert.match(splash, /isGuestBrowsingEnabled/);
-assert.ok(
-  splash.indexOf('isGuestBrowsingEnabled()') < splash.indexOf("name: 'GuestTabs'"),
-);
+assert.match(splash, /enterSignedOutAt\(\{ name: 'GuestTabs' \}\)/);
+assert.equal(splash.includes('isGuestBrowsingEnabled'), false);
 assert.ok(
   splash.indexOf('resolveColdStartDestination') <
-    splash.indexOf("name: 'Welcome'"),
+    splash.indexOf("name: 'GuestTabs'"),
 );
 
 assert.equal(guestHome.includes('publicRequest'), false);

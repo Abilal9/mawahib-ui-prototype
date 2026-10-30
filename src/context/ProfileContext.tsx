@@ -786,8 +786,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }
 
+export function useOptionalMyProfile() {
+  return useContext(ProfileContext);
+}
+
 export function useMyProfile() {
-  const ctx = useContext(ProfileContext);
+  const ctx = useOptionalMyProfile();
   if (!ctx) throw new Error('useMyProfile must be used within ProfileProvider');
   return ctx;
 }

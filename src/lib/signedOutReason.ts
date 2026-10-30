@@ -49,14 +49,10 @@ export function resetSignedOutReasonForTests(): void {
 
 export function signedOutDestinationName(input: {
   reason?: SignedOutReason;
-  guestEnabled: boolean;
   recoveryLocked?: boolean;
 }): 'GuestTabs' | 'SignIn' {
   if (input.recoveryLocked) return 'SignIn';
   const current = input.reason ?? reason;
   if (current === 'expired') return 'SignIn';
-  if (input.guestEnabled && (current === 'none' || current === 'logout' || current === 'guestChosen')) {
-    return 'GuestTabs';
-  }
-  return 'SignIn';
+  return 'GuestTabs';
 }

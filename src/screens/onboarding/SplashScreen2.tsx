@@ -17,7 +17,6 @@ import {
 } from '../../lib/pendingSignup';
 import { consumeProcessStart } from '../../lib/processStart';
 import { enterSignedOutAt } from '../../lib/productTree';
-import { isGuestBrowsingEnabled } from '../../config/guestBrowsingFlag';
 
 /**
  * Splash + auth gate:
@@ -71,11 +70,7 @@ export default function SplashScreen2({ navigation }: ScreenProps<'Splash2'>) {
     consumeProcessStart();
 
     if (destination.kind === 'welcome') {
-      if (isGuestBrowsingEnabled()) {
-        enterSignedOutAt({ name: 'GuestTabs' });
-        return;
-      }
-      enterSignedOutAt({ name: 'Welcome', params: { step: 1 } });
+      enterSignedOutAt({ name: 'GuestTabs' });
       return;
     }
 

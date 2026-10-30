@@ -25,7 +25,6 @@ import { applyPostAuthDestination } from '../../lib/postAuthNavigation';
 import { isAccountSuspendedFailure, isAuthFailure } from '../../lib/authFailure';
 import { getSignedOutReason } from '../../lib/signedOutReason';
 import { invalidateReturnIntents } from '../../lib/returnIntent';
-import { isGuestBrowsingEnabled } from '../../config/guestBrowsingFlag';
 
 function isRateLimitError(error: unknown): boolean {
   const message =
@@ -297,7 +296,7 @@ export default function SignInScreen({ navigation, route }: RootStackScreenProps
           </TouchableOpacity>
 
           <Button title="Log In" onPress={handleLogIn} disabled={!canSubmit || Boolean(recovery)} />
-          {sessionExpired && !recovery && isGuestBrowsingEnabled() ? (
+          {sessionExpired && !recovery ? (
             <Button
               title="Continue as Guest"
               variant="outline"

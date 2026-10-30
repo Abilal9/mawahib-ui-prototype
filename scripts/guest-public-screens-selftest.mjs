@@ -183,12 +183,14 @@ assert.match(searchScreen, /exploreApi/);
 assert.match(searchScreen, /loadTaxonomy/);
 assert.equal(searchScreen.includes('fetchPublicExploreTalents'), false);
 
-const flag = read('src/config/guestBrowsingFlag.ts');
-assert.match(flag, /Unset \/ "true" → true/);
-assert.match(flag, /'false'/);
-
 const create = read('src/components/layout/GuestCreateMenu.tsx');
 assert.match(create, /Sign in to create/);
 assert.equal(create.includes("navigate('PostCreate')"), false);
+
+const currencyIcon = read('src/components/ui/CurrencyIcon.tsx');
+assert.match(currencyIcon, /useOptionalMyProfile/);
+assert.equal(currencyIcon.includes('useMyProfile()'), false);
+assert.match(read('src/components/guest/GuestDiscoveryCards.tsx'), /MoneyAmount/);
+assert.match(read('src/context/ProfileContext.tsx'), /useOptionalMyProfile/);
 
 console.log('guest-public-screens-selftest ok');

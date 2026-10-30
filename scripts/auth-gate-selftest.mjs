@@ -12,7 +12,6 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 const gate = read('src/context/AuthGateContext.tsx');
 const sheet = read('src/components/auth/AuthGateSheet.tsx');
 const app = read('App.tsx');
-const flag = read('src/config/guestBrowsingFlag.ts');
 
 assert.match(gate, /export function AuthGateProvider/);
 assert.match(gate, /requireAuth: \(request: AuthGateRequest\) => void/);
@@ -63,9 +62,6 @@ assert.ok(
   app.indexOf('<AuthGateProvider>') < app.indexOf('<AppProviders />'),
 );
 assert.ok(app.indexOf('<AuthGateSheet />') < app.indexOf('</AuthGateProvider>'));
-
-assert.match(flag, /Unset \/ "true" → true/);
-assert.match(flag, /'false'/);
 
 const home = read('src/screens/home/HomeScreen.tsx');
 assert.equal(home.includes('useAuthGate'), false);

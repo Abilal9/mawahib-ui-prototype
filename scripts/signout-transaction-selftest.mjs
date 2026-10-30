@@ -28,46 +28,42 @@ function reset() {
 }
 
 reset();
-assert.equal(destinationForSignOutKind('logout', true), 'GuestTabs');
-assert.equal(destinationForSignOutKind('logout', false), 'SignIn');
-assert.equal(destinationForSignOutKind('suspensionLogout', true), 'GuestTabs');
-assert.equal(destinationForSignOutKind('hydrate401', true), 'SignIn');
-assert.equal(destinationForSignOutKind('recoveryAbort', true), 'SignIn');
-assert.equal(destinationForSignOutKind('recoveryComplete', true), 'SignIn');
-assert.equal(destinationForSignOutKind('identityMismatch', true), 'SignIn');
-assert.equal(destinationForSignOutKind('sessionClearForRecovery', true), 'ForgotPassword');
+assert.equal(destinationForSignOutKind('logout'), 'GuestTabs');
+assert.equal(destinationForSignOutKind('suspensionLogout'), 'GuestTabs');
+assert.equal(destinationForSignOutKind('hydrate401'), 'SignIn');
+assert.equal(destinationForSignOutKind('recoveryAbort'), 'SignIn');
+assert.equal(destinationForSignOutKind('recoveryComplete'), 'SignIn');
+assert.equal(destinationForSignOutKind('identityMismatch'), 'SignIn');
+assert.equal(destinationForSignOutKind('sessionClearForRecovery'), 'ForgotPassword');
 
 reset();
-const first = beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+const first = beginSignOutTransaction({ kind: 'logout' });
 assert.equal(first.status, 'started');
-const dup = beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+const dup = beginSignOutTransaction({ kind: 'logout' });
 assert.equal(dup.status, 'duplicate');
 assert.equal(dup.txn.id, first.txn.id);
 const conflict = beginSignOutTransaction({
   kind: 'hydrate401',
-  guestEnabled: true,
-});
+  });
 assert.equal(conflict.status, 'conflict');
 assert.equal(conflict.txn.kind, 'logout');
 
 reset();
-beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+beginSignOutTransaction({ kind: 'logout' });
 failSignOutTransaction();
 assert.equal(getActiveSignOutTransaction()?.status, 'failed');
 const afterFail = beginSignOutTransaction({
   kind: 'suspensionLogout',
-  guestEnabled: true,
-});
+  });
 assert.equal(afterFail.status, 'started');
 
 reset();
-beginSignOutTransaction({ kind: 'logout', guestEnabled: true });
+beginSignOutTransaction({ kind: 'logout' });
 completeSignOutTransaction();
 assert.equal(getActiveSignOutTransaction()?.status, 'completed');
 const afterComplete = beginSignOutTransaction({
   kind: 'hydrate401',
-  guestEnabled: true,
-});
+  });
 assert.equal(afterComplete.status, 'started');
 
 const kinds = [
@@ -81,15 +77,14 @@ const kinds = [
 ];
 for (const kind of kinds) {
   reset();
-  beginSignOutTransaction({ kind, guestEnabled: true });
+  beginSignOutTransaction({ kind });
   const interpreted = interpretSignedOut({
     hadAuthenticatedProduct: true,
     recoveryLocked: false,
     processStarted: true,
-    guestEnabled: true,
-  });
+      });
   assert.equal(interpreted.apply, true);
-  assert.equal(interpreted.destination, destinationForSignOutKind(kind, true));
+  assert.equal(interpreted.destination, destinationForSignOutKind(kind));
 }
 
 reset();
@@ -98,8 +93,7 @@ assert.deepEqual(
     hadAuthenticatedProduct: true,
     recoveryLocked: false,
     processStarted: true,
-    guestEnabled: true,
-  }),
+      }),
   { reason: 'expired', destination: 'SignIn', apply: true },
 );
 
@@ -109,8 +103,7 @@ assert.equal(
     hadAuthenticatedProduct: false,
     recoveryLocked: false,
     processStarted: false,
-    guestEnabled: true,
-  }).reason,
+      }).reason,
   'none',
 );
 assert.equal(
@@ -118,20 +111,18 @@ assert.equal(
     hadAuthenticatedProduct: false,
     recoveryLocked: false,
     processStarted: false,
-    guestEnabled: true,
-  }).apply,
+      }).apply,
   false,
 );
 
 reset();
-beginSignOutTransaction({ kind: 'sessionClearForRecovery', guestEnabled: true });
+beginSignOutTransaction({ kind: 'sessionClearForRecovery' });
 assert.equal(
   interpretSignedOut({
     hadAuthenticatedProduct: true,
     recoveryLocked: true,
     processStarted: true,
-    guestEnabled: true,
-  }).destination,
+      }).destination,
   'ForgotPassword',
 );
 
@@ -141,8 +132,7 @@ assert.equal(
     hadAuthenticatedProduct: true,
     recoveryLocked: true,
     processStarted: true,
-    guestEnabled: true,
-  }).apply,
+      }).apply,
   false,
 );
 
