@@ -184,7 +184,7 @@ assert.match(searchScreen, /loadTaxonomy/);
 assert.equal(searchScreen.includes('fetchPublicExploreTalents'), false);
 
 const flag = read('src/config/guestBrowsingFlag.ts');
-assert.match(flag, /Unset \/ "false" → false/);
+assert.match(flag, /Unset \/ "true" → true/);
 assert.match(flag, /'false'/);
 
 const create = read('src/components/layout/GuestCreateMenu.tsx');

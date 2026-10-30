@@ -64,7 +64,7 @@ assert.ok(
 );
 assert.ok(app.indexOf('<AuthGateSheet />') < app.indexOf('</AuthGateProvider>'));
 
-assert.match(flag, /Unset \/ "false" → false/);
+assert.match(flag, /Unset \/ "true" → true/);
 assert.match(flag, /'false'/);
 
 const home = read('src/screens/home/HomeScreen.tsx');

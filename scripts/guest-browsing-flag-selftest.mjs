@@ -1,6 +1,6 @@
 /**
- * Phase H: Guest Browsing implementation flag still defaults OFF until activation.
- * Remove in Phase I.
+ * Phase H: Guest Browsing implementation flag defaults ON.
+ * Rollback with EXPO_PUBLIC_GUEST_BROWSING=false. Remove in Phase I.
  * Run: node --no-warnings --experimental-strip-types scripts/guest-browsing-flag-selftest.mjs
  */
 import assert from 'node:assert/strict';
@@ -12,16 +12,16 @@ import { parseGuestBrowsingFlag } from '../src/config/guestBrowsingFlag.ts';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
-assert.equal(parseGuestBrowsingFlag(undefined), false);
-assert.equal(parseGuestBrowsingFlag(null), false);
-assert.equal(parseGuestBrowsingFlag(''), false);
+assert.equal(parseGuestBrowsingFlag(undefined), true);
+assert.equal(parseGuestBrowsingFlag(null), true);
+assert.equal(parseGuestBrowsingFlag(''), true);
 assert.equal(parseGuestBrowsingFlag('false'), false);
 assert.equal(parseGuestBrowsingFlag('FALSE'), false);
 assert.equal(parseGuestBrowsingFlag('true'), true);
 assert.equal(parseGuestBrowsingFlag('TRUE'), true);
 assert.equal(parseGuestBrowsingFlag(' true '), true);
-assert.equal(parseGuestBrowsingFlag('1'), false);
-assert.equal(parseGuestBrowsingFlag('yes'), false);
+assert.equal(parseGuestBrowsingFlag('1'), true);
+assert.equal(parseGuestBrowsingFlag('yes'), true);
 
 const flag = read('src/config/guestBrowsingFlag.ts');
 assert.match(flag, /EXPO_PUBLIC_GUEST_BROWSING/);
