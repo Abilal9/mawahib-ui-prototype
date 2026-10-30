@@ -74,6 +74,7 @@ export type SignedOutStackParamList = {
   Reviews: { userId?: string; serviceId?: string } | undefined;
   PortfolioProjectDetail: {
     projectId: string;
+    userId?: string;
     title?: string;
     description?: string;
     images?: string[];

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import UserAvatar from '../ui/UserAvatar';
+import BookmarkButton from '../ui/BookmarkButton';
 import ServiceMediaMosaic from '../explore/ServiceMediaMosaic';
 import PostMediaPreview from '../ui/PostMediaPreview';
 import MoneyAmount from '../ui/MoneyAmount';
@@ -179,11 +180,13 @@ export function GuestServiceCard({
   service,
   onPress,
   onProviderPress,
+  onSave,
   compact,
 }: {
   service: GuestExploreService | { id: string; title: string; description: string; category: string | null; images: string[]; reviewSummary: GuestReviewAggregate; provider: GuestActorCard };
   onPress: () => void;
   onProviderPress?: () => void;
+  onSave?: () => void;
   compact?: boolean;
 }) {
   return (
@@ -194,9 +197,14 @@ export function GuestServiceCard({
     >
       <ServiceMediaMosaic images={service.images ?? []} />
       <View style={styles.serviceBody}>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {service.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.cardTitle, { flex: 1 }]} numberOfLines={2}>
+            {service.title}
+          </Text>
+          {onSave ? (
+            <BookmarkButton kind="service" saved={false} onPress={onSave} />
+          ) : null}
+        </View>
         {service.category ? (
           <Text style={styles.cardMeta}>{service.category}</Text>
         ) : null}
@@ -229,10 +237,12 @@ function jobTypeLabel(type: string): string {
 export function GuestJobCard({
   job,
   onPress,
+  onSave,
   compact,
 }: {
   job: GuestJob;
   onPress: () => void;
+  onSave?: () => void;
   compact?: boolean;
 }) {
   const company = job.companyName || job.poster.displayName;
@@ -245,9 +255,12 @@ export function GuestJobCard({
     >
       <UserAvatar uri={job.poster.avatarUrl} size={48} />
       <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {job.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.cardTitle, { flex: 1 }]} numberOfLines={2}>
+            {job.title}
+          </Text>
+          {onSave ? <BookmarkButton kind="job" saved={false} onPress={onSave} /> : null}
+        </View>
         <Text style={styles.cardMeta} numberOfLines={1}>
           {company}
         </Text>
@@ -271,10 +284,16 @@ export function GuestPostCard({
   post,
   onPress,
   onAuthorPress,
+  onLike,
+  onComment,
+  onSave,
 }: {
   post: GuestPost;
   onPress: () => void;
   onAuthorPress?: () => void;
+  onLike?: () => void;
+  onComment?: () => void;
+  onSave?: () => void;
 }) {
   const images = guestMediaUrls(post.media);
   const caption = post.text.length > 120 ? `${post.text.slice(0, 120)}...` : post.text;
@@ -297,14 +316,29 @@ export function GuestPostCard({
       {caption ? <Text style={styles.caption}>{caption}</Text> : null}
       {images.length > 0 ? <PostMediaPreview images={images} onPress={onPress} /> : null}
       <View style={styles.countRow}>
-        <View style={styles.count}>
+        <TouchableOpacity
+          style={styles.count}
+          onPress={onLike}
+          disabled={!onLike}
+          hitSlop={8}
+        >
           <Ionicons name="thumbs-up-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.muted}>{post.likeCount}</Text>
-        </View>
-        <View style={styles.count}>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.count}
+          onPress={onComment}
+          disabled={!onComment}
+          hitSlop={8}
+        >
           <Ionicons name="chatbubble-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.muted}>{post.commentCount}</Text>
-        </View>
+        </TouchableOpacity>
+        {onSave ? (
+          <View style={{ flex: 1, alignItems: 'flex-end' }}>
+            <BookmarkButton kind="post" saved={false} onPress={onSave} idleColor={colors.textSecondary} />
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -388,6 +422,7 @@ const styles = StyleSheet.create({
   },
   cardBody: { flex: 1, minWidth: 0, gap: 2 },
   cardTitle: { ...typography.label, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardMeta: { ...typography.caption, color: colors.textSecondary },
   muted: { ...typography.caption, color: colors.textSecondary },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

@@ -21,6 +21,7 @@ import {
   GuestTalentCard,
 } from '../../components/guest/GuestDiscoveryCards';
 import { useGuestExplore } from '../../hooks/useGuestExplore';
+import { useAuthGate } from '../../context/AuthGateContext';
 import { exploreTabs, type ExploreTab } from '../../data/mock/explore';
 import { colors, spacing, radius, typography } from '../../theme';
 import type { GuestTabScreenProps } from '../../navigation/types';
@@ -38,6 +39,7 @@ export default function GuestExploreScreen({
   const insets = useSafeAreaInsets();
   const [searchOpen, setSearchOpen] = useState(false);
   const explore = useGuestExplore(normalizeTab(route.params?.contentType));
+  const { requireAuth } = useAuthGate();
 
   useEffect(() => {
     if (route.params?.contentType) {
@@ -210,6 +212,13 @@ export default function GuestExploreScreen({
                     userId: item.service.provider.id,
                   })
                 }
+                onSave={() =>
+                  requireAuth({
+                    action: 'save',
+                    route: 'ServiceDetail',
+                    params: { serviceId: item.service.id },
+                  })
+                }
               />
             );
           }
@@ -219,6 +228,13 @@ export default function GuestExploreScreen({
               onPress={() =>
                 navigation.navigate('JobListingDetail', {
                   listingId: item.job.id,
+                })
+              }
+              onSave={() =>
+                requireAuth({
+                  action: 'save',
+                  route: 'JobListingDetail',
+                  params: { listingId: item.job.id },
                 })
               }
             />

@@ -24,6 +24,7 @@ import {
   RECOVERY_REQUEST_COPY,
 } from '../../lib/recoveryState';
 import { enterSignedOutAt } from '../../lib/productTree';
+import { invalidateReturnIntents } from '../../lib/returnIntent';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COOLDOWN_SEC = 60;
@@ -55,6 +56,10 @@ export default function ForgotPasswordScreen({
   const sendRef = useRef(false);
   const verifyRef = useRef(false);
   const requestCodeRef = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    invalidateReturnIntents();
+  }, []);
 
   useEffect(() => {
     if (!route.params?.autoSend) return;

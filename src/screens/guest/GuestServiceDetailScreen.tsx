@@ -13,14 +13,15 @@ import {
 } from '../../components/guest/GuestDiscoveryCards';
 import UserAvatar from '../../components/ui/UserAvatar';
 import { useGuestService } from '../../hooks/useGuestService';
+import { useAuthGate } from '../../context/AuthGateContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { displayProfileTitle } from '../../constants/profile';
 import { colors, spacing, radius, typography } from '../../theme';
 import type { SignedOutScreenProps } from '../../navigation/types';
 import { TouchableOpacity } from 'react-native';
 
 /**
- * Public service detail. Request CTA navigates to Sign In only — no mutation.
- * Phase G replaces this with the auth gate sheet.
+ * Public service detail. Request/Save open the Auth Gate. No mutations.
  */
 export default function GuestServiceDetailScreen({
   route,
@@ -36,6 +37,7 @@ export default function GuestServiceDetailScreen({
     notFound,
     refresh,
   } = useGuestService(route.params.serviceId);
+  const { requireAuth } = useAuthGate();
 
   return (
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
@@ -52,7 +54,20 @@ export default function GuestServiceDetailScreen({
         <ScrollView contentContainerStyle={styles.body}>
           <ServiceMediaMosaic images={service.images} height={200} />
           <View style={styles.section}>
-            <Text style={styles.title}>{service.title}</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { flex: 1 }]}>{service.title}</Text>
+              <BookmarkButton
+                kind="service"
+                saved={false}
+                onPress={() =>
+                  requireAuth({
+                    action: 'save',
+                    route: 'ServiceDetail',
+                    params: { serviceId: service.id },
+                  })
+                }
+              />
+            </View>
             {service.categoryName || service.category ? (
               <Text style={styles.meta}>
                 {service.categoryName || service.category}
@@ -138,8 +153,14 @@ export default function GuestServiceDetailScreen({
 
           <View style={styles.cta}>
             <Button
-              title="Sign in to request"
-              onPress={() => navigation.navigate('SignIn')}
+              title="Request Service"
+              onPress={() =>
+                requireAuth({
+                  action: 'request',
+                  route: 'ServiceDetail',
+                  params: { serviceId: service.id },
+                })
+              }
               fullWidth
             />
           </View>
@@ -153,6 +174,7 @@ const styles = StyleSheet.create({
   body: { paddingBottom: spacing.xxxl },
   section: { paddingHorizontal: spacing.screen, paddingTop: spacing.lg, gap: 8 },
   title: { ...typography.h2, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   meta: { ...typography.bodySmall, color: colors.textSecondary },
   description: { ...typography.body, color: colors.text },
   provider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

@@ -132,25 +132,32 @@ assert.match(profileHook, /fetchPublicUserPosts/);
 assert.match(profileHook, /fetchPublicUserServices/);
 assert.match(profileHook, /fetchPublicUserPortfolio/);
 assert.match(profileHook, /fetchPublicUserReviews/);
-assert.match(profile, /Message\/Connect are hidden/);
+assert.match(profile, /requireAuth/);
+assert.match(profile, /title="Connect"/);
+assert.match(profile, /title="Message"/);
 assert.equal(profile.includes('requestConnect'), false);
+assert.equal(profile.includes("navigate('SignIn')"), false);
 
 const post = read('src/screens/guest/GuestPostDetailScreen.tsx');
 assert.match(post, /useGuestPost/);
-assert.match(post, /Like\/Save\/comments thread are not/);
+assert.match(post, /requireAuth/);
+assert.match(post, /Comments thread is not loaded/);
 assert.equal(post.includes('focusComments'), false);
 assert.equal(post.includes('PostLikesModal'), false);
+assert.equal(post.includes("navigate('SignIn')"), false);
 
 const service = read('src/screens/guest/GuestServiceDetailScreen.tsx');
 assert.match(service, /useGuestService/);
-assert.match(service, /Sign in to request/);
-assert.match(service, /navigate\('SignIn'\)/);
+assert.match(service, /requireAuth/);
+assert.match(service, /Request Service/);
+assert.equal(service.includes("navigate('SignIn')"), false);
 assert.equal(service.includes('RequestService'), false);
 
 const job = read('src/screens/guest/GuestJobListingDetailScreen.tsx');
 assert.match(job, /useGuestJob/);
-assert.match(job, /Sign in to apply/);
-assert.match(job, /navigate\('SignIn'\)/);
+assert.match(job, /requireAuth/);
+assert.match(job, /title="Apply"/);
+assert.equal(job.includes("navigate('SignIn')"), false);
 assert.equal(job.includes('applyToListing'), false);
 assert.equal(job.includes('applications'), false);
 

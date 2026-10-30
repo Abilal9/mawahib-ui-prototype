@@ -46,6 +46,7 @@ import {
   saveRecoveryState,
   type RecoveryState,
 } from '../lib/recoveryState';
+import { invalidateReturnIntents } from '../lib/returnIntent';
 import { shouldIgnoreStaleAuthResult } from './authSessionGuard';
 import { supabase } from '../lib/supabase';
 import { appEnv } from '../config/env';
@@ -388,6 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       phase: 'verifying',
     };
     if (!saveRecoveryState(next)) return false;
+    invalidateReturnIntents();
     setRecovery(next);
     return true;
   }, []);
@@ -414,6 +416,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearAuthenticatedState = useCallback(() => {
+    invalidateReturnIntents();
     authEpoch.current += 1;
     hydrateSessionRef.current = null;
     hydrateOverridesRef.current = undefined;
@@ -450,6 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markAccountSuspended = useCallback(() => {
+    invalidateReturnIntents();
     suspensionEpoch.current += 1;
     accountSuspendedRef.current = true;
     setAccountSuspended(true);
@@ -581,6 +585,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const previousUserId = hydrateSessionRef.current?.user?.id;
       if (previousUserId && previousUserId !== active.user.id) {
         authEpoch.current += 1;
+        invalidateReturnIntents();
         accountSuspendedRef.current = false;
         setAccountSuspended(false);
         setApiUser(null);

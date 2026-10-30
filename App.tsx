@@ -7,8 +7,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './src/navigation/RootNavigator';
+import { navigationRef } from './src/navigation/navigationRef';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { AuthGateProvider } from './src/context/AuthGateContext';
 import AuthDeepLinkListener from './src/components/auth/AuthDeepLinkListener';
+import AuthGateSheet from './src/components/auth/AuthGateSheet';
 import AuthTransitionOverlay from './src/components/auth/AuthTransitionOverlay';
 import { hasConsumedProcessStart } from './src/lib/processStart';
 import { colors } from './src/theme';
@@ -52,7 +55,7 @@ function AppProviders() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <StatusBar style="dark" />
         <AuthDeepLinkListener />
         <RootNavigator />
@@ -71,7 +74,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <AppProviders />
+          <AuthGateProvider>
+            <AppProviders />
+            <AuthGateSheet />
+          </AuthGateProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

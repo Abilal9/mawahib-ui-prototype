@@ -13,12 +13,14 @@ import {
 } from '../../components/guest/GuestDiscoveryCards';
 import { displayProfileTitle } from '../../constants/profile';
 import { useGuestPost } from '../../hooks/useGuestPost';
+import { useAuthGate } from '../../context/AuthGateContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { colors, spacing, typography } from '../../theme';
 import type { SignedOutScreenProps } from '../../navigation/types';
 
 /**
- * Public post detail. Counts are visible; Like/Save/comments thread are not.
- * Phase G owns participation gates.
+ * Public post detail. Like/Save/comments open the Auth Gate. No mutations.
+ * Comments thread is not loaded.
  */
 export default function GuestPostDetailScreen({
   route,
@@ -27,7 +29,14 @@ export default function GuestPostDetailScreen({
   const { post, loading, error, notFound, refresh } = useGuestPost(
     route.params.postId,
   );
+  const { requireAuth } = useAuthGate();
   const images = guestMediaUrls(post?.media);
+  const gatePost = (action: 'like' | 'comment' | 'save') =>
+    requireAuth({
+      action,
+      route: 'PostDetail',
+      params: { postId: route.params.postId },
+    });
 
   return (
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
@@ -60,13 +69,21 @@ export default function GuestPostDetailScreen({
           {post.text ? <Text style={styles.text}>{post.text}</Text> : null}
           {images.length > 0 ? <PostMediaPreview images={images} /> : null}
           <View style={styles.counts}>
-            <View style={styles.count}>
+            <TouchableOpacity style={styles.count} onPress={() => gatePost('like')}>
               <Ionicons name="thumbs-up-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.meta}>{post.likeCount}</Text>
-            </View>
-            <View style={styles.count}>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.count} onPress={() => gatePost('comment')}>
               <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.meta}>{post.commentCount}</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              <BookmarkButton
+                kind="post"
+                saved={false}
+                onPress={() => gatePost('save')}
+                idleColor={colors.textSecondary}
+              />
             </View>
           </View>
         </ScrollView>

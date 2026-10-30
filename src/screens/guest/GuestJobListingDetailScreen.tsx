@@ -8,12 +8,14 @@ import MoneyAmount from '../../components/ui/MoneyAmount';
 import GuestScreenHeader from '../../components/guest/GuestScreenHeader';
 import { GuestStatusBlock, publicTimeAgo } from '../../components/guest/GuestDiscoveryCards';
 import { useGuestJob } from '../../hooks/useGuestJob';
+import { useAuthGate } from '../../context/AuthGateContext';
+import BookmarkButton from '../../components/ui/BookmarkButton';
 import { displayProfileTitle } from '../../constants/profile';
 import { colors, spacing, radius, typography } from '../../theme';
 import type { SignedOutScreenProps } from '../../navigation/types';
 
 /**
- * Public job detail. Apply CTA navigates to Sign In only — no mutation.
+ * Public job detail. Apply/Save open the Auth Gate. No mutations.
  * No applicant lists, applicant counts, or owner tools.
  */
 export default function GuestJobListingDetailScreen({
@@ -23,6 +25,7 @@ export default function GuestJobListingDetailScreen({
   const { job, loading, error, notFound, refresh } = useGuestJob(
     route.params.listingId,
   );
+  const { requireAuth } = useAuthGate();
 
   return (
     <ScreenContainer padded={false} safeTop={false} backgroundColor={colors.background}>
@@ -37,7 +40,20 @@ export default function GuestJobListingDetailScreen({
         />
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.title}>{job.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { flex: 1 }]}>{job.title}</Text>
+            <BookmarkButton
+              kind="job"
+              saved={false}
+              onPress={() =>
+                requireAuth({
+                  action: 'save',
+                  route: 'JobListingDetail',
+                  params: { listingId: job.id },
+                })
+              }
+            />
+          </View>
           <TouchableOpacity
             style={styles.poster}
             onPress={() =>
@@ -90,8 +106,14 @@ export default function GuestJobListingDetailScreen({
             </View>
           ) : null}
           <Button
-            title="Sign in to apply"
-            onPress={() => navigation.navigate('SignIn')}
+            title="Apply"
+            onPress={() =>
+              requireAuth({
+                action: 'apply',
+                route: 'JobListingDetail',
+                params: { listingId: job.id },
+              })
+            }
             fullWidth
           />
         </ScrollView>
@@ -108,6 +130,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: { ...typography.h2, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   poster: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   posterName: { ...typography.label, color: colors.text },
   meta: { ...typography.bodySmall, color: colors.textSecondary },

@@ -21,6 +21,7 @@ import {
   GuestTalentCard,
 } from '../../components/guest/GuestDiscoveryCards';
 import { useGuestHome } from '../../hooks/useGuestHome';
+import { useAuthGate } from '../../context/AuthGateContext';
 import { colors, spacing, typography } from '../../theme';
 import type { GuestTabScreenProps } from '../../navigation/types';
 
@@ -30,6 +31,7 @@ export default function GuestHomeScreen({
 }: GuestTabScreenProps<'HomeTab'>) {
   const insets = useSafeAreaInsets();
   const home = useGuestHome();
+  const { requireAuth } = useAuthGate();
   const openExplore = (contentType?: 'talents' | 'services' | 'jobs') =>
     navigation.navigate('SearchTab', contentType ? { contentType } : undefined);
 
@@ -125,6 +127,13 @@ export default function GuestHomeScreen({
                         userId: item.provider.id,
                       })
                     }
+                    onSave={() =>
+                      requireAuth({
+                        action: 'save',
+                        route: 'ServiceDetail',
+                        params: { serviceId: item.id },
+                      })
+                    }
                   />
                 )}
               />
@@ -152,6 +161,13 @@ export default function GuestHomeScreen({
                         listingId: item.id,
                       })
                     }
+                    onSave={() =>
+                      requireAuth({
+                        action: 'save',
+                        route: 'JobListingDetail',
+                        params: { listingId: item.id },
+                      })
+                    }
                   />
                 )}
               />
@@ -173,6 +189,27 @@ export default function GuestHomeScreen({
                   onAuthorPress={() =>
                     navigation.navigate('UserProfile', {
                       userId: post.author.id,
+                    })
+                  }
+                  onLike={() =>
+                    requireAuth({
+                      action: 'like',
+                      route: 'PostDetail',
+                      params: { postId: post.id },
+                    })
+                  }
+                  onComment={() =>
+                    requireAuth({
+                      action: 'comment',
+                      route: 'PostDetail',
+                      params: { postId: post.id },
+                    })
+                  }
+                  onSave={() =>
+                    requireAuth({
+                      action: 'save',
+                      route: 'PostDetail',
+                      params: { postId: post.id },
                     })
                   }
                 />

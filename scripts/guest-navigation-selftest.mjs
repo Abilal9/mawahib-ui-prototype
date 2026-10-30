@@ -119,9 +119,11 @@ assert.match(rootNavigator, /key="app"/);
 assert.match(rootNavigator, /key="media-hold"/);
 assert.match(rootNavigator, /key="account-suspended"/);
 assert.equal(rootNavigator.includes('NavigationContainer'), false);
-assert.match(app, /<NavigationContainer>/);
+assert.match(app, /<NavigationContainer/);
 assert.match(app, /<\/NavigationContainer>/);
-assert.equal(app.split('<NavigationContainer>').length, 2);
+assert.equal(app.split('<NavigationContainer').length, 2);
+assert.match(app, /AuthGateProvider/);
+assert.match(app, /AuthGateSheet/);
 
 assert.match(splash, /consumeProcessStart\(\)/);
 assert.match(splash, /enterSignedOutAt\(\{ name: 'Welcome'/);

@@ -77,7 +77,12 @@ function MainTabsGate() {
 
   useEffect(() => {
     const pending = pendingRef.current;
-    if (!pending || pending.length <= 1) return;
+    if (!pending || pending.length === 0) return;
+    const onlyDefaultHome =
+      pending.length === 1 &&
+      pending[0].name === 'MainTabs' &&
+      pending[0].params == null;
+    if (onlyDefaultHome) return;
     navigation.reset({
       index: pending.length - 1,
       routes: pending as never,

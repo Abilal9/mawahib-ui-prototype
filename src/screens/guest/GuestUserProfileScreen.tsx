@@ -24,6 +24,8 @@ import {
   guestLocationLabel,
 } from '../../components/guest/GuestDiscoveryCards';
 import { useGuestProfile } from '../../hooks/useGuestProfile';
+import { useAuthGate } from '../../context/AuthGateContext';
+import Button from '../../components/ui/Button';
 import { displayProfileTitle } from '../../constants/profile';
 import { toImageSource } from '../../utils/image';
 import { getMediaCacheKey } from '../../lib/mediaCacheKey';
@@ -34,7 +36,7 @@ import type { SignedOutScreenProps } from '../../navigation/types';
 /**
  * Guest public profile container.
  * Does not mount private profile, connection, or saved providers.
- * Message/Connect are hidden until Phase G auth gates.
+ * Message/Connect/Request open the Auth Gate. No mutations.
  */
 export default function GuestUserProfileScreen({
   route,
@@ -43,6 +45,7 @@ export default function GuestUserProfileScreen({
   const { userId } = route.params;
   const [tab, setTab] = useState<ProfileTab>('About');
   const profileState = useGuestProfile(userId);
+  const { requireAuth } = useAuthGate();
   const profile = profileState.profile;
   const location = guestLocationLabel(
     profile?.locationCity,
@@ -112,6 +115,44 @@ export default function GuestUserProfileScreen({
           >
             <GuestRating summary={profile.reviewSummary.overall} />
           </TouchableOpacity>
+          <View style={styles.ctaRow}>
+            <Button
+              title="Connect"
+              style={styles.ctaHalf}
+              onPress={() =>
+                requireAuth({
+                  action: 'connect',
+                  route: 'UserProfile',
+                  params: { userId: profile.id },
+                })
+              }
+            />
+            <Button
+              title="Message"
+              variant="outline"
+              style={styles.ctaHalf}
+              onPress={() =>
+                requireAuth({
+                  action: 'message',
+                  route: 'UserProfile',
+                  params: { userId: profile.id },
+                })
+              }
+            />
+          </View>
+          <Button
+            title="Request Work"
+            variant="ghost"
+            fullWidth
+            style={{ alignSelf: 'stretch' }}
+            onPress={() =>
+              requireAuth({
+                action: 'request',
+                route: 'UserProfile',
+                params: { userId: profile.id },
+              })
+            }
+          />
         </View>
 
         <ProfileTabs active={tab} onChange={setTab} />
@@ -155,6 +196,7 @@ export default function GuestUserProfileScreen({
                 onPress={() =>
                   navigation.navigate('PortfolioProjectDetail', {
                     projectId: project.id,
+                    userId: profile.id,
                     title: project.title,
                     description: project.description,
                     images: project.images,
@@ -186,6 +228,13 @@ export default function GuestUserProfileScreen({
                 onPress={() =>
                   navigation.navigate('ServiceDetail', { serviceId: service.id })
                 }
+                onSave={() =>
+                  requireAuth({
+                    action: 'save',
+                    route: 'ServiceDetail',
+                    params: { serviceId: service.id },
+                  })
+                }
               />
             ))}
           </View>
@@ -211,6 +260,27 @@ export default function GuestUserProfileScreen({
                 post={post}
                 onPress={() =>
                   navigation.navigate('PostDetail', { postId: post.id })
+                }
+                onLike={() =>
+                  requireAuth({
+                    action: 'like',
+                    route: 'PostDetail',
+                    params: { postId: post.id },
+                  })
+                }
+                onComment={() =>
+                  requireAuth({
+                    action: 'comment',
+                    route: 'PostDetail',
+                    params: { postId: post.id },
+                  })
+                }
+                onSave={() =>
+                  requireAuth({
+                    action: 'save',
+                    route: 'PostDetail',
+                    params: { postId: post.id },
+                  })
                 }
               />
             ))}
@@ -246,6 +316,13 @@ const styles = StyleSheet.create({
   },
   name: { ...typography.h3, color: colors.text, marginTop: spacing.sm },
   meta: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center' },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  ctaHalf: { flex: 1 },
   bio: { ...typography.body, color: colors.text, marginBottom: spacing.md },
   section: { paddingHorizontal: spacing.screen, paddingVertical: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
