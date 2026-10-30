@@ -10,7 +10,7 @@ const SIDE_ICON_SIZE = 32;
 
 /**
  * Signed-out chrome: logo only. No inbox bell, unread badges, messages
- * shortcut, or ProfileContext avatar menu.
+ * shortcut, or signed-in avatar menu.
  */
 export default function GuestAppHeader() {
   const insets = useSafeAreaInsets();

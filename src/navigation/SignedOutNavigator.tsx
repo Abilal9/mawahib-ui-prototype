@@ -14,16 +14,22 @@ import {
   SignupSuccessScreen,
 } from '../screens';
 import { SignedOutStackParamList } from './types';
+import GuestUserProfileScreen from '../screens/guest/GuestUserProfileScreen';
+import GuestServiceDetailScreen from '../screens/guest/GuestServiceDetailScreen';
+import GuestJobListingDetailScreen from '../screens/guest/GuestJobListingDetailScreen';
+import GuestPostDetailScreen from '../screens/guest/GuestPostDetailScreen';
+import GuestReviewsScreen from '../screens/guest/GuestReviewsScreen';
+import GuestPortfolioProjectDetailScreen from '../screens/guest/GuestPortfolioProjectDetailScreen';
 
 const Stack = createNativeStackNavigator<SignedOutStackParamList>();
 
 /**
  * Signed-out product tree.
  *
- * Public detail routes (UserProfile, ServiceDetail, JobListingDetail,
- * PostDetail, Reviews, PortfolioProjectDetail) are deferred to Phase F.
- * Current screens depend on authenticated providers; registering the
- * private versions here would violate route isolation.
+ * Public detail routes map to Guest-safe containers. Private
+ * UserProfileScreen / ServiceDetailScreen / JobListingDetailScreen /
+ * PostDetailScreen / ReviewsScreen / PortfolioProjectDetailScreen
+ * remain registered only on AuthenticatedNavigator.
  */
 export default function SignedOutNavigator({
   initialRouteName,
@@ -82,6 +88,18 @@ export default function SignedOutNavigator({
         }
       />
       <Stack.Screen name="SignupSuccess" component={SignupSuccessScreen} />
+      <Stack.Screen name="UserProfile" component={GuestUserProfileScreen} />
+      <Stack.Screen name="ServiceDetail" component={GuestServiceDetailScreen} />
+      <Stack.Screen
+        name="JobListingDetail"
+        component={GuestJobListingDetailScreen}
+      />
+      <Stack.Screen name="PostDetail" component={GuestPostDetailScreen} />
+      <Stack.Screen name="Reviews" component={GuestReviewsScreen} />
+      <Stack.Screen
+        name="PortfolioProjectDetail"
+        component={GuestPortfolioProjectDetailScreen}
+      />
     </Stack.Navigator>
   );
 }

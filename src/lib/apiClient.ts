@@ -112,9 +112,8 @@ export async function apiRequest<T>(
 }
 
 /**
- * Public Nest request for future `/api/v1/public/*` Guest reads.
+ * Public Nest request for `/api/v1/public/*` Guest reads.
  * Never inspects the session or attaches Authorization.
- * Product screens must not call this in Phase A.
  */
 export async function publicRequest<T>(
   path: string,

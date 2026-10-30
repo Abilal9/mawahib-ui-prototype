@@ -150,7 +150,16 @@ assert.equal(guestHeader.includes('useMyProfile'), false);
 assert.equal(guestHeader.includes('notifications-outline'), false);
 assert.equal(guestHeader.includes('UserAvatar'), false);
 
-assert.match(signedOut, /deferred to Phase F/);
+assert.match(signedOut, /GuestUserProfileScreen/);
+assert.equal(signedOut.includes('component={UserProfileScreen}'), false);
+assert.equal(signedOut.includes('component={ServiceDetailScreen}'), false);
+assert.equal(signedOut.includes('component={PostDetailScreen}'), false);
+assert.equal(signedOut.includes('component={ReviewsScreen}'), false);
+assert.equal(signedOut.includes('component={PortfolioProjectDetailScreen}'), false);
+assert.equal(
+  signedOut.includes('component={JobListingDetailScreen}'),
+  false,
+);
 assert.equal(guestTabs.includes('AppSidebar'), false);
 assert.equal(guestTabs.includes('CreateActionMenu'), false);
 assert.match(guestTabs, /showUnreadIndicators=\{false\}/);

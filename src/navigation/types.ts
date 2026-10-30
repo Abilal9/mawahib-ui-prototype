@@ -37,7 +37,11 @@ export type MainTabParamList = {
 /** Guest bottom tabs: Home / Explore / Create / Account. No Messages. No Jobs. */
 export type GuestTabParamList = {
   HomeTab: undefined;
-  SearchTab: undefined;
+  SearchTab:
+    | {
+        contentType?: SearchContentType;
+      }
+    | undefined;
   CreateTab: undefined;
   AccountTab: undefined;
 };
@@ -49,8 +53,7 @@ export type SplashStackParamList = {
 
 /**
  * Signed-out product tree. Private route names are intentionally absent.
- * Public profile/detail screens are deferred to Phase F — current screens
- * depend on authenticated providers.
+ * Public detail routes map to Guest-safe containers, not authenticated screens.
  */
 export type SignedOutStackParamList = {
   GuestTabs: NavigatorScreenParams<GuestTabParamList> | undefined;
@@ -64,6 +67,17 @@ export type SignedOutStackParamList = {
   VerifyAccount: { email: string; phoneE164: string };
   ConfirmCode: { phone?: string; email?: string };
   SignupSuccess: undefined;
+  UserProfile: { userId: string };
+  ServiceDetail: { serviceId: string; userId?: string };
+  JobListingDetail: { listingId: string };
+  PostDetail: { postId: string; focusComments?: boolean };
+  Reviews: { userId?: string; serviceId?: string } | undefined;
+  PortfolioProjectDetail: {
+    projectId: string;
+    title?: string;
+    description?: string;
+    images?: string[];
+  };
 };
 
 export type RootStackParamList = {
